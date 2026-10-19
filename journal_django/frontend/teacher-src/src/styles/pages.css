@@ -1,0 +1,137 @@
+/* ── Общие элементы страниц кабинета преподавателя ── */
+
+/* Шапка страницы (паттерн Eduson): h2 18px/600 слева, справа пояснение и
+   действия. Не липкая: липнет верхняя шапка приложения. */
+.t-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.t-head__main { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.t-head__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text);
+}
+.t-head__sub {
+  margin-left: auto;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  text-align: right;
+}
+.t-head__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.t-head__sub + .t-head__actions { margin-left: 0; }
+@media (max-width: 900px) {
+  .t-head__sub { margin-left: 0; text-align: left; flex-basis: 100%; }
+  .t-head__sub + .t-head__actions { margin-left: auto; }
+}
+
+/* «обновление…» рядом с заголовком: моно, приглушённо. */
+.t-updating {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+/* Скелет средней высоты (списки «Мои уроки», «Зарплата», «Отчёт»). */
+.cal-skel--md { height: 320px; }
+
+/* Стартовое «Загрузка…» до проверки входа. */
+.t-boot {
+  padding: var(--space-10);
+  text-align: center;
+  color: var(--text3);
+}
+
+/* Панель-список: белая, рамка --line, r8, без тени (.panel Eduson). */
+.t-panel {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+/* Метка курса в строке — точка цвета направления (цвет приходит из данных). */
+.t-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--subject-color, var(--t-unknown));
+  flex-shrink: 0;
+}
+
+/* ── Контекстное меню занятия в календаре (OccurrenceMenu) — .pop Eduson ── */
+
+.occ-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  min-width: 220px;
+  padding: var(--space-1);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-popover);
+  animation: occ-pop var(--dur-2) var(--ease-out);
+}
+@keyframes occ-pop {
+  from { opacity: 0; transform: translateY(4px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .occ-menu { animation: none; } }
+.occ-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--space-1);
+}
+.occ-menu-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.occ-menu-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+}
+.occ-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: var(--r-xs);
+  cursor: pointer;
+}
+.occ-menu-item:hover:not(:disabled) { background: var(--bg3); }
+.occ-menu-item:focus-visible { box-shadow: var(--focus-ring); }
+.occ-menu-item:disabled { color: var(--text3); cursor: not-allowed; }
+.occ-menu-item-hint {
+  display: block;
+  font-size: var(--fs-2xs);
+  font-weight: 400;
+  color: var(--text3);
+  margin-top: 2px;
+}

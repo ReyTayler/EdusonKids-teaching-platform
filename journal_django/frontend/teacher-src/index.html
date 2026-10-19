@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fafafa">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <title>Eduson Kids · Кабинет преподавателя</title>
+    <style>
+      /*
+        Стартовый экран. Живёт в index.html и только здесь: он обязан быть на
+        экране ДО загрузки CSS-бандла и React — иначе в этот момент видна белая
+        вспышка. Снимает его hideSplash() (@shared/lib/splash).
+
+        Прямые цвета вместо токенов — единственное такое место проекта: tokens.css
+        здесь ещё не загружен, var(--...) не существуют. Значения — светлая тема
+        Eduson (--bg #fafafa, --text #000), чтобы экран переходил в интерфейс без
+        скачка фона; при правке токенов поправить и здесь. Экран одинаков в обеих
+        темах: тема лежит в localStorage, а inline-скрипт, который прочитал бы её
+        до отрисовки, запрещён CSP. Шрифт системный: Geist ещё не загружен, а
+        ждать его ради одной строки не нужно. Знак — HTML, а не <img>: внешний
+        файл приехал бы вторым запросом, уже после фона.
+      */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background: #fafafa;
+        opacity: 1;
+        transition: opacity .3s ease;
+      }
+      #splash.is-hidden { opacity: 0; pointer-events: none; }
+      #splash .splash-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #000000;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -.02em;
+        animation: splash-in .45s ease both;
+      }
+      #splash .splash-logo {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        background: #000000;
+        color: #fafafa;
+        display: grid;
+        place-items: center;
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -.02em;
+      }
+      @keyframes splash-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: none; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash { transition: none; }
+        #splash .splash-brand { animation: none; }
+      }
+    </style>
+    <script type="module" src="/src/main.tsx"></script>
+  </head>
+  <body>
+    <div id="splash" role="status" aria-label="Загрузка">
+      <div class="splash-brand">
+        <span class="splash-logo" aria-hidden="true">E</span>
+        <span>Eduson Kids</span>
+      </div>
+    </div>
+
+    <div id="app"></div>
+    <div id="modal-host"></div>
+    <div id="toast-host"></div>
+  </body>
+</html>

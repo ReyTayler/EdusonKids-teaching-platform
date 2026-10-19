@@ -1,0 +1,133 @@
+/* ── BASE TYPOGRAPHY — applies to all heading levels unless overridden ── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text);
+}
+h1 { font-size: 24px; }
+h2 { font-size: 18px; }
+h3 { font-size: 16px; }
+h4 { font-size: 14px; }
+
+/* Моноширинное начертание для данных — числа, коды групп, время, даты, id.
+   .num — синоним .mono из Eduson. */
+.mono, .num, .id-cell, code, kbd, samp {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Выделение текста: чёрное с белым (в тёмной теме наоборот) */
+::selection { background: var(--selection-bg); color: var(--selection-fg); }
+
+/* Скроллбар Eduson: тонкий, без дорожки. Жил в table.css с хардкодом цвета. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; }
+
+/* Фокус полей: чёрная рамка + кольцо вместо контура. Клавиатурный фокус
+   остальных элементов (кнопки, ссылки) — outline ниже. */
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Focus ring — single style, applied via :focus-visible */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ── LAYOUT ── */
+/* Оболочка: колонка «шапка + контент» (teacher). В admin слева стоит боковая
+   колонка — там класс .shell--side (styles/shell.css) переводит оболочку в ряд. */
+.shell { display: flex; flex-direction: column; min-height: 100vh; }
+/* Колонка контента. Внешние поля задаёт .main, а ширину ограничивает
+   внутренний .page — иначе липкая шапка страницы не смогла бы растянуться
+   на всю ширину области, оставаясь выровненной по контенту.
+
+   overflow-y здесь НЕ ставить. Прокручивается страница целиком: .shell задан
+   через min-height, поэтому .main растягивается по своему содержимому и своей
+   полосы прокрутки не имеет никогда. Но `overflow-y: auto` всё равно объявлял
+   .main прокручиваемым — а для position:sticky это значит «отсчитывай от меня».
+   Отсчитывать было не от чего: контейнер не двигается, и НИ ОДИН липкий
+   элемент внутри не работал — ни шапка страницы, ни панель редактора, ни
+   боковая колонка статьи. Прокрутка при этом выглядела как обычная, поэтому
+   поломка не бросалась в глаза. Липкая шапка/колонка навигации уцелела только
+   потому, что лежит рядом с .main, а не внутри. */
+.main {
+  flex: 1;
+  min-width: 0;
+  /* clip, а НЕ hidden — разница здесь принципиальная и напрямую связана с
+     предупреждением выше. `hidden` объявил бы .main прокручиваемым боксом, и
+     все липкие элементы внутри (шапка страницы, панель редактора, боковая
+     колонка статьи) начали бы отсчитываться от него — то есть перестали бы
+     работать. `clip` просто обрезает и скролл-контейнером не становится.
+     Зачем: любой блок, который случайно окажется шире колонки, утаскивает
+     вбок ВСЮ страницу вместе с шапкой и фильтрами — при горизонтальной
+     прокрутке уезжает всё, кроме того, что пользователь хотел прокрутить.
+     Внутренние ленты (доска задач, продлений, широкие таблицы) прокручиваются
+     каждая в своём контейнере и этой обрезки не касаются. */
+  overflow-x: clip;
+}
+
+/* Рамка страницы: единственное место, где живут поля и потолок ширины.
+   Имя с префиксом app-: короткое «page» уже использовалось как класс-пустышка
+   на странице абонементов, и глобальное правило внезапно к ней применилось —
+   контент оказался ограничен и отцентрован дважды.
+   До этого .main раздавал padding напрямую и ширина не ограничивалась ничем —
+   на широком мониторе строка таблицы из 9 колонок растягивалась через весь
+   экран, и на обратном ходе взгляд терял строку. */
+.app-page {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  /* Поля .wrap Eduson: 18px сверху, 60px снизу. */
+  padding: var(--page-pad-y) var(--page-pad-x) 60px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+@media (max-width: 900px) {
+  .app-page { padding: var(--space-4) var(--space-4) var(--space-10); }
+}
+
+
+/* ============================================================
+ *  ФОКУС — единое кольцо для всего интерфейса.
+ *  Жило в overrides.css, файле-«догонялке», который импортировался
+ *  последним и переспоривал каскад. Файл расформирован: правила
+ *  переехали к своим владельцам, это — сюда, к глобальным.
+ *  outline снимается только для мыши; :focus-visible всегда виден.
+ * ============================================================ */
+*:focus { outline: none; }
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* Карточки, работающие кнопками (role="button" + tabIndex). */
+.dir-card:focus-visible,
+.link-card:focus-visible,
+.student-row-card:focus-visible,
+.token-row:focus-visible,
+.modal-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── REDUCED MOTION (как в Eduson) ──
+   Гасим всё движение, кроме вращения спиннеров: без него «идёт загрузка»
+   превращается в застывший круг и выглядит как зависание. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .spin { animation: sp var(--dur-spin) linear infinite !important; }
+  .kb-spin { animation: kb-spin 0.8s linear infinite !important; }
+}

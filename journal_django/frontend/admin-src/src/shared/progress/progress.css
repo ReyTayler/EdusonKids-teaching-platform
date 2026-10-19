@@ -1,0 +1,117 @@
+/* ── PROGRESS — матрица посещаемости группы (GroupProgressView) ──────────
+ * Общий для admin (Group detail · вкладка «Прогресс») и teacher (страница
+ * группы). Вынесено из admin styles/pages/detail.css.
+ * Вариант 2: лента плиток посещаемости на ученика + процент/счётчик справа.
+ * Семантика: is-present=был (ok), is-absent=не был (bad), is-planned=не проведён (пунктир);
+ * без смысловых статусов — никаких цветных заливок (тройки ink/bg/line из tokens.css).
+ */
+.progress-view__head {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.progress-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: var(--fs-sm); color: var(--text2); }
+.progress-legend__item { display: inline-flex; align-items: center; gap: 7px; }
+.progress-chip { width: 14px; height: 14px; border-radius: 4px; flex: none; border: 1.5px solid transparent; }
+.progress-chip.is-present { background: var(--ok-bg); border-color: var(--ok-line); }
+.progress-chip.is-absent  { background: color-mix(in oklch, var(--danger) 15%, transparent);  border-color: color-mix(in oklch, var(--danger) 42%, transparent); }
+.progress-chip.is-planned { background: var(--bg2); border: 1.5px dashed var(--line-3); }
+.progress-chip.is-compensated { background: var(--warn-bg); border-color: var(--warn-line); }
+.progress-chip.is-free { background: var(--bg3); border-color: var(--line-3); }
+.progress-chip.is-skip { background: var(--info-bg); border-color: var(--info-line); }
+.progress-chip.is-transferred { background: var(--bg2); border-color: var(--text3); }
+
+.progress-view__summary { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.progress-summary-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-sm); color: var(--text2); font-weight: 500;
+  background: var(--bg2); border: 1px solid var(--line-2);
+  padding: 2px 10px; border-radius: var(--r-pill);
+}
+.progress-summary-pill b { color: var(--text); font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.progress-rows { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--bg2); }
+.progress-row {
+  display: grid; grid-template-columns: 210px 1fr auto; align-items: center;
+  gap: var(--space-4); padding: 11px var(--space-4);
+  transition: background var(--dur-1) var(--ease);
+}
+.progress-row + .progress-row { border-top: 1px solid var(--line); }
+.progress-row:hover { background: var(--bg); }
+
+.progress-row__who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.progress-row__name {
+  font-size: var(--fs-md); font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.progress-ribbon { display: flex; flex-wrap: wrap; gap: 5px; }
+.progress-sq {
+  width: 20px; height: 20px; border-radius: var(--r-xs); flex: none;
+  border: 1.5px solid transparent; cursor: default;
+  transition: transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.progress-sq.is-present { background: var(--ok-bg); border-color: var(--ok-line); }
+.progress-sq.is-absent  { background: color-mix(in oklch, var(--danger) 15%, transparent);  border-color: color-mix(in oklch, var(--danger) 40%, transparent); }
+.progress-sq.is-planned { background: var(--bg2); border: 1.5px dashed var(--line-3); }
+.progress-sq.is-compensated { background: var(--warn-bg); border-color: var(--warn-line); }
+.progress-sq.is-free { background: var(--bg3); border-color: var(--line-3); }
+.progress-sq.is-skip { background: var(--info-bg); border-color: var(--info-line); }
+.progress-sq.is-transferred { background: var(--bg2); border-color: var(--text3); }
+.progress-sq:hover {
+  transform: translateY(-1px); position: relative; z-index: 2;
+  box-shadow: var(--shadow-popover);
+}
+.progress-sq.is-present:hover { border-color: var(--ok); }
+.progress-sq.is-absent:hover  { border-color: var(--bad); }
+.progress-sq.is-compensated:hover { border-color: var(--warn); }
+.progress-sq.is-free:hover { border-color: var(--text3); }
+.progress-sq.is-skip:hover { border-color: var(--info); }
+.progress-sq.is-transferred:hover { border-color: var(--accent); }
+
+.progress-row__stat { display: flex; align-items: center; gap: var(--space-3); justify-self: end; }
+.progress-bar { display: block; width: 80px; height: 5px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
+.progress-bar > i { display: block; height: 100%; border-radius: 3px; }
+.progress-pct { font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: 600; min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+.progress-cnt { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text3); min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Плавающий тултип: номер урока + дата + статус (position: fixed по курсору) */
+.progress-tip {
+  position: fixed; z-index: 60; pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--bg2); color: var(--text);
+  border: 1px solid var(--line-2);
+  padding: 8px 11px; border-radius: var(--r);
+  box-shadow: var(--shadow-popover); min-width: 128px; white-space: nowrap;
+}
+.progress-tip__lesson { font-weight: 600; font-size: var(--fs-sm); }
+.progress-tip__date { color: var(--text3); font-family: var(--font-mono); font-size: var(--fs-2xs); }
+.progress-tip__status { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-size: var(--fs-xs); font-weight: 500; }
+.progress-tip__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.progress-tip.is-present .progress-tip__status { color: var(--ok); }
+.progress-tip.is-present .progress-tip__dot { background: var(--ok); }
+.progress-tip.is-absent .progress-tip__status { color: var(--bad); }
+.progress-tip.is-absent .progress-tip__dot { background: var(--bad); }
+.progress-tip.is-planned .progress-tip__status { color: var(--text3); }
+.progress-tip.is-planned .progress-tip__dot { background: var(--text3); }
+.progress-tip.is-compensated .progress-tip__status { color: var(--warn); }
+.progress-tip.is-compensated .progress-tip__dot { background: var(--warn); }
+.progress-tip.is-free .progress-tip__status { color: var(--text3); }
+.progress-tip.is-free .progress-tip__dot { background: var(--text3); }
+.progress-tip.is-skip .progress-tip__status { color: var(--info); }
+.progress-tip.is-skip .progress-tip__dot { background: var(--info); }
+.progress-tip.is-transferred .progress-tip__status { color: var(--accent); }
+.progress-tip.is-transferred .progress-tip__dot { background: var(--accent); }
+.progress-tip::after {
+  content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: var(--bg2);
+}
+
+@media (max-width: 640px) {
+  .progress-row { grid-template-columns: 1fr; gap: 10px; }
+  .progress-row__stat { justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-sq { transition: none; }
+}

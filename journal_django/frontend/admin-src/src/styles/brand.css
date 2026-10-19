@@ -1,0 +1,52 @@
+/* ============================================================
+ *  ЗНАК EDUSON — .brand / .brand__logo (как .brand/.logo в Eduson).
+ *  Чёрный квадрат с моно-«E» + название и подпись. Цвета через токены:
+ *  в тёмной теме --accent белый, а --on-accent чёрный, поэтому квадрат
+ *  становится белым с чёрной буквой без отдельных правил.
+ *  Файл общий: подключается и в admin, и в teacher (через @shared).
+ * ============================================================ */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+.brand__logo {
+  width: var(--brand-size);
+  height: var(--brand-size);
+  border-radius: var(--r-brand);
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  user-select: none;
+}
+.brand__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.brand__name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.brand__sub {
+  font-size: var(--fs-2xs);
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--text3);
+  white-space: nowrap;
+}
+/* Свёрнутый вид (рельса, узкая панель): только квадрат. */
+.brand--compact .brand__text { display: none; }

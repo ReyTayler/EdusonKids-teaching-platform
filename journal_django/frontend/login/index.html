@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <title>Вход — Eduson Kids</title>
+  <link rel="stylesheet" href="/login/styles.css" />
+  <!-- Внешние скрипты (не inline) ради CSP script-src 'self'. Порядок важен:
+       тема применяется до отрисовки, затем — редирект уже авторизованного. -->
+  <script src="/login/theme-init.js"></script>
+  <script src="/login/auth-redirect.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand" role="img" aria-label="Eduson Kids">
+      <span class="brand__logo" aria-hidden="true">E</span>
+      <span class="brand__text" aria-hidden="true">
+        <span class="brand__name">Eduson Kids</span>
+        <span class="brand__sub">Вход в систему</span>
+      </span>
+    </span>
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Переключить тему">
+      <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+      </svg>
+      <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+      </svg>
+    </button>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <div class="welcome">ДОБРО ПОЖАЛОВАТЬ</div>
+      <h1 class="title">Вход в Eduson Kids</h1>
+      <p class="subtitle">Выберите, кто вы — и мы подберём правильный вход.</p>
+    </div>
+
+    <section id="screen-role" class="cards">
+      <button class="card" data-role="teacher">
+        <div class="card-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4.26 10.15a60 60 0 0 0-.49 6.34A48 48 0 0 1 12 20.9a48 48 0 0 1 8.23-4.41 60 60 0 0 0-.49-6.34" />
+            <path d="M4.26 10.15a50 50 0 0 1-2.66-.81A60 60 0 0 1 12 3.49a60 60 0 0 1 10.4 5.85c-.9.24-1.78.51-2.66.81" />
+            <path d="M4.26 10.15A50 50 0 0 1 12 13.49a50 50 0 0 1 7.74-3.34" />
+            <path d="M6.75 15v-3.68A55 55 0 0 1 12 8.44" />
+          </svg>
+        </div>
+        <div class="card-title">Преподаватель</div>
+        <div class="card-sub">Журнал, группы, расписание</div>
+      </button>
+      <button class="card" data-role="admin">
+        <div class="card-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 12.75 11.25 15 15 9.75" />
+            <path d="M12 2.71A12 12 0 0 1 3.6 6 12 12 0 0 0 3 9.75c0 5.59 3.82 10.29 9 11.62 5.18-1.33 9-6.03 9-11.62 0-1.31-.21-2.57-.6-3.75h-.15c-3.2 0-6.1-1.25-8.25-3.29Z" />
+          </svg>
+        </div>
+        <div class="card-title">Админ / Менеджер</div>
+        <div class="card-sub">CRM, оплаты, отчёты, дашборд</div>
+      </button>
+    </section>
+
+    <section id="screen-login" class="panel hidden">
+      <button class="back" data-back>← Назад</button>
+      <div class="login-card">
+        <div class="kicker" id="login-kicker">КАБИНЕТ</div>
+        <h2 id="login-h">Войти</h2>
+        <form id="login-form" novalidate>
+          <input id="f-email" class="field" type="email" placeholder="Email" autocomplete="username" required />
+          <input id="f-pass" class="field" type="password" placeholder="Пароль" autocomplete="current-password" required />
+          <button class="primary" type="submit">→ Войти</button>
+          <div class="err hidden" id="login-err"></div>
+        </form>
+      </div>
+    </section>
+
+    <section id="screen-2fa" class="panel hidden">
+      <button class="back" data-back>← Назад</button>
+      <div class="login-card">
+        <div class="kicker">ПОДТВЕРЖДЕНИЕ ВХОДА</div>
+        <h2 id="twofa-h">Введите код</h2>
+
+        <!-- Явный выбор метода — только при первичной настройке 2FA (enrollment) -->
+        <div id="twofa-choose" class="hidden">
+          <p class="muted">Выберите способ подтверждения входа:</p>
+          <button class="primary" type="button" data-method="totp">Приложение-аутентификатор</button>
+          <button class="ghost" type="button" data-method="email">Код на электронную почту</button>
+          <p class="muted hidden" id="choose-pending"></p>
+          <div class="err hidden" id="choose-err"></div>
+        </div>
+
+        <!-- Ввод кода -->
+        <div id="twofa-enter">
+          <p class="muted" id="twofa-hint"></p>
+          <div id="twofa-qr-wrap" class="qr hidden"><img id="twofa-qr" alt="QR" /></div>
+          <form id="twofa-form" novalidate>
+            <input id="f-code" class="field code" inputmode="numeric" placeholder="Код" required />
+            <!-- Резервный код (10 символов с буквами) не помещается в сегментированное
+                 поле выше: otp.js режет ввод до 6 цифр. Поэтому отдельное поле. -->
+            <input id="f-recovery" class="field mono hidden" type="text" spellcheck="false"
+                   autocomplete="off" placeholder="Резервный код" />
+            <button class="primary" type="submit">Подтвердить</button>
+            <button class="ghost hidden" type="button" id="email-resend">Отправить код на почту</button>
+            <button class="ghost hidden" type="button" id="use-recovery">Ввести резервный код</button>
+            <button class="ghost hidden" type="button" id="twofa-back">← Выбрать другой способ</button>
+            <div class="err hidden" id="twofa-err"></div>
+          </form>
+        </div>
+
+        <!-- Шаг после включения 2FA: коды показываются ЕДИНСТВЕННЫЙ раз (в БД хеши) -->
+        <div id="recovery-save" class="hidden">
+          <p class="muted">
+            Каждый код работает один раз и заменяет код подтверждения входа, если
+            телефон или почта недоступны. Повторно мы их не покажем.
+          </p>
+          <ul id="recovery-list" class="recovery recovery-list"></ul>
+          <div class="recovery-actions">
+            <button class="ghost" type="button" id="recovery-copy">Скопировать</button>
+            <a class="ghost" id="recovery-download" href="#" download>Скачать файлом</a>
+          </div>
+          <label class="recovery-ack">
+            <input type="checkbox" id="recovery-ack" />
+            <span>Я сохранил коды в надёжном месте</span>
+          </label>
+          <button class="primary" type="button" id="recovery-continue" disabled>Продолжить</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">© <span id="yr"></span> Eduson Kids</footer>
+
+  <script src="/login/theme.js"></script>
+  <script src="/login/otp.js"></script>
+  <script src="/login/recovery.js"></script>
+  <script src="/login/login.js"></script>
+</body>
+</html>

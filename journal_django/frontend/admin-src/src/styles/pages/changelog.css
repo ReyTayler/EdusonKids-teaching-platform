@@ -1,0 +1,90 @@
+/* ── CHANGELOG DETAIL — карточка события ── */
+.changelog-event {
+  display: grid;
+  gap: var(--space-2);
+}
+.changelog-event__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.changelog-event__title {
+  font-weight: 600;
+  color: var(--text);
+}
+a.changelog-event__title { text-decoration: none; }
+.changelog-event__text {
+  color: var(--text2);
+  font-size: var(--fs-md);
+}
+.changelog-event__empty {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+}
+.changelog-event__diff-wrap {
+  margin-top: var(--space-2);
+}
+
+/* Список полей человекочитаемого diff — обычный шрифт, без mono-шума. */
+.changelog-changes {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) 1fr;
+  gap: 6px var(--space-3);
+}
+.changelog-changes__row { display: contents; }
+.changelog-changes__label {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  padding-top: 1px;
+}
+.changelog-changes__value {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text);
+  font-size: var(--fs-md);
+  word-break: break-word;
+}
+.changelog-changes__old {
+  color: var(--text3);
+  text-decoration: line-through;
+  text-decoration-color: var(--text4);
+}
+.changelog-changes__arrow {
+  color: var(--text3);
+}
+
+/* ── DiffView: таблица «поле / было / стало» ──
+   Удалённое — bad-тон, добавленное — ok-тон, светлые фоны (рецепт бейджа без
+   рамки: ячейка таблицы рамки не держит). */
+.diff-view {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.diff-view th {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text3);
+  border-bottom: 1px solid var(--line);
+}
+.diff-view td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  word-break: break-word;
+}
+.diff-view__field,
+.diff-view__val { font-size: var(--fs-xs); }
+.diff-view__del { background: var(--bad-bg); color: var(--bad); }
+.diff-view__ins { background: var(--ok-bg); color: var(--ok); }
+.diff-view__none { color: var(--text3); }
+.diff-view__empty { color: var(--text3); font-size: var(--fs-sm); }

@@ -1,0 +1,114 @@
+/* ── ФОРМА ЗАПИСИ УРОКА (LessonForm, ExtraLessonRecordModal) ──
+   Язык Eduson: поля по каталогу, ученики — строки-чекбоксы (общий Checkbox),
+   отказы — плашки статусного тона с текстом, отправка — чёрная primary.
+   Только токены. */
+
+/* Плашки: рецепт бейджа в крупном виде (заливка + рамка + ink статуса). */
+.lf-warn,
+.lf-error {
+  border: 1px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-radius: var(--r);
+  padding: var(--space-3);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.lf-error {
+  border-color: var(--bad-line);
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+.lf-students-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+/* В шапке секции подпись без нижнего отступа — его задаёт сама шапка. */
+.lf-students-hdr .t-sec-label { margin-bottom: 0; }
+
+/* Ученики — строки-чекбоксы: панель с линиями между строками. */
+.lf-students {
+  display: flex; flex-direction: column;
+  max-height: 280px; overflow-y: auto;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.lf-student {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text2);
+  font-size: var(--fs-sm);
+  transition: background var(--dur-1) var(--ease);
+}
+.lf-student + .lf-student { border-top: 1px solid var(--line); }
+.lf-student:hover:not(.is-blocked) { background: var(--bg); }
+/* Чекбокс занимает всю строку слева: клик по имени отмечает ученика. */
+.lf-student .checkbox { flex: 1; min-width: 0; color: inherit; }
+.lf-student-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lf-student-state {
+  flex-shrink: 0; font-size: var(--fs-2xs); font-weight: 500;
+  color: var(--text3);
+}
+.lf-student.is-present { color: var(--text); }
+.lf-student.is-present .lf-student-state { color: var(--ok); }
+.lf-student.is-blocked .lf-student-state { color: var(--bad); }
+
+/* Итог: сколько пришло и сколько заплатят — число моно. */
+.lf-preview {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--r); padding: var(--space-3) var(--space-4);
+}
+.lf-preview-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-sm); color: var(--text2); }
+.lf-preview-money { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
+.lf-preview-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--fs-xs); color: var(--text3); }
+
+.lf-actions { display: flex; align-items: center; gap: var(--space-2); }
+
+/* ── Поле «Запись урока» (ссылка на видео) — .input Eduson ── */
+
+.lf-record { display: flex; flex-direction: column; gap: var(--space-2); }
+.lf-record-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.lf-record-head .t-sec-label { margin-bottom: 0; }
+.lf-record-optional { font-size: var(--fs-2xs); color: var(--text3); }
+
+.lf-record-box {
+  display: flex; align-items: center; gap: var(--space-2);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  padding: var(--space-2) 11px;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.lf-record-box:hover { border-color: var(--line-3); }
+.lf-record-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.lf-record-box.is-valid { border-color: var(--ok-line); }
+.lf-record-box.is-valid .lf-record-icon { color: var(--ok); }
+.lf-record-box.is-suspect { border-color: var(--warn-line); }
+
+.lf-record-icon { flex-shrink: 0; color: var(--text3); transition: color var(--dur-1) var(--ease); }
+
+.lf-record-input {
+  flex: 1; min-width: 0;
+  background: transparent; border: 0; outline: none;
+  font: inherit; font-size: var(--fs-sm); color: var(--text);
+}
+.lf-record-input::placeholder { color: var(--text3); }
+
+.lf-record-clear {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 50%;
+  color: var(--text3); font-size: var(--fs-lg); line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.lf-record-clear:hover { background: var(--bg3); color: var(--text); }
+
+.lf-record-hint { font-size: var(--fs-2xs); color: var(--warn); }

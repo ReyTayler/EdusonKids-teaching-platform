@@ -1,0 +1,935 @@
+/* ============================================================
+ *  RENEWALS PAGE (CRM-воронка продлений)
+ *  Оболочка (заголовок + переключатель Канбан/Список),
+ *  канбан-доска с DnD и drawer сделки.
+ * ============================================================ */
+
+/* .renewals-page — общая оболочка ТРЁХ страниц раздела: канбан/список,
+   аналитика и настройка стадий. Всё, что относится только к канбану, живёт на
+   модификаторе --board: иначе правила плотности и ширины молча растянули бы
+   таблицу «Продления по месяцам» и список стадий через весь монитор. */
+.renewals-page {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Канбан живёт во всю ширину области контента: это горизонтальная лента, и
+   общий потолок --content-max (введённый ради таблиц, чтобы строка из 9
+   колонок не растягивалась через монитор) превращал её в узкое окно. */
+.app-page:has(> .renewals-page--board) { max-width: none; }
+
+.renewals-page--board {
+  /* Собственного padding у страницы канбана НЕТ — поля раздаёт .app-page.
+     Пока он был, липкая шапка вырывалась на --page-pad-x из уже вдвинутого
+     бокса и не дотягивалась до края области контента. */
+  padding: 0;
+  /* Плотнее общего --section-gap: экран рабочий, вертикаль на вес золота. */
+  gap: var(--space-3);
+
+  /* Сумма того, что стоит НАД и ПОД лентой. Раньше здесь было магическое
+     calc(100vh - 220px), устаревавшее при любой правке шапки; теперь величина
+     разобрана на слагаемые, и следующая правка видит, что именно менять:
+
+       шапка (dense)   24 сверху + 36 ряд кнопок + 12 снизу + 1 рамка = 73
+       гэп страницы                                                   = 12
+       панель фильтров  8 + 36 (высота SearchInput) + 8 + 2 рамки      = 54
+       гэп страницы                                                   = 12
+       нижнее поле ленты (--space-2) + нижнее поле .app-page (--space-10) = 48
+                                                                 итого ≈ 199
+       + высота липкой полосы над содержимым (--topbar-h) — добавлена в значении
+       ниже: на десктопе 0 (навигация слева), на узком экране — высота TopBar.
+
+     Строка чипов в сумму НЕ входит: она появляется не всегда, и колонки должны
+     переставать тянуться, а не прыгать по высоте при выборе фильтра. */
+  --rnl-board-top: calc(200px + var(--topbar-h));
+}
+
+@media (max-width: 900px) {
+  /* Здесь .app-page и .page-header уходят на --space-4, а ряд кнопок шапки и
+     ряд фильтров переносятся на вторую строку — над лентой встаёт заметно
+     больше. Значение прикидочное: если колонки уедут ниже сгиба, страница
+     проскроллится, а не сломается. */
+  .renewals-page--board { --rnl-board-top: calc(280px + var(--topbar-h)); }
+}
+
+.renewals-page__kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+
+@media (max-width: 720px) {
+  .renewals-page__kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+ *  НАСТРОЙКА СТАДИЙ (superadmin)
+ * ============================================================ */
+
+.renewal-stages-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.renewal-stages-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.renewal-stages-list__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.renewal-stages-list__label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.renewal-stages-list__kind {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+.renewal-stages-list__auto-badge {
+  font-size: 11px;
+  color: var(--text3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+}
+
+/* Переключатель режима «пауза» стоит в одном ряду с бейджами «авто» —
+   держим его в том же кегле, чтобы строка не разъезжалась по высоте. */
+.renewal-stages-list__pause {
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.renewal-stages-list__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.renewal-stages-list__action-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+}
+
+.renewal-stages-list__action-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.renewal-stages-list__action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.renewal-stages-list__action-btn--danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.renewal-stages-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: var(--space-4);
+}
+
+.renewal-stages-form__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.renewal-stages-form__hint {
+  margin: 0;
+  max-width: 62ch;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text3);
+}
+
+.renewal-stages-form__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.renewal-stages-form__input {
+  flex: 1 1 220px;
+  font: inherit;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: var(--space-2);
+}
+
+.renewal-stages-form__color {
+  width: 100px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: var(--space-2);
+}
+
+/* ============================================================
+ *  КАНБАН-ДОСКА
+ * ============================================================ */
+
+/* Лента канбана идёт от края до края области контента: гасим боковые поля
+   страницы отрицательным margin и возвращаем их padding'ом, чтобы первая и
+   последняя колонки не липли к краю. Величина ОБЯЗАНА совпадать с
+   --page-pad-x из .app-page и переключаться вместе с ней на 900px — иначе
+   лента вылезет наружу и даст горизонтальный скролл всей страницы (ровно эта
+   ошибка уже ловилась в .kb-editor, см. knowledge.css).
+   overflow-x живёт ТОЛЬКО здесь: <body> по горизонтали не скроллится. */
+.renewal-board {
+  display: flex;
+  gap: var(--space-3);
+  margin-inline: calc(-1 * var(--page-pad-x));
+  padding-inline: var(--page-pad-x);
+  padding-bottom: var(--space-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.renewal-board--loading {
+  color: var(--text3);
+  font-size: var(--fs-md);
+  padding: var(--space-6);
+}
+
+.renewal-col {
+  /* Тянутся на свободном месте, но не ужимаются: на широком мониторе колонки
+     не жмутся в левый угол, на узком включается скролл ленты. Потолок нужен,
+     чтобы три колонки не расползлись на полэкрана каждая. */
+  flex: 1 0 272px;
+  min-width: 272px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  /* Ни зазора, ни полей: шапка-плашка тянется от края до края и лежит вплотную
+     к верху колонки. Вертикальные интервалы держат сами дети (см. ниже). */
+  gap: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 0;
+  /* Без обрезки прямой угол колонки срезал бы скругление плашки. */
+  overflow: hidden;
+  max-height: calc(100vh - var(--rnl-board-top));
+}
+
+.renewal-col--over {
+  border-color: var(--info);
+  background: color-mix(in oklab, var(--info) 6%, var(--bg));
+}
+
+@media (max-width: 900px) {
+  /* Брейкпоинт тот же, на котором .app-page переключает поля на --space-4. */
+  .renewal-board {
+    margin-inline: calc(-1 * var(--space-4));
+    padding-inline: var(--space-4);
+  }
+}
+
+/* Пометка прогресс-стадии: сюда двигает только движок. Без рамки — рамка
+   превращала служебную подпись в самостоятельный элемент управления. */
+.renewal-col__auto-badge {
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text3);
+}
+
+/* ── Шапка колонки доски (общая для «Продлений» и «Задач») ──
+   Рецепт Eduson: нейтральная плашка --bg2 с линией снизу, заголовок 13px/600,
+   счётчик mono --text3. Цвет стадии из справочника — только маленькая точка
+   (цвет приходит из данных инлайном, токеном его не выразить). Определение в
+   components.css (заливка стадии) перекрывается здесь: файл подключён позже. */
+.board-col-head {
+  min-height: 36px;
+  background: var(--bg2);
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+}
+.board-col-head__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--line-3);
+}
+.board-col-head__label { font-size: var(--fs-sm); font-weight: 600; }
+.board-col-head__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text3);
+  opacity: 1;
+}
+.board-col-head__actions { color: var(--text3); }
+
+/* Развёрнутый поиск замещает плашку стадии, поэтому держит её геометрию:
+   те же боковые поля и та же высота строки — иначе при открытии поиска
+   вся колонка подпрыгивает. */
+.renewal-col__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 34px;
+  padding: 0 var(--space-3);
+}
+
+.renewal-col__search-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  outline: none;
+}
+.renewal-col__search-input::placeholder { color: var(--text4); }
+.renewal-col__search-input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.renewal-col__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-y: auto;
+  min-height: 40px;
+  /* Сверху/снизу меньше, чем по бокам: после сплошной плашки полные поля
+     смотрятся пустовато. */
+  padding: var(--space-2) var(--space-3);
+}
+
+/* Короткая служебная строка («Ищем…», «Никого не найдено») — в отличие от
+   EmptyState, который объясняет ПУСТУЮ стадию и занимает больше места. */
+.renewal-col__note {
+  padding: var(--space-3) var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  text-align: center;
+}
+
+/* Пустое состояние внутри колонки уже, чем общее: колонка 272px. */
+.renewal-col__body .empty-state { padding: var(--space-4) var(--space-2); }
+.renewal-col__body .empty-state__title { font-size: var(--fs-sm); }
+.renewal-col__body .empty-state__hint { font-size: var(--fs-xs); max-width: none; }
+
+/* Вид кнопки — .btn ghost sm (классы в разметке); здесь только отступы. */
+.renewal-col__more {
+  margin: 0 var(--space-3) var(--space-3);
+}
+
+/* Карточка сделки. Плотность — главное требование раздела: цель 64–88px по
+   высоте. Верхняя цветная полоса убрана: цвет стадии принадлежит КОЛОНКЕ,
+   на карточке он дублировал бы её и спорил с бейджами состояния. */
+.renewal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--space-2) var(--space-3);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.renewal-card:hover {
+  border-color: var(--line-3);
+}
+
+/* Карточка-источник во время драга — тускнеет на месте, сам «полёт» рисует
+   .renewal-card--overlay внутри DragOverlay (см. RenewalBoard.tsx). */
+.renewal-card--dragging {
+  opacity: 0.35;
+}
+
+/* Плавающая копия в DragOverlay: dnd-kit порталит её в document.body, поэтому
+   она вне overflow/stacking-контекста колонок. Ширина явная — минимальная
+   ширина колонки (272px) минус её горизонтальные поля (2 × --space-3). */
+.renewal-card--overlay {
+  width: 248px;
+  cursor: grabbing;
+  box-shadow: var(--shadow-popover);
+}
+
+.renewal-card__top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.renewal-card__student {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.renewal-card__direction {
+  font-size: var(--fs-sm);
+  color: var(--text3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ряд состояния. Бейджи-пилюли заменены на цветной текст: рамка и заливка
+   вокруг каждой метки на карточке высотой 68px читаются как отдельные
+   элементы управления. */
+.renewal-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.renewal-card__age { color: var(--text3); }
+/* «Зависла» и «Долг» — только ink --bad, без заливок. */
+.renewal-card__age.is-stuck { color: var(--bad); font-weight: 500; }
+/* Долг — danger: ученик уже занимается в минус, это нарушение.
+   Кончившиеся уроки — warning: ничего не нарушено, но продлевать надо сейчас.
+   Разные цвета намеренно: свести их в один — потерять разницу между
+   «пора работать» и «уже проглядели». */
+.renewal-card__debt { color: var(--bad); font-weight: 500; }
+.renewal-card__spent { color: var(--warn); font-weight: 500; }
+.renewal-card__frozen { color: var(--text3); }
+
+/* Пилюли вместо прямоугольных бейджей — в drawer'е сделки (на карточке
+   бейджей больше нет). */
+.renewal-drawer .status-badge {
+  border-radius: 999px;
+}
+
+/* ============================================================
+ *  DRAWER СДЕЛКИ
+ * ============================================================ */
+
+.renewal-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  /* Токен вместо жёсткого rgba(15, 23, 42, 0.32): тот молчал в тёмной теме —
+     затемнение оставалось «светлым» по формуле, не переключаясь вместе с
+     остальным UI (тот же фикс уже сделан для .task-drawer-overlay). */
+  background: var(--overlay);
+  display: flex;
+  justify-content: flex-end;
+  /* var(--z-overlay), а не прежние «40 на глаз». Боковая панель — модальная
+     поверхность: она обязана закрывать собой и содержимое, и навигацию. С 40
+     её накрывала верхняя панель узкого режима (--z-nav, 900), которая появилась
+     позже, — и срезала ровно первую строку панели, то есть имя и кнопку
+     закрытия. Шкала слоёв объявлена в tokens.css именно чтобы такие столкновения
+     разрешались порядком уровней, а не сравнением случайных чисел. */
+  z-index: var(--z-overlay);
+}
+
+/* Ширина панели — пользовательская (ручка на левом крае, RenewalDrawer.tsx +
+   общий hooks/useDrawerResize.ts), базовое значение здесь — только запасной
+   вариант до применения инлайнового style. container-type включает
+   контейнерные запросы ниже: раскладка полей реагирует на фактическую
+   ширину ПАНЕЛИ, а не окна (устройство 1-в-1 с .task-drawer). */
+.renewal-drawer {
+  position: relative;
+  width: min(440px, 100%);
+  height: 100%;
+  background: var(--bg2);
+  border-left: 1px solid var(--line);
+  padding: var(--space-6);
+  /* Запас снизу: без него последний блок панели упирается в край экрана, и не
+     видно, что список кончился (то же правило у .task-drawer). */
+  padding-bottom: var(--space-10);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow-y: auto;
+  overflow-x: hidden;
+  container-type: inline-size;
+}
+
+.renewal-drawer__loading {
+  color: var(--text3);
+  font-size: 14px;
+  padding: var(--space-4) 0;
+}
+
+.renewal-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.renewal-drawer__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* min-width: 0 обязателен, и это ровно та причина, по которой крестик
+     «пропадал» на телефоне. Шапка — flex со space-between, а у флекс-элемента
+     минимальная ширина по умолчанию равна ширине содержимого: длинное имя
+     ученика не сжималось, строка переполнялась, и кнопка закрытия уезжала за
+     правый край панели, где её срезал overflow-x: hidden. Теперь вместо этого
+     сжимается имя (многоточие ниже), а кнопка остаётся на месте. */
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Имя ученика — единственное, что в шапке имеет право сжиматься, поэтому
+   многоточие вешаем на него. */
+.renewal-drawer__title > a,
+.renewal-drawer__title > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.renewal-drawer__subhead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--text3);
+}
+
+.renewal-drawer__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.renewal-drawer__balance {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.renewal-drawer__balance-label {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+.renewal-drawer__balance-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Ряд действий открытой сделки: «Внести оплату» + «Вернуть в работу» (только на
+   стадии «Заморожен»). Без обёртки кнопки — прямые flex-дети .renewal-drawer и
+   растягиваются на всю ширину колонки. */
+.renewal-drawer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.renewal-drawer__pay-btn {
+  align-self: flex-start;
+  border-radius: var(--r-lg);
+}
+
+/* Поле комментария — во всю ширину и скруглённое: под лентой переписки оно
+   читается как строка ввода сообщения, а не как ещё одно поле формы. */
+.renewal-drawer__comment-input {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  color: var(--text);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* Кнопка отправки появляется только с набранным текстом (см. RenewalDrawer). */
+.renewal-drawer__comment-send {
+  align-self: flex-start;
+}
+
+.renewal-drawer__timeline-section {
+  flex: 1;
+}
+
+/* ===== Зоны закрытия сделки (появляются при перетаскивании карточки) ===== */
+
+.renewal-close-zones {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+  padding: var(--space-3);
+}
+
+.renewal-close-zone {
+  flex: 0 1 240px;
+  padding: var(--space-4);
+  text-align: center;
+  font-weight: 600;
+  border: 2px dashed var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg2);
+  color: var(--text3);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.renewal-close-zone--won.renewal-close-zone--over {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.renewal-close-zone--lost.renewal-close-zone--over {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.renewal-close-dialog__text {
+  font-size: 13px;
+  color: var(--text2);
+  margin: 0 0 var(--space-3);
+  line-height: 1.5;
+}
+
+/* ===== Карточка сделки: CRM-поля, прогресс, закрытая сделка ===== */
+
+.renewal-drawer__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--text2);
+}
+
+/* Поля идут одним столбцом, а не парами, даже на широкой панели: строка
+   (InlineField) теперь горизонтальная — подпись слева, контрол справа, — и две
+   таких пары в ряд дают четыре колонки текста. Тот же довод, что у
+   .task-drawer__fields в tasks.css. */
+.renewal-drawer__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Комментарий и лента активности — на узкой панели друг под другом, на
+   широкой встают двумя колонками бок о бок (тот же приём, что
+   .task-drawer__lower в tasks.css). */
+.renewal-drawer__lower {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.renewal-drawer__closed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Пояснение вместо кнопки «Переоткрыть» у НЕ последней сделки ученика: место
+   кнопки не оставляем пустым, иначе непонятно, почему действия нет. Тянется по
+   остатку строки, поэтому текст переносится, а бейдж слева держит свою ширину. */
+.renewal-drawer__hint {
+  flex: 1;
+  text-align: right;
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+/* Правка даты закрытия: календарь тянется, кнопка держит свою ширину —
+   иначе на узком drawer'е «Сохранить» переносится под инпут и рвёт строку. */
+.renewal-drawer__outcome-date-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.renewal-drawer__outcome-date-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.renewal-drawer__outcome-date-row > button {
+  flex: 0 0 auto;
+}
+
+/* ===== Панель фильтров раздела =====
+   Один ряд контролов + строка чипов, появляющаяся только когда что-то выбрано.
+   Прежний вид (uppercase-подписи над каждым полем) съедал ~20px высоты на
+   информацию, которую поле и так сообщает своим значением. */
+.rnl-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.rnl-toolbar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Селекты и поле цикла — одной высоты между собой. SearchInput чуть выше
+   (36px, задано в components.css); ряд выровнен по центру, поэтому разница
+   в 2px не читается, а лезть в общий компонент ради неё не стоит. */
+.rnl-toolbar__select { width: 190px; }
+.rnl-toolbar__select .select-input__trigger,
+.rnl-toolbar__cycle {
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  padding: 0 var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  outline: none;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.rnl-toolbar__cycle { width: 88px; }
+.rnl-toolbar__cycle::placeholder { color: var(--text4); }
+.rnl-toolbar__cycle:focus,
+.rnl-toolbar__select .select-input__trigger:focus,
+.rnl-toolbar__select.is-open .select-input__trigger {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.rnl-toolbar__select .select-input__value { font-size: var(--fs-sm); }
+
+/* Чипы активных фильтров. Сам чип — кнопка: клик снимает свой фильтр,
+   поэтому крестик декоративный (aria-hidden), а смысл несёт подпись. */
+.rnl-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.rnl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px 8px 3px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 320px;
+}
+.rnl-chip:hover { background: var(--bg4); }
+.rnl-chip__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rnl-chip__x { font-size: var(--fs-md); line-height: 1; opacity: 0.7; }
+.rnl-chip:hover .rnl-chip__x { opacity: 1; }
+
+@media (max-width: 720px) {
+  .rnl-toolbar__row > * { flex: 1 1 100%; }
+  .rnl-toolbar__select { width: 100%; }
+}
+
+/* ===== Список: направления-чипы и «дней в стадии» ===== */
+.rnl-dirs { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.rnl-dir-chip {
+  display: inline-flex; align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-2xs); font-weight: 500;
+  white-space: nowrap;
+}
+.rnl-days {
+  display: inline-flex; align-items: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text2);
+}
+/* Просрочка — ink --bad без заливки. */
+.rnl-days.is-overdue {
+  color: var(--bad);
+  font-weight: 500;
+}
+
+/* ===== Аналитика: таблица «Продления по месяцам» ===== */
+
+.renewal-months__scroll {
+  overflow-x: auto;
+}
+
+.renewal-months {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.renewal-months th,
+.renewal-months td {
+  padding: var(--space-2) var(--space-3);
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.renewal-months th:first-child,
+.renewal-months td:first-child {
+  text-align: left;
+}
+
+.renewal-months th {
+  color: var(--text3);
+  font-weight: 500;
+}
+
+.renewal-months__month {
+  text-transform: capitalize;
+}
+
+.chart-card__hint {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+/* ===== Сводка «Ученики без сделок» ===== */
+
+.renewal-unassigned__student {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.renewals-page__unassigned-btn--attention {
+  border-color: var(--warn-line);
+  color: var(--warn);
+}
+
+/* ===== Каркас доски на время загрузки =====
+   Повторяет геометрию настоящей карточки, чтобы при появлении данных колонка
+   не дёргалась. Полоски держим тонкими — как строки текста, а не как блоки, —
+   а разницу до высоты настоящей карточки добираем зазором:
+   рамка 2 + поля 16 + ряд аватара 22 + строка 12 + строка 11 + два зазора по 9
+   = 81px против ≈82px у карточки с тремя строками текста.
+   Анимация — общая .skeleton-block из components.css. */
+.rnl-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* Ряд аватара: кружок той же величины, что Avatar на карточке (22px). */
+.rnl-skeleton__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 22px;
+}
+.rnl-skeleton__avatar {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+/* Шапка колонки в каркасе повторяет геометрию плашки, но нейтральна по цвету:
+   цвет стадии приезжает вместе с доской. */
+.rnl-skeleton__head {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--r) var(--r) 0 0;
+}
+
+.rnl-skeleton__head-label {
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rnl-skeleton__title { height: 13px; width: 60%; }
+.rnl-skeleton__line { height: 11px; }
+.rnl-skeleton__line--name { flex: 1; height: 13px; max-width: 75%; }
+.rnl-skeleton__line--dir  { height: 12px; width: 90%; }
+.rnl-skeleton__line--meta { width: 45%; }

@@ -1,0 +1,486 @@
+/* ============================================================
+ *  БОКОВАЯ КОЛОНКА НАВИГАЦИИ (Sidebar) — язык Eduson
+ *  Фон --bg2, линия справа --line, без теней. Группа: заголовок 13px/600
+ *  со значком 18px (монохром, currentColor) и шевроном --text3. Пункты
+ *  13px/500 --text2, отступ под значком, hover --bg3, r6. Активный пункт —
+ *  чёрная заливка --accent с --on-accent (как активная вкладка Eduson).
+ *  Рельса: только значки, активная — чёрный квадрат r6.
+ * ============================================================ */
+.shell--side { flex-direction: row; }
+
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  flex-shrink: 0;
+  height: 100vh;
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border-right: 1px solid var(--line);
+}
+
+/* Шапка колонки: знак слева, кнопка «свернуть» справа. */
+.sidebar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+.sidebar__brand { min-width: 0; text-decoration: none; border-radius: var(--r-sm); }
+.sidebar__toggle {
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.sidebar__toggle:hover { background: var(--bg3); color: var(--text); }
+
+/* Прокрутка работает, скроллбар скрыт. */
+.sidebar__nav {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sidebar__nav::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.side-pinned { display: flex; flex-direction: column; margin-bottom: var(--space-2); }
+
+/* Общие рецепты строк: «Дашборд» (side-top), заголовок группы, ссылка-пункт. */
+.side-top,
+.side-group__btn,
+.side-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.side-top:hover,
+.side-group__btn:hover,
+.side-item:hover { background: var(--bg3); }
+
+/* Верхний уровень и заголовок группы: значок 18px + подпись 13px/600. */
+.side-top,
+.side-group__btn {
+  gap: var(--space-3);
+  min-height: 36px;
+  padding: 7px var(--space-3);
+  font-weight: 600;
+  color: var(--text);
+}
+.side-top > svg,
+.side-group__btn > svg { flex-shrink: 0; color: var(--text2); }
+.side-group__btn--current > svg { color: var(--text); }
+.side-top__label,
+.side-group__label,
+.side-item__label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.side-group + .side-group { margin-top: 2px; }
+.side-group__chevron {
+  display: inline-flex;
+  color: var(--text3);
+  transition: transform var(--dur-1) var(--ease);
+}
+.side-group--open .side-group__chevron { transform: rotate(90deg); }
+
+/* Раскрытие строкой грида 0fr → 1fr: анимируется настоящая высота списка,
+   без JS-замеров и без max-height с угаданным числом. */
+.side-group__panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-2) var(--ease);
+}
+.side-group--open .side-group__panel { grid-template-rows: 1fr; }
+.side-group__items {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 1px;
+}
+
+/* Пункт: 13px/500 --text2; левый отступ = поля строки группы + значок 18 + зазор 12,
+   поэтому подпись встаёт точно под подпись группы. */
+.side-item {
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 6px var(--space-3) 6px 42px;
+  font-weight: 500;
+  color: var(--text2);
+}
+.side-item:hover { color: var(--text); }
+/* .side-group__items режет всё, что вылезает за край (overflow: hidden нужен
+   анимации 0fr -> 1fr), и глобальное кольцо с outline-offset: 2px срезалось бы
+   по бокам. Кольцо внутрь; на чёрной заливке активного пункта — светлое. */
+.side-group__items .side-item:focus-visible { outline-offset: -2px; }
+.side-group__items .side-item--active:focus-visible { outline-color: var(--on-accent); }
+
+/* Активный пункт и «Дашборд»: чёрная заливка. Hover не должен её перекрашивать. */
+.side-item--active,
+.side-item--active:hover,
+.side-top--active,
+.side-top--active:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.side-top--active > svg { color: var(--on-accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .side-group__panel,
+  .side-group__chevron { transition: none; }
+}
+
+/* Подвал: пользователь и два ghost-действия. */
+.sidebar__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.side-user {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: var(--space-1) var(--space-3) var(--space-2);
+}
+.side-user__name {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side-user__role { font-size: var(--fs-2xs); color: var(--text3); white-space: nowrap; }
+
+.side-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 32px;
+  padding: 6px var(--space-3);
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.side-btn:hover { background: var(--bg3); color: var(--text); }
+.side-btn > svg { flex-shrink: 0; }
+.side-btn__label { flex: 1; min-width: 0; white-space: nowrap; }
+
+/* ── РЕЛЬСА ── только значки; подписи — в title/aria-label, группы — во вылете. */
+.sidebar--rail {
+  width: var(--sidebar-rail-w);
+  min-width: var(--sidebar-rail-w);
+}
+.sidebar--rail .sidebar__head {
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-2) var(--space-2);
+}
+.sidebar--rail .sidebar__nav { padding: var(--space-2); }
+/* Кнопка — квадрат 44px (нижняя граница удобной цели нажатия). Активная
+   «Дашборд» и текущая группа — чёрный квадрат r6 с белым значком. */
+.sidebar--rail .side-top,
+.sidebar--rail .side-group__btn {
+  position: relative;
+  width: 44px; height: 44px;
+  min-height: 0;
+  padding: 0;
+  margin: 0 auto 2px;
+  justify-content: center;
+  gap: 0;
+}
+.sidebar--rail .side-top__label,
+.sidebar--rail .side-user,
+.sidebar--rail .side-btn__label { display: none; }
+.sidebar--rail .side-group__btn--current,
+.sidebar--rail .side-group__btn--current:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.sidebar--rail .side-group__btn--current > svg { color: var(--on-accent); }
+/* Счётчик пропусков не помещается в строку — садится на угол значка. */
+.sidebar--rail .nav-badge {
+  position: absolute;
+  top: 2px; right: 2px;
+  margin-left: 0;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  font-size: var(--fs-2xs);
+}
+.sidebar--rail .sidebar__foot { padding: var(--space-2); align-items: center; }
+.sidebar--rail .side-btn {
+  width: 44px; height: 40px;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+/* Вылет разделов группы в рельсе — рецепт .pop: r8, рамка --line-2,
+   --shadow-popover. Портал (Radix Popover): прокручиваемая колонка его бы обрезала. */
+.side-flyout {
+  z-index: var(--z-popover);
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-popover);
+}
+.side-flyout__title {
+  padding: var(--space-1) var(--space-3) var(--space-2);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+/* Во вылете вложенности нет — отступ под значок был бы пустым местом. */
+.side-flyout .side-item { padding-left: var(--space-3); }
+
+/* ============================================================
+ *  ВЕРХНЯЯ ПОЛОСА УЗКОГО РЕЖИМА (TopBar): знак, раздел, кнопка меню.
+ *  Липкая, в потоке. Её высота публикуется через .main--topbar.
+ * ============================================================ */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--mobile-bar-h);
+  padding: 0 var(--page-pad-x);
+  background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+}
+.topbar__mark { flex-shrink: 0; }
+.topbar__section {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar__burger {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.topbar__burger:hover { background: var(--bg3); color: var(--text); }
+/* Полоса узкого режима занимает высоту: канбаны, таблицы и липкие панели
+   страниц отсчитывают верх от этих переменных (на десктопе они равны 0). */
+.main--topbar {
+  --topbar-h: var(--mobile-bar-h);
+  --header-h: var(--mobile-bar-h);
+}
+
+/* ── Меню узкого режима (в общем Dialog): группы со значками одним списком ── */
+.side-drawer { display: flex; flex-direction: column; gap: var(--space-4); }
+.side-drawer__group { display: flex; flex-direction: column; gap: 1px; }
+.side-drawer__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.side-drawer__title > svg { flex-shrink: 0; color: var(--text2); }
+.side-drawer .side-item { min-height: 36px; }
+.side-drawer__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+/* Красный бейдж-счётчик необработанных пропусков на кнопке «Доп.уроки». */
+.nav-badge {
+  margin-left: auto;
+  min-width: 20px; height: 20px;
+  padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 9px;
+  background: var(--danger); color: var(--on-accent);
+  font-size: var(--fs-xs); font-weight: 700; line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── SECTIONS ── */
+#admin-main > * { animation: fadeIn .18s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+
+/* ── SCROLL-TOP BUTTON ── */
+#scroll-top-btn {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  right: calc(24px + env(safe-area-inset-right));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Было 1500 — выше подложки модалки (1000), из-за чего акцентный круг
+     «наверх» всплывал поверх открытого диалога. Экранная кнопка живёт на
+     уровне навигации, то есть ПОД модалкой. */
+  z-index: var(--z-nav);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition: opacity .2s, transform .2s, background .15s;
+}
+#scroll-top-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+#scroll-top-btn:hover {
+  background: var(--accent-hover);
+}
+
+
+/* ============================================================
+ *  ШАПКА СТРАНИЦЫ (PageHeader) — паттерн Eduson: заголовок 18px/600
+ *  слева, справа пояснение и/или действия. Не липкая: липкая полоса
+ *  съедала бы высоту экрана у рабочих таблиц.
+ * ============================================================ */
+.page-header {
+  /* Небольшой подтяг к следующей секции: общий зазор .app-page (24px) для
+     строки заголовка многовато. */
+  margin-bottom: calc(-1 * var(--space-2));
+}
+.page-header__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.page-header__main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.page-header__title-row { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
+.page-header__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text);
+}
+/* Счётчик — моно, как все числа Eduson. */
+.page-header__count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text3);
+}
+/* Пояснение прижато вправо; действия идут следом. */
+.page-header__sub {
+  margin-left: auto;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  text-align: right;
+}
+.page-header__actions {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  margin-left: auto;
+}
+.page-header__sub + .page-header__actions { margin-left: 0; }
+.page-header__actions .btn-save { margin-left: 0; }
+.page-header--dense { margin-bottom: calc(-1 * var(--space-3)); }
+.page-header--dense .page-header__title { font-size: var(--fs-xl); }
+
+@media (max-width: 900px) {
+  .page-header__sub { margin-left: 0; text-align: left; flex-basis: 100%; }
+  .page-header__sub + .page-header__actions { margin-left: auto; }
+}
+
+/* ── ХЛЕБНЫЕ КРОШКИ ── */
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: var(--fs-xs); color: var(--text3); }
+.crumbs__item { display: inline-flex; align-items: center; gap: 4px; }
+/* Ссылки пути — акцентом: по ним уходят наверх, и они должны читаться как
+   ссылки. Текущая страница — основным цветом и полужирным, это «вы здесь». */
+.crumbs__link { color: var(--accent); text-decoration: none; border-radius: 3px; transition: color var(--t-fast) var(--ease); }
+.crumbs__link:hover { color: var(--accent-hover); text-decoration: underline; }
+.crumbs__sep { color: var(--text4); font-size: var(--fs-sm); line-height: 1; }
+.crumbs [aria-current="page"] { color: var(--text); font-weight: 600; }
+
+/* Крошки на карточке сущности: стрелка «назад» + путь. */
+.detail-crumbs { padding: var(--space-2) 0 var(--space-4); }
+.crumbs__back {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  margin-right: 2px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+              border-color var(--t-fast) var(--ease);
+}
+.crumbs__back:hover { background: var(--bg3); color: var(--text); border-color: var(--border-strong); }
+
+/* Страница-карточка: тот же вертикальный ритм, что у остальных страниц. */
+.detail-page { display: flex; flex-direction: column; animation: fadeIn .18s ease; }

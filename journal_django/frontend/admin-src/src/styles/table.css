@@ -1,0 +1,373 @@
+/* ── TABLE — table.tbl Eduson ──
+   Панель таблицы — .panel: белая поверхность, рамка 1px --line, радиус 8, без
+   тени. Заголовки колонок 11px/500 UPPERCASE --text3 .04em; ячейка 13px,
+   9×10; разделители строк — линии; зебры нет; hover строки — фон страницы. */
+.table-panel {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.table-wrap {
+  overflow: auto;
+  max-height: calc(100vh - 280px - var(--topbar-h));
+  /* overscroll-behavior НЕ 'contain': при 'contain' скролл не передаётся
+     странице на краю таблицы — дойдя до конца, приходилось уводить курсор из
+     таблицы, чтобы прокрутить страницу. Дефолт 'auto' даёт нормальную сцепку:
+     таблица докручивается до края, дальше колесо прокручивает страницу. */
+  overscroll-behavior: auto;
+}
+table { width: 100%; min-width: max-content; border-collapse: collapse; }
+thead th {
+  padding: var(--cell-pad-y) var(--cell-pad-x);
+  text-align: left;
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text3);
+  background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  max-width: 240px;
+}
+tbody td {
+  max-width: 240px;
+  word-break: break-word;
+  padding: var(--cell-pad-y) var(--cell-pad-x);
+  vertical-align: middle;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+tbody tr {
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+  border-bottom: 1px solid var(--line);
+}
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--bg); }
+/* Клавиатурный фокус строки: полоса 3px слева цветом акцента (чёрная). */
+tbody tr:focus-visible { outline: none; background: var(--bg); }
+tbody tr:focus-visible td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+/* Строка, требующая разбора («Ждёт решения» в доп.уроках): мягкая заливка
+   статуса bad на всю ширину — статус виден до того, как глаз дошёл до колонки.
+   Правила стоят ПОСЛЕ `tbody tr:hover`: при равной специфичности выигрывает
+   последнее, иначе общий hover стирал бы подсветку. */
+tbody tr.row--danger { background: var(--bad-bg); }
+tbody tr.row--danger:hover { background: color-mix(in oklab, var(--bad) 12%, var(--bg2)); }
+/* Текст строки — --danger-strong: на бледной подложке обычный цвет читался как
+   «обычная строка, которую зачем-то подкрасили». Кнопка «…» держит свой цвет и
+   краснеть не должна — это управление, а не данные. */
+tbody tr.row--danger td { color: var(--danger-strong); }
+.data-table thead tr:nth-child(2) th { padding: 4px 8px; background: var(--bg2); border-bottom: 1px solid var(--line); }
+
+
+/* ============================================================
+ *  .table-panel--roomy — списки сущностей (Ученики, Группы, Преподаватели,
+ *  Направления): тот же вид, что у плотной таблицы, но строка ровно --row-h,
+ *  чтобы шаг не зависел от аватара и двухэтажной ячейки.
+ *  Высота задаётся на <tr>, а не паддингом ячейки: у «Учеников» строку держит
+ *  аватар, у «Направлений» — только текст, и на одном паддинге шаг разъехался бы.
+ * ============================================================ */
+.table-panel--roomy tbody tr { height: var(--row-h); }
+.table-panel--roomy tbody td { max-width: 280px; }
+
+/* ── ДВУХЭТАЖНАЯ ЯЧЕЙКА ──
+   Главное значение и приглушённая метаданная под ним («Каримова И. З.» /
+   «id: 16066»). Экономит колонку там, где второе значение читается вместе с первым. */
+.cell-stack { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cell-stack__main { color: var(--text); font-weight: 500; line-height: 1.35; }
+.cell-stack__sub {
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  line-height: 1.35;
+}
+
+/* ── КОЛОНКА ДЕЙСТВИЙ ──
+   Липнет к правому краю: у «Групп» тринадцать колонок и горизонтальный
+   скролл, а кнопка «Открыть» обязана оставаться на виду.
+
+   Собственный непрозрачный фон обязателен — под липкой ячейкой проезжают
+   данные соседних колонок. Отсюда же парное правило на :hover. */
+.col-actions {
+  position: sticky;
+  right: 0;
+  /* 1px, а НЕ 1%. Процент здесь взрывает всю раскладку таблицы: ширина колонки
+     считается от ширины таблицы, минимальная ширина ячейки задана содержимым
+     (кнопка «Открыть»), и чтобы 1% равнялся сотне пикселей, браузер растягивает
+     таблицу до ~10000px. С 1px минимум по содержимому просто побеждает
+     заявленную ширину, и колонка садится ровно по кнопке. */
+  width: 1px;
+  white-space: nowrap;
+  text-align: right;
+}
+thead th.col-actions {
+  background: var(--bg2);
+  /* Угловая ячейка липнет сразу по двум осям (top от общего правила шапки и
+     right отсюда) и обязана лежать выше обычных липких ячеек, иначе первая
+     строка тела проезжает поверх неё. */
+  z-index: calc(var(--z-sticky) + 1);
+  box-shadow: inset 1px 0 0 var(--line);
+}
+tbody td.col-actions {
+  background: var(--bg2);
+  box-shadow: inset 1px 0 0 var(--line);
+}
+tbody tr:hover td.col-actions { background: var(--bg); }
+
+/* Кнопка перехода в карточку сущности: «Открыть ›» — .btn.sm Eduson (общие
+   правила кнопок — в components.css): белая с рамкой --line-2, hover — рамка
+   --text3. Заливка по наведению строки убрана: пятьдесят чёрных плашек в
+   колонке перетягивали внимание с данных. */
+.btn-open { gap: 6px; }
+.btn-open svg { flex-shrink: 0; }
+/* На телефоне подпись уходит, остаётся шеврон: липкая колонка с текстом
+   «Открыть» съедала около четверти ширины экрана — на 390px это те самые
+   колонки с данными, ради которых в таблицу и заходят. Доступное имя ссылки
+   держится через aria-label (см. RowOpenButton). */
+@media (max-width: 640px) {
+  .btn-open { padding: 5px var(--space-2); gap: 0; }
+  .btn-open__label { display: none; }
+}
+
+/* ── ENTITY DATA CARD (collapsible) ── */
+.entity-card {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.entity-card__head {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 16px;
+  background: transparent; border: none; border-bottom: 1px solid var(--line);
+  cursor: pointer; text-align: left;
+  transition: background var(--dur-1) var(--ease);
+  font-family: var(--font-sans);
+}
+.entity-card__head:hover { background: var(--bg); }
+.entity-card__head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.entity-card__title {
+  font-size: var(--fs-2xs); font-weight: 500; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--text3);
+  display: flex; align-items: center; gap: 8px;
+}
+.entity-card__chevron { color: var(--text3); transition: transform var(--dur-2) var(--ease); flex-shrink: 0; }
+.entity-card.is-collapsed .entity-card__head { border-bottom-color: transparent; }
+.entity-card.is-collapsed .entity-card__chevron { transform: rotate(-90deg); }
+.entity-card__body {
+  padding: 6px 20px 12px;
+  max-height: 4000px;
+  overflow: hidden;
+  transition: max-height .25s ease, padding var(--dur-2) ease, opacity var(--dur-2) ease;
+  opacity: 1;
+}
+.entity-card.is-collapsed .entity-card__body {
+  max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0;
+}
+.entity-card__row {
+  display: flex; gap: 24px; padding: 10px 0;
+  border-bottom: 1px solid var(--line); align-items: baseline;
+}
+.entity-card__row:last-child { border-bottom: none; }
+.entity-card__label {
+  flex: 0 0 180px;
+  font-size: var(--fs-2xs); font-weight: 500;
+  text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text3);
+}
+.entity-card__value {
+  flex: 1; min-width: 0;
+  font-size: var(--fs-sm); color: var(--text);
+  word-break: break-word; line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .entity-card__row { flex-direction: column; gap: 4px; }
+  .entity-card__label { flex: none; }
+}
+
+/* scrollbar переехал в base.css (на токене --scrollbar-thumb). */
+
+/* Skeleton cell (table rows): плоский --bg3 без бегущего блика. */
+.skeleton-cell { height: 12px; background: var(--bg3); border-radius: var(--r-xs); }
+
+/* ── STICKY TABLE HEADER ──
+   Липнет к верху .table-wrap (см. max-height выше), а не к странице. Фон
+   обязателен — иначе строки просвечивают сквозь заголовки. */
+.table-wrap { position: relative; }
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+}
+
+/* ── RESET FILTERS BUTTON ── вид — в components.css (.btn.sm) */
+.btn-reset-filters { gap: 6px; }
+.btn-reset-filters svg { display: block; }
+
+/* ── PAGINATOR ──
+   Цифры моноширинные, активная страница — чёрная заливка (как активная
+   вкладка/сегмент). */
+.paginator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.paginator__pages { display: flex; gap: 2px; align-items: center; }
+.paginator__btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  color: var(--text2);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+              transform var(--dur-1) var(--ease);
+}
+.paginator__btn:hover:not(:disabled):not(.is-current) { background: var(--bg3); color: var(--text); }
+.paginator__btn:active:not(:disabled) { transform: var(--press); }
+.paginator__btn.is-current {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 500;
+  cursor: default;
+}
+.paginator__btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.paginator__gap { padding: 0 4px; color: var(--text3); font-size: var(--fs-xs); }
+.paginator__info {
+  color: var(--text3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.paginator__size {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  margin-left: auto;
+}
+.select-input.paginator__size-select { width: auto; }
+.paginator__size-select .select-input__trigger {
+  padding: 4px 8px;
+  font-size: var(--fs-xs);
+  color: var(--text2);
+  min-height: 26px;
+}
+.paginator__size-select .select-input__chevron { width: 10px; height: 10px; }
+
+/* ── DATA TABLE SERVER MODE ── */
+.data-table-wrapper { position: relative; }
+.data-table--loading { opacity: 0.7; transition: opacity 100ms; }
+/* pointer-events гасим только на теле таблицы — строка фильтров и пагинатор
+   остаются интерактивными, иначе сфокусированный фильтр-инпут терял фокус
+   при рефетче на каждый введённый символ. */
+.data-table--loading tbody { pointer-events: none; }
+/* Колонка действий — исключение. Клик по строке в списках сущностей больше
+   ничего не делает, и кнопка «Открыть» осталась единственным входом в карточку:
+   гасить её на каждый рефетч фильтра значит отбирать навигацию у пользователя,
+   пока таблица моргает. Данные под кнопкой всё равно перерисуются. */
+.data-table--loading tbody .col-actions { pointer-events: auto; }
+/* Сортировка: тонкая стрелка --text3 (её рисует DataTable текстом ▲/▼ рядом с
+   подписью), заголовок сортируемой колонки темнеет на наведении. */
+.data-table th.sortable { cursor: pointer; user-select: none; transition: color var(--dur-1) var(--ease); }
+.data-table th.sortable:hover { color: var(--text); }
+.sort-mark { margin-left: 5px; font-size: 8px; color: var(--text3); vertical-align: 1px; }
+
+/* ── DATA TABLE EMPTY STATE ── */
+.data-table__empty {
+  text-align: center;
+  padding: var(--space-6);
+  color: var(--text3);
+  font-size: var(--fs-md);
+}
+.data-table__empty svg { display: block; margin: 0 auto var(--space-3); color: var(--text3); }
+.data-table__empty-hint {
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+/* ============================================================
+ *  ТУЛБАР ФИЛЬТРОВ (FilterBar) — панель с рамкой, поля Eduson 8×11 r6.
+ * ============================================================ */
+.table-block { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.filterbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.filterbar__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.filterbar__field { position: relative; display: flex; min-width: 0; width: 150px; }
+/* Лупа внутри поля поиска — иначе непонятно, что в поле можно печатать. */
+.filterbar__icon {
+  position: absolute;
+  left: 10px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--text3);
+  pointer-events: none;
+}
+/* Текстовый фильтр и выпадающий список обязаны выглядеть одинаково: одна
+   высота, один радиус, одна рамка. Раньше на SelectInput вешался тот же класс,
+   что на <input>, но компонент кладёт className на ОБЁРТКУ — получались
+   вложенные рамки и разная высота. */
+.filterbar__control,
+.filterbar__select .select-input__trigger {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 11px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  outline: none;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+/* Ширину задаёт поле-контейнер, а не сам контрол — так текстовый поиск можно
+   сделать шире выпадающих списков. */
+.filterbar__field--text { width: 220px; }
+.filterbar__select { width: 100%; }
+
+.filterbar__control--search { padding-left: 30px; }
+.filterbar__control::placeholder { color: var(--text3); }
+.filterbar__control:focus,
+.filterbar__select .select-input__trigger:focus,
+.filterbar__select.is-open .select-input__trigger {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.filterbar__select .select-input__value { font-size: var(--fs-sm); }
+.filterbar__actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
+@media (max-width: 720px) {
+  .filterbar__field,
+  .filterbar__field--text { width: auto; flex: 1 1 150px; }
+}

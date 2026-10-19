@@ -1,0 +1,390 @@
+/* ============================================================
+ *  ШРИФТЫ — self-hosted (CSP font-src 'self').
+ *  Geist и Geist Mono — npm-пакет `geist` 1.7.2 (Vercel, SIL OFL, лицензия —
+ *  public/fonts/Geist-OFL.txt). Берём variable-файлы: одно начертание на
+ *  семейство вместо четырёх, ось веса 100–900 покрывает 400/500/600/700.
+ *  Кириллица в обоих файлах есть (А–я и Ё/ё проверены по cmap).
+ *  Раздаётся из public/fonts → /admin/fonts/*; teacher и страница входа
+ *  берут эти же файлы с того же адреса.
+ * ============================================================ */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/admin/fonts/geist-v1.7.2-cyrillic_latin-variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/admin/fonts/geist-mono-v1.7.2-cyrillic_latin-variable.woff2') format('woff2');
+}
+
+/* Inter оставлен ТОЛЬКО как выбираемый шрифт в редакторе базы знаний
+   (editorFonts.ts): он уже записан в существующих документах. Интерфейс на нём
+   больше не набирается. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/admin/fonts/inter-v20-cyrillic_latin-regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/admin/fonts/inter-v20-cyrillic_latin-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/admin/fonts/inter-v20-cyrillic_latin-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/admin/fonts/inter-v20-cyrillic_latin-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/admin/fonts/inter-v20-cyrillic_latin-800.woff2') format('woff2');
+}
+/* Lato 2.0 (SIL OFL, лицензия — public/fonts/Lato-OFL.txt) — шрифт текста
+   документов базы знаний (--kb-font). Версия 2.0, а не Google Fonts: у той
+   нет кириллицы, и русский текст падал бы на Arial вперемешку с Lato.
+   Файлы урезаны до латиницы+кириллицы без хинтинга (~40 КБ на начертание);
+   браузер качает их только там, где шрифт реально применён, — в Wiki. */
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/admin/fonts/lato-v2-cyrillic_latin-regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Lato';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/admin/fonts/lato-v2-cyrillic_latin-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/admin/fonts/lato-v2-cyrillic_latin-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/admin/fonts/lato-v2-cyrillic_latin-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Lato';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/admin/fonts/lato-v2-cyrillic_latin-700italic.woff2') format('woff2');
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ============================================================
+ *  DESIGN TOKENS — визуальный язык Eduson (монохром в стиле Geist).
+ *  Значения: docs/design-system.md §2. Имена токенов остались от прежнего
+ *  вида (их читают сотни правил) — менялись только значения.
+ *  Принципы: цвет = смысл (4 статуса и 4 курса, остальное — серый);
+ *  линии 1px вместо теней; тень только у всплывающего.
+ *  ⚠️ Токены, которые читает общий CSS, обязаны быть и в teacher-src/…/
+ *  tokens.css: var() к отсутствующему токену схлопывается молча.
+ * ============================================================ */
+:root {
+  /* Поверхности */
+  --bg:        #fafafa;   /* фон страницы, hover строки таблицы */
+  --bg2:       #ffffff;   /* панели, модалки, поля */
+  --bg3:       #f4f4f4;   /* hover, приглушённая поверхность, трек прогресса */
+  --bg4:       #ededed;   /* нажатое / вдавленное */
+
+  /* Линии. --border = --line Eduson (рамки панелей, разделители),
+     --border-strong = --line-3. --line-2 (рамка контролов) — отдельный токен. */
+  --border:        #eaeaea;
+  --border2:       #f0f0f0;
+  --border-strong: #d1d1d1;
+  --line:   var(--border);
+  --line-2: #e2e2e2;
+  --line-3: var(--border-strong);
+
+  /* Текст. Контраст на белом: text2 5.7, text3 4.95, text4 4.74.
+     Решение спеки: третичный текст #6f6f6f вместо #999 Eduson (2.8:1 — ниже AA).
+     text4 = #737373, а не декоративный #8f8f8f: в интерфейсе им набрано больше
+     сотни подписей и плейсхолдеров, то есть это значимый текст. */
+  --text:      #000000;
+  --text2:     #666666;
+  --text3:     #6f6f6f;
+  --text4:     #737373;
+
+  /* Акцент — чёрный (в тёмной теме — белый). --on-accent — цвет текста и иконок
+     ПОВЕРХ акцентной заливки: белый на чёрном и наоборот. Жёсткий #fff на
+     акценте в тёмной теме дал бы белое на белом. */
+  --accent:        #000000;
+  --accent-hover:  #333333;
+  --accent-soft:   #f4f4f4;
+  --accent-soft-h: #ededed;
+  --on-accent:     #ffffff;
+
+  /* Статусы — тройки ink / bg / line (рецепт бейджа: заливка + рамка + тёмный
+     текст того же тона). Имена KOTOKOD (--success…) — алиасы тех же значений. */
+  --ok:        #067a57;  --ok-bg:   #edfdf4;  --ok-line:   #a6e6c6;
+  --warn:      #9a5b09;  --warn-bg: #fff7ed;  --warn-line: #f3cfa0;
+  --bad:       #d12d36;  --bad-bg:  #fff1f1;  --bad-line:  #f4b8ba;
+  --info:      #0064e0;  --info-bg: #f0f6ff;  --info-line: #aecbf8;
+
+  --success: var(--ok);
+  --warning: var(--warn);
+  --danger:  var(--bad);
+  --green: var(--success); --amber: var(--warning); --red: var(--danger); --blue: var(--info);
+  /* Заливки под цветом-текстом (чипы, подсветка строк). */
+  --success-soft: var(--ok-bg);
+  --warning-soft: var(--warn-bg);
+  --info-soft:    var(--info-bg);
+  --danger-soft:  var(--bad-bg);
+  /* Текст поверх --danger-soft / красной подсветки строки: на тон темнее --danger. */
+  --danger-strong: #b4232b;
+
+  /* Курсы (направления): ink / bg / line. ⚠️ «Вайб-кодинг» совпадает с ok —
+     известная особенность исходного стиля (design-system.md §2.3). */
+  --t-scratch: #c2410c;  --t-scratch-bg: #fff4ec;  --t-scratch-line: #f3c49a;
+  --t-python:  #1a56db;  --t-python-bg:  #f0f5ff;  --t-python-line:  #aac1f4;
+  --t-vibe:    #067a57;  --t-vibe-bg:    #edfdf4;  --t-vibe-line:    #a6e6c6;
+  --t-groups:  #a21570;  --t-groups-bg:  #fdf0f7;  --t-groups-line:  #e9aed0;
+  --t-unknown: #828892;
+
+  /* Type scale.
+     --fs-2xs (11px) — пол шкалы: uppercase-микрометки и mono-подписи. Ниже не
+     опускаться: на 9–10px кириллица теряет различимость строчных. */
+  --fs-2xs:  11px;
+  --fs-xs:   12px;
+  --fs-sm:   13px;
+  --fs-md:   14px;   /* база интерфейса */
+  --fs-lg:   15px;
+  --fs-xl:   16px;
+  --fs-2xl:  18px;
+  --fs-3xl:  20px;
+  --fs-4xl:  22px;
+  --fs-5xl:  24px;
+  --fs-6xl:  30px;
+
+  /* Слои. --z-popover ВЫШЕ --z-modal: выпадающие списки и календари
+     рендерятся порталом в body (Floating UI) и обязаны перекрывать модалку,
+     из которой открыты. Новый код берёт значение отсюда. */
+  --z-base:    1;     /* приподнятые элементы внутри потока */
+  --z-sticky:  10;    /* липкие шапки таблиц, строка фильтров, гаттер календаря */
+  --z-nav:     900;   /* мобильная навигация, бургер, плавающие кнопки экрана */
+  --z-overlay: 1000;  /* затемняющая подложка модалки */
+  --z-modal:   1010;  /* сама модалка, диалоги */
+  --z-popover: 1100;  /* поповеры и меню — поверх модалки (портал в body) */
+  --z-toast:   1200;  /* тосты — поверх всего */
+
+  /* Spacing scale — 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Радиусы Eduson: 8px — контейнеры (панели, модалки, поповеры), 6px —
+     контролы (кнопки, поля, тосты). Крупных скруглений нет: --r-lg/--r-xl
+     схлопнуты до 8px, чтобы старые панели не выбивались из языка. */
+  --r-xs: 4px;   /* внутренние элементы контролов: галочка, пункт сегмента */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r:    8px;
+  --r-lg: 8px;
+  --r-xl: 8px;
+  --r-pill: 999px;   /* бейджи-чипы */
+  /* Знак: квадрат 30×30 со скруглением 7px (как .logo в Eduson). */
+  --brand-size: 30px;
+  --r-brand: 7px;
+
+  /* Глубина: линии вместо теней. Панели, карточки и «приподнятое» — без тени
+     (границу даёт рамка 1px --border). Тень — только у всплывающего. */
+  --shadow-panel:  none;
+  --shadow-raised: none;
+  --shadow-card:   none;
+  --shadow-xs:     0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow:        0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-lg:     0 1px 2px rgba(0, 0, 0, 0.06), 0 14px 34px -12px rgba(0, 0, 0, 0.22);
+  --shadow-modal:   var(--shadow-lg);
+  --shadow-popover: var(--shadow-lg);
+  /* Затемняющая подложка модалок/оверлеев (Eduson: 40%) */
+  --overlay: rgba(0, 0, 0, 0.4);
+  /* Кольцо фокуса полей: кольцо + чёрная рамка у самого поля (border-color: var(--accent)) */
+  --focus-ring: 0 0 0 3px rgba(0, 0, 0, 0.08);
+  --scrollbar-thumb: #d8d8d8;
+  --selection-bg: #000000;
+  --selection-fg: #ffffff;
+
+  /* Раскладка страницы.
+     --content-max: потолок 1560px как у .wrap Eduson (статья базы знаний держит свой
+     --kb-doc-width). --section-gap — вертикальный ритм между секциями. */
+  --content-max:  1560px;  /* .wrap Eduson: потолок ширины шапки и страницы */
+  --page-pad-x:   20px;
+  --page-pad-y:   18px;
+  --section-gap:  var(--space-6);
+  /* Верх липких элементов страницы (панель редактора, колонка статьи) — низ
+     липкой полосы над содержимым. На десктопе полосы нет (0), на узком экране
+     .main--topbar подставляет высоту TopBar. */
+  --header-h:     var(--topbar-h);
+
+  /* Typography */
+  --font-sans: 'Geist', 'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);       /* hover, смена цвета */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* появление */
+  --dur-1: 0.12s;   /* hover, нажатие */
+  --dur-2: 0.18s;   /* оверлей, поповер, тост */
+  --dur-3: 0.24s;   /* модалка */
+  --dur-spin: 0.7s;
+  --dur-pulse: 2.4s;
+  --press: scale(0.96);
+  /* Прежние имена длительностей (--t-*) читает старый CSS. */
+  --t-fast: var(--dur-1);
+  --t-base: var(--dur-2);
+  --t-slow: var(--dur-3);
+
+  /* Боковая колонка навигации: полная и рельса (иконки). */
+  --sidebar-w: 272px;
+  --sidebar-rail-w: 64px;
+  /* Высота липкой полосы НАД содержимым, которую вычитают расчёты высот
+     (канбаны, таблицы, календарь). На десктопе такой полосы нет — 0. На узком
+     экране .main--topbar подставляет --mobile-bar-h. */
+  --topbar-h: 0px;
+  --mobile-bar-h: 54px;
+  /* Вкладка и сегмент — скругление 7px, как у знака. */
+  --r-tab: 7px;
+
+  /* ── Ритм таблицы сущностей (.table-panel--roomy) ──
+     Плотный режим — дефолт для служебных таблиц; списки сущностей используют
+     строку фиксированной высоты, чтобы шаг не зависел от аватара. */
+  --row-h:        44px;   /* Eduson: плотная строка; двухэтажная ячейка (cell-stack) влезает */
+  --cell-pad-x:   10px;     /* ячейка table.tbl Eduson: 9×10 */
+  --cell-pad-y:   9px;
+
+  /* ── Типографика документа базы знаний ──
+     Отдельная шкала от интерфейсной: статью читают подряд, ей нужны 16px и
+     просторный интерлиньяж. Применяется только внутри .kb-doc. */
+  --kb-fs-h1: 26px;
+  --kb-fs-h2: 20px;
+  --kb-fs-h3: 17px;
+  --kb-fs-body: 16px;
+  --kb-fs-small: 14px;
+  --kb-fs-caption: 13px;
+  --kb-lh-body: 1.55;
+  /* Шрифт текста документа. Явно выбранный в редакторе хранится в самом
+     документе (style у текста) и перекрывает этот. */
+  --kb-font: 'Lato', 'Helvetica Neue', Arial, Helvetica, sans-serif;
+  /* Цвет «Приглушённый» из палитры редактора. В документе он хранится как
+     var(--text3) (так его принимает сервер), а при показе подменяется этим
+     токеном — см. displayTextColor в editorColors.ts. */
+  --kb-text-muted: rgb(67, 67, 67);
+  /* Ширина колонки текста статьи: мера строки при чтении и при правке. */
+  --kb-doc-width: 800px;
+
+  color-scheme: light;
+}
+
+/* ── DARK THEME — монохром Geist ──
+   Фон #0a0a0a, поверхности #111/#171717, линии #262626/#333, текст #ededed/#a1a1a1,
+   акцент — белый, статусы — светлые варианты тех же оттенков.
+   Контраст text3/text4 на bg2 (#111): 5.8 / 4.9; на bg3 (#171717): 5.5 / 4.6. */
+[data-theme="dark"] {
+  /* Тёмно-серый rgb(67,67,67) на тёмном фоне не читается — в тёмной теме
+     «Приглушённый» остаётся обычным приглушённым цветом темы. */
+  --kb-text-muted: var(--text3);
+
+  --bg:        #0a0a0a;
+  --bg2:       #111111;
+  --bg3:       #171717;
+  --bg4:       #1f1f1f;
+
+  --border:        #262626;
+  --border2:       #1f1f1f;
+  --border-strong: #333333;
+  --line-2: #2e2e2e;
+
+  --text:      #ededed;
+  --text2:     #a1a1a1;
+  --text3:     #8f8f8f;
+  --text4:     #858585;
+
+  --accent:        #ffffff;
+  --accent-hover:  #d4d4d4;
+  --accent-soft:   #1f1f1f;
+  --accent-soft-h: #292929;
+  --on-accent:     #000000;
+
+  --ok:   #3dd9a0;  --ok-bg:   #0d2a21;  --ok-line:   #14553f;
+  --warn: #f2b45a;  --warn-bg: #2b1d09;  --warn-line: #5a3d12;
+  --bad:  #ff6b73;  --bad-bg:  #2d1214;  --bad-line:  #5c2226;
+  --info: #5aa2ff;  --info-bg: #0c1d33;  --info-line: #1b3f6e;
+  --danger-strong: #ff9a9f;
+
+  --t-scratch: #fb923c;  --t-scratch-bg: #2a1708;  --t-scratch-line: #5c3410;
+  --t-python:  #7aa2ff;  --t-python-bg:  #0e1a33;  --t-python-line:  #243f78;
+  --t-vibe:    #3dd9a0;  --t-vibe-bg:    #0d2a21;  --t-vibe-line:    #14553f;
+  --t-groups:  #f08acb;  --t-groups-bg:  #2b0f22;  --t-groups-line:  #5e2149;
+  --t-unknown: #8a8f98;
+
+  --shadow-xs:     0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow:        0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg:     0 1px 2px rgba(0, 0, 0, 0.5), 0 14px 34px -12px rgba(0, 0, 0, 0.7);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb: #333333;
+  --selection-bg: #ffffff;
+  --selection-fg: #000000;
+
+  color-scheme: dark;
+}
+/* Нативные части поля даты (иконка календаря) в тёмной теме. */
+[data-theme="dark"] .field input[type="date"] { color-scheme: dark; }
+
+html, body {
+  /* min-height, а НЕ height. При height:100% тело документа — коробка ровно в
+     высоту экрана, содержимое из которой торчит наружу. Десктопные браузеры это
+     переживают, мобильные — не всегда: `position:fixed` с привязкой к низу
+     начинает отсчитываться от конца документа, и плавающая кнопка уезжает вниз
+     страницы. Высоту оболочки гарантирует `.shell { min-height: 100vh }`. */
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}

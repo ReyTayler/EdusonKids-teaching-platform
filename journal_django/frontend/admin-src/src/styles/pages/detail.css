@@ -1,0 +1,1828 @@
+/* ── DETAIL ── */
+.detail-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.detail-head-info { flex: 1; }
+.detail-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.detail-title h2 { font-size: var(--fs-2xl); font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
+.detail-sub { font-size: var(--fs-sm); color: var(--text2); }
+/* Кнопки шапки DetailShell — каталожные .btn: «Редактировать» обычная
+   (белая с рамкой), «Удалить» — danger, «Разархивировать» — белая с ink и line
+   статуса ok (hover — его фон). Общий каркас (7×13, r6, 13px/500, нажатие
+   scale) — тот же, что у .btn в components.css. */
+.edit-btn, .delete-btn, .restore-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  font: inherit; font-size: var(--fs-sm); font-weight: 500; line-height: 1.45;
+  color: var(--text);
+  cursor: pointer; white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.edit-btn:hover { border-color: var(--text3); }
+.delete-btn { color: var(--bad); border-color: var(--bad-line); }
+.delete-btn:hover { background: var(--bad-bg); }
+.delete-btn.is-confirming { background: var(--bad); border-color: var(--bad); color: var(--bg2); }
+.restore-btn { color: var(--ok); border-color: var(--ok-line); }
+.restore-btn:hover { background: var(--ok-bg); }
+.edit-btn:active, .delete-btn:active, .restore-btn:active { transform: var(--press); }
+.sub-header { font-size: var(--fs-lg); font-weight: 600; color: var(--text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+
+/* Счётчик рядом с заголовком раздела. Класс использовался на карточках
+   преподавателя и направления с самого начала, но правила под него не было
+   нигде — число рисовалось голым текстом тем же кеглем, что заголовок, и
+   читалось как часть названия. */
+.count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  color: var(--text2);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xs); font-weight: 500; line-height: 1;
+}
+
+/* ============================================================
+ *  ENTITY HERO — общая шапка карточек ученика, группы, преподавателя
+ *  Одна панель-якорь (.panel Eduson: белая, рамка --line, r8, без тени):
+ *  личность слева, короткие факты справа, действия с иерархией (основное +
+ *  вторичные + «…»). Цветных градиентов и заливок нет: цвет сущности
+ *  (--entity-c) остаётся доступен потомкам (полоса прогресса), но саму
+ *  шапку не красит — для преподавателя он вообще хеш имени, чистая декорация.
+ * ============================================================ */
+.ehero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 18px 20px;
+  margin-bottom: var(--space-4);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.ehero__main {
+  display: flex;
+  gap: var(--space-4);
+  min-width: 0;
+  flex: 1 1 420px;
+}
+/* Монограмма: нейтральный светлый квадрат с моно-инициалами. */
+.ehero__mono {
+  flex-shrink: 0;
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r);
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg); font-weight: 500; letter-spacing: -0.02em;
+  color: var(--text2);
+  background: var(--bg3);
+  border: 1px solid var(--line);
+}
+.ehero__body { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.ehero__name-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.ehero__name {
+  margin: 0;
+  font-size: var(--fs-2xl); font-weight: 600;
+  letter-spacing: -0.02em; line-height: 1.25;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ehero__meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--text2); font-size: var(--fs-sm); }
+/* Чип метаданных — нейтральный .chip (код и числа — моно). */
+.ehero-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-2); border-radius: var(--r-pill);
+  background: var(--bg2);
+  font-size: var(--fs-2xs); font-weight: 500; color: var(--text2);
+  white-space: nowrap;
+}
+.ehero-chip--mono {
+  font-family: var(--font-mono); font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.ehero__actions {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+/* .btn-save по умолчанию прижат вправо (margin-left:auto) — в шапке не нужно. */
+.ehero__actions .btn-save { margin-left: 0; }
+
+.ehero__side {
+  flex: 0 1 300px;
+  min-width: 240px;
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+/* Факты — пары «ключ — значение» (.kv Eduson): ключ --text2, значение mono. */
+.ehero__facts {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden;
+}
+.ehero__fact {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-3);
+  padding: 7px var(--space-3);
+}
+.ehero__fact + .ehero__fact { border-top: 1px solid var(--line); }
+.ehero__fact-label {
+  font-size: var(--fs-xs); font-weight: 400;
+  color: var(--text2); white-space: nowrap;
+}
+.ehero__fact-value {
+  margin: 0;
+  font-size: var(--fs-sm); font-weight: 500; color: var(--text);
+  text-align: right; overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .ehero { padding: var(--space-4); gap: var(--space-4); }
+  .ehero__mono { width: 40px; height: 40px; }
+  .ehero__side { flex-basis: 100%; min-width: 0; }
+}
+
+/* ── STAT TILES (.stat Eduson) — ряд ключевых цифр карточки ──
+ *  Плитка 14×16 на панели с рамкой; число 26px/600 Geist Mono -.03em сверху,
+ *  подпись 12px --text2 под ним. Цвет числа — только статусный и только когда
+ *  есть смысл (norma/риск). Свои классы вместо общих .kpi-card: те объявлены в
+ *  трёх файлах (dashboard.css, shared/calendar/calendar.css, здесь) и побеждает
+ *  импортированный последним — KPI ученика раскладывались сеткой календаря. */
+.dstat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.dstat {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 14px 16px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.dstat__value {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 600;
+  line-height: 1.15; letter-spacing: -0.03em;
+  color: var(--text);
+}
+.dstat__label {
+  font-size: var(--fs-xs); font-weight: 400;
+  color: var(--text2);
+}
+.dstat__sub { font-size: var(--fs-xs); color: var(--text3); }
+.dstat__value--ok,     .dstat__sub--ok     { color: var(--ok); }
+.dstat__value--warn,   .dstat__sub--warn   { color: var(--warn); }
+.dstat__value--danger, .dstat__sub--danger { color: var(--bad); }
+.dstat__value--accent, .dstat__sub--accent { color: var(--accent); }
+
+/* ── PROGRESS STRIP — «сколько курса пройдено» одной строкой ── */
+.dprogress {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.dprogress__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+}
+.dprogress__title { font-size: var(--fs-sm); font-weight: 600; color: var(--text2); }
+.dprogress__pct {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-3xl); font-weight: 600; color: var(--text);
+}
+/* Прогресс курса — рецепт Eduson: трек 5px --bg3, заливка чёрная. */
+.dprogress__bar {
+  height: 5px; border-radius: 3px;
+  background: var(--bg3); overflow: hidden;
+}
+.dprogress__fill {
+  height: 100%; border-radius: 3px;
+  background: var(--accent);
+  transition: width .4s var(--ease);
+}
+.dprogress__foot {
+  display: flex; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+  font-size: var(--fs-xs); color: var(--text3);
+}
+
+/* ── ACTION MENU («…» — вторичные действия шапки, Radix DropdownMenu) ──
+   Триггер — квадратная .btn.sm; список — .pop Eduson: r8, рамка --line-2,
+   --shadow-lg, пункты 13px/500 r6, hover — --bg3, анимация pop-in. */
+.action-menu__trigger {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg2); color: var(--text2);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+              background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.action-menu__trigger:hover,
+.action-menu__trigger[data-state="open"] {
+  border-color: var(--text3); color: var(--text);
+}
+.action-menu__trigger:active { transform: var(--press); }
+.action-menu__trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.action-menu__list {
+  /* Radix рендерит меню порталом в body — значение должно быть из общей шкалы,
+     а не локальным «30», иначе меню уедет под липкую шапку или модалку. */
+  z-index: var(--z-popover);
+  min-width: 210px;
+  display: flex; flex-direction: column;
+  padding: 6px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2); border-radius: var(--r);
+  box-shadow: var(--shadow-popover);
+  animation: pop-in var(--dur-2) var(--ease-out);
+  transform-origin: top center;
+}
+.action-menu__item {
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm); font-weight: 500;
+  color: var(--text); cursor: pointer; white-space: nowrap;
+  outline: none;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+/* Radix ведёт «активный» пункт через data-highlighted (мышь и клавиатура). */
+.action-menu__item[data-highlighted] { background: var(--bg3); }
+.action-menu__item.is-danger { color: var(--bad); }
+.action-menu__item.is-danger[data-highlighted] { background: var(--bad-bg); }
+/* Пункт, закрытый ролью: остаётся на месте (чтобы состав меню не «прыгал»
+   между ролями), но гасится и не подсвечивается. Radix ставит data-disabled и
+   сам снимает с него навигацию с клавиатуры. */
+.action-menu__item[data-disabled] {
+  color: var(--text3); cursor: not-allowed; opacity: .6;
+}
+.action-menu__item.is-danger[data-disabled] { color: var(--text3); }
+
+/* Разделитель групп в длинном меню: когда пунктов больше пяти, они перестают
+   читаться как набор и превращаются в список. Нужен там, где рядом стоят
+   добавление и удаление, — промах между ними стоит дорого. */
+.action-menu__sep {
+  height: 1px;
+  margin: var(--space-1) 6px;
+  background: var(--line);
+}
+
+/* ============================================================
+ *  СТУДЕНТ · вкладка «Обучение»
+ *  Направление — единственный объект, группы живут внутри него.
+ *  Классы префиксованы `learn-`: общий `.dir-card` объявлен и для
+ *  сетки направлений (cursor:pointer + подъём на hover), из-за чего
+ *  некликабельные карточки статистики вели себя как кнопки.
+ * ============================================================ */
+.learn { display: flex; flex-direction: column; gap: var(--space-4); }
+.learn__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+}
+.learn__head-title { font-size: var(--fs-lg); font-weight: 600; color: var(--text); }
+.learn__add { display: flex; align-items: center; gap: var(--space-2); }
+.learn__add .select-input { min-width: 220px; }
+@media (max-width: 560px) {
+  .learn__add { width: 100%; }
+  .learn__add .select-input { flex: 1; min-width: 0; }
+}
+/* Пустое состояние вкладки — общий .empty-state (components.css). */
+
+.learn-dir {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--dir-color, var(--accent));
+  border-radius: var(--r);
+  padding: var(--space-4) var(--space-5);
+}
+.learn-dir__head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-4); margin-bottom: var(--space-3);
+}
+.learn-dir__name {
+  margin: 0;
+  font-size: var(--fs-2xl); font-weight: 600; letter-spacing: -0.015em;
+  color: var(--text);
+}
+.learn-dir__sub { margin-top: 2px; font-size: 12px; color: var(--text3); }
+.learn-dir__pct {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-5xl); font-weight: 600; line-height: 1; letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.learn-dir__progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.learn-dir__bar { height: 5px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
+.learn-dir__bar-fill { height: 100%; border-radius: 3px; transition: width .4s var(--ease); }
+.learn-dir__counts {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 13px; color: var(--text3); white-space: nowrap;
+}
+.learn-dir__counts b { font-size: 15px; font-weight: 600; color: var(--text); }
+.learn-dir__counts-sub { margin-left: var(--space-2); font-size: 11px; }
+.learn-dir__month { grid-column: 1 / -1; font-size: 12px; color: var(--text3); }
+.learn-dir__month b { color: var(--text2); font-variant-numeric: tabular-nums; }
+
+/* Строка группы: имя · расписание · цифры · % · убрать. */
+.learn-groups { display: flex; flex-direction: column; }
+.learn-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 48px 28px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.learn-group.is-archived { opacity: .62; }
+.learn-group__main { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.learn-group__main .entity-link { font-weight: 600; font-size: 14px; }
+.learn-group__slots {
+  font-family: var(--font-mono); font-size: 12px; color: var(--text3);
+  white-space: nowrap;
+}
+.learn-group__num {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 12px; color: var(--text3); white-space: nowrap;
+}
+.learn-group__num b { font-size: 14px; font-weight: 600; color: var(--text2); }
+.learn-group__pct {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 600; text-align: right;
+}
+.learn-group__remove {
+  width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--text4);
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  font-size: 18px; line-height: 1; cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.learn-group__remove:hover:not(:disabled) {
+  background: var(--bad-bg); color: var(--bad);
+}
+.learn-group__remove:disabled { opacity: .4; cursor: default; }
+.learn-group__remove-spacer { display: block; }
+.learn-group__note {
+  grid-column: 1 / -1;
+  font-size: 11px; color: var(--text4);
+  padding-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .learn-group {
+    grid-template-columns: minmax(0, 1fr) auto 28px;
+    row-gap: 2px;
+  }
+  /* Расписание уходит на свою строку — числа остаются рядом с именем. */
+  .learn-group__slots { grid-column: 1 / -1; order: 3; }
+}
+
+/* ── LINKED CARDS ── */
+.link-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; cursor: pointer; margin-bottom: 8px; transition: border-color var(--dur-1) var(--ease); }
+.link-card:hover { border-color: var(--line-3); }
+.link-card-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.link-card-title { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: 16px; }
+.link-card-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.link-card-meta-pill { font-size: var(--fs-2xs); font-weight: 500; color: var(--text2); background: var(--bg2); border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 2px 8px; }
+.student-row-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; cursor: pointer; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; transition: border-color var(--dur-1) var(--ease); }
+.student-row-card:hover { border-color: var(--line-3); }
+
+/* ── TEACHER CARD ── */
+.teacher-info-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+/* В шапке группы карточка стоит в колонке фактов — плотнее и без внешнего отступа. */
+.ehero__side .teacher-info-card {
+  margin-bottom: 0;
+  padding: 8px 10px;
+  gap: 10px;
+  background: var(--bg2);
+  min-width: 0;
+}
+.teacher-info-card--link { cursor: pointer; transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease); }
+.teacher-info-card--link:hover { border-color: var(--line-3); background: var(--bg3); }
+.teacher-info-card--link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.teacher-info-card__name { font-size: 13px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.teacher-info-card__mail { font-size: 12px; color: var(--text3); overflow-wrap: anywhere; }
+
+/* ── TOKEN ROW ── */
+.token-row { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 11px 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+
+/* ── DIRECTIONS GRID ── */
+.dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.dir-card {
+  border: 1px solid var(--line); border-radius: var(--r);
+  padding: 18px 20px; position: relative;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+/* Без подъёма и тени: карточка отвечает на наведение рамкой. */
+.dir-card:hover { border-color: var(--line-3); }
+.dir-card-color {
+  position: absolute; top: 14px; right: 14px;
+  width: 10px; height: 10px; border-radius: 3px;
+}
+.dir-card-name {
+  font-size: var(--fs-sm); font-weight: 600; letter-spacing: -0.01em;
+  margin-bottom: 12px;
+  padding-right: 22px;
+  display: flex; align-items: center; gap: 8px;
+}
+.dir-card-mark {
+  font-size: var(--fs-2xs); font-weight: 500;
+  color: var(--text2); background: var(--bg2); border: 1px solid var(--line-2);
+  padding: 1px 8px; border-radius: var(--r-pill); text-transform: none;
+}
+.dir-card-count { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 600; color: var(--text); letter-spacing: -0.03em; margin-bottom: 4px; line-height: 1; }
+.dir-card-sub { font-size: 13px; color: var(--text3); }
+.dir-card-meta { font-size: 13px; color: var(--text2); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+/* ── LESSON GRID (Group detail) ── */
+.lesson-grid-hint {
+  font-size: 13px; color: var(--text3);
+  margin-bottom: 12px;
+}
+.lesson-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.lesson-square {
+  --dir-color: var(--accent);
+  position: relative;
+  width: 54px; height: 54px;
+  border: 1px dashed var(--line-3);
+  background: var(--bg2);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text3);
+  padding: 0;
+}
+/* План — нейтральный пунктир; проведённый урок — ok-тон (тройка ink/bg/line);
+   цвет направления на квадрате не нужен (он у блока, а не у урока). */
+.lesson-square:hover {
+  transform: translateY(-1px);
+  border-color: var(--text3);
+  color: var(--text);
+}
+.lesson-square.is-filled {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid var(--ok-line);
+}
+.lesson-square.is-filled:hover { border-color: var(--ok); }
+.lesson-square__num { font-size: var(--fs-2xl); letter-spacing: -0.01em; }
+
+/* Подсказка — рецепт .pop: белая, рамка, тень как у всплывающего. */
+.lesson-square::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--bg2);
+  color: var(--text);
+  border: 1px solid var(--line-2);
+  padding: 5px 12px;
+  border-radius: var(--r);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+  z-index: 20;
+  box-shadow: var(--shadow-popover);
+}
+.lesson-square::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid var(--bg2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-1) var(--ease);
+  z-index: 21;
+}
+.lesson-square:hover::after,
+.lesson-square:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Lesson editor (inline panel) */
+/* Хост-контейнер #lesson-editor: плавный fade при смене содержимого. */
+#lesson-editor { transition: opacity .15s ease; }
+#lesson-editor.lesson-editor-host--loading { opacity: .55; pointer-events: none; }
+
+.lesson-editor {
+  margin-top: 4px;
+  padding: 18px 20px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--dir-color, var(--accent));
+  border-radius: var(--r);
+  animation: lessonEditorIn .18s ease;
+}
+@keyframes lessonEditorIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+.lesson-editor__header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.lesson-editor__header h4 {
+  margin: 0; font-size: var(--fs-2xl); font-weight: 600; color: var(--text);
+  letter-spacing: -0.01em;
+}
+.lesson-editor__row { margin-bottom: 16px; }
+.lesson-editor__row > label {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: var(--fs-xs); letter-spacing: 0;
+  color: var(--text2); font-weight: 500;
+  margin-bottom: 8px;
+}
+.lesson-editor__hint {
+  text-transform: none; letter-spacing: 0;
+  font-size: 13px; font-weight: 500; color: var(--text4);
+}
+.lesson-editor__row input[type="url"] {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg2); border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); color: var(--text);
+  padding: 8px 12px; font: inherit; font-size: var(--fs-md);
+  transition: border-color var(--dur-1) var(--ease);
+}
+.lesson-editor__row input:focus { outline: none; border-color: var(--accent); }
+/* DateInput внутри lesson-editor: тот же визуал как в формах модалок (через токены) */
+
+.attendance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.attendance-card {
+  position: relative;
+  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px 10px;
+  overflow: hidden;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-weight: 500; font-size: var(--fs-md);
+  color: var(--text);
+  transition: background .15s, border-color .15s, transform .12s;
+}
+.attendance-card:hover { transform: translateY(-1px); }
+.attendance-card__icon {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  font-size: var(--fs-md); font-weight: 600;
+  flex-shrink: 0;
+}
+/* Был — ok-тон (тройка), не был — bad, бесплатное — warn, пропуск — нейтральный. */
+.attendance-card.is-present {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+}
+.attendance-card.is-present .attendance-card__icon {
+  background: var(--ok); color: var(--bg2);
+}
+/* Бесплатное занятие: ученик присутствовал (базовый is-present зелёный сохраняется),
+   но денег ноль — иконка и метка выделены янтарём, чтобы отличать от обычного «пришёл». */
+.attendance-card.is-free {
+  border-color: var(--warn-line);
+}
+.attendance-card.is-free .attendance-card__icon {
+  background: var(--warn); color: var(--bg2);
+}
+.attendance-card__free {
+  flex-basis: 100%;               /* метка исхода — на своей строке, не толкает имя за рамку */
+  font-size: var(--fs-2xs); font-weight: 500; color: var(--warn);
+  text-transform: uppercase; letter-spacing: .03em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Ячейка = карточка исхода + кнопка «неопл. пропуск» под ней. */
+.attendance-cell { display: flex; flex-direction: column; gap: 6px; }
+.attendance-cell .attendance-card { width: 100%; box-sizing: border-box; }
+.attendance-card.is-skip {
+  background: var(--bg2);
+  border-color: var(--line);
+  color: var(--text3);
+}
+.attendance-card.is-skip .attendance-card__icon { background: var(--bg3); color: var(--text3); }
+.attendance-skip-btn {
+  align-self: flex-start; max-width: 100%;
+  font-size: 11px; padding: 3px 9px;
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  background: var(--bg2); color: var(--text2);
+  cursor: pointer; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.attendance-skip-btn:hover:not(:disabled) { border-color: var(--text3); }
+.attendance-skip-btn.is-on {
+  background: var(--warn-bg);
+  border-color: var(--warn-line); color: var(--warn);
+}
+.attendance-skip-btn:disabled { opacity: .5; cursor: default; }
+.attendance-card.is-absent {
+  background: var(--bad-bg);
+  border-color: var(--bad-line);
+}
+.attendance-card.is-absent .attendance-card__icon {
+  background: var(--bad); color: var(--bg2);
+}
+/* Компенсированный пропуск (доп.урок / сгорание): сам урок ученик пропустил, но
+   пропуск закрыт отдельным фактом — жёлтая карточка (как в матрице прогресса), а
+   не тревожный красный «не был». Всегда заблокирована (гард двойного учёта). */
+.attendance-card.is-compensated {
+  background: var(--warn-bg);
+  border-color: var(--warn-line);
+  color: var(--text2);
+}
+.attendance-card.is-compensated .attendance-card__icon {
+  background: var(--warn); color: var(--bg2);
+}
+.attendance-card__name {
+  flex: 1; min-width: 0;
+  /* Имя показываем ПОЛНОСТЬЮ: переносим по словам, карточка растёт вниз, за рамки
+     не вылезает (без обрезки многоточием). */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Сохранённый урок: посещаемость — свершившийся факт, грид read-only.
+   Отсутствовавшие гасятся до нейтрального серого (не тревожный красный):
+   пропуск закрывают из раздела «Доп.уроки», не отсюда. */
+.attendance-card.is-locked { cursor: default; }
+.attendance-card.is-locked:hover { transform: none; }
+.attendance-card.is-absent.is-locked {
+  background: var(--bg2);
+  border-color: var(--line);
+  color: var(--text3);
+  opacity: .75;
+}
+.attendance-card.is-absent.is-locked .attendance-card__icon {
+  background: var(--text3); color: var(--bg2);
+}
+
+.lesson-editor__footer {
+  display: flex; gap: 10px; padding-top: 14px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
+/* Текст модалки «Записать в долг?»: абзацы предупреждения о том, что занятие
+   остаётся платным. */
+.lesson-editor__debt-text {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  line-height: 1.5;
+}
+.lesson-editor__debt-text + .lesson-editor__debt-text { margin-top: var(--space-3); }
+
+/* ── MEMBERSHIPS ── */
+.memberships { margin-top: 12px; }
+.memberships__title { font-size: var(--fs-lg); font-weight: 600; color: var(--text); margin-bottom: 10px; }
+.memberships__head { display: grid; grid-template-columns: 1fr 80px 80px 32px; gap: 8px; padding: 6px 10px; font-size: var(--fs-2xs); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--text3); }
+.memberships__row { display: grid; grid-template-columns: 1fr 80px 80px 32px; gap: 8px; padding: 8px 10px; align-items: center; background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-sm); margin-bottom: 6px; }
+.memberships__row input[type="number"] { background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 14px; color: var(--text); text-align: center; width: 100%; outline: none; }
+.memberships__row input[type="number"]:focus { border-color: var(--accent); }
+.memberships__empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 20px; text-align: center;
+  color: var(--text3); font-size: var(--fs-md);
+}
+.memberships__add { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.memberships__add .select-input { flex: 1; min-width: 0; }
+.memberships__note { margin-top: 8px; font-size: 13px; color: var(--text4); font-style: italic; }
+.memberships__group { font-weight: 600; font-size: 15px; color: var(--text); }
+
+/* Зарплата в карточке урока: своя сетка, а не .memberships__row — там последняя
+   колонка 32px, и поле «Штраф» схлопывалось до нечитаемой ширины. */
+.payroll-edit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+.payroll-edit .field input[type="number"] { text-align: right; }
+
+/* Статистика ученика по направлениям переехала в секцию «СТУДЕНТ · вкладка
+   Обучение» выше (классы learn-): .stats-overall дублировал KPI-плитку
+   «Посещаемость», а карточки dir-card + dir-group — строку группы внутри блока.
+
+   Второе объявление `.dir-card` (background/border-left) здесь тоже жило и
+   доставалось карточкам страницы «Направления» — им оно и оставлено: */
+.dir-card {
+  background: var(--bg2);
+  border-left: 3px solid var(--dir-color, var(--accent));
+}
+
+.stat-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.stat-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) auto 56px minmax(120px, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r);
+}
+.stat-row__title { font-weight: 600; font-size: var(--fs-md); color: var(--text); margin-bottom: 2px; }
+.stat-row__sub { font-size: 13px; color: var(--text3); }
+.stat-row__num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--fs-xl); font-weight: 600; color: var(--text); white-space: nowrap; text-align: right; }
+.stat-row__num-value { font-size: 18px; font-weight: 600; }
+.stat-row__num-label { font-size: 14px; color: var(--text3); font-weight: 600; margin-left: 4px; }
+.stat-row__num-sub { font-size: 12px; color: var(--text3); margin-top: 2px; font-weight: 600; }
+.stat-row__pct { font-size: 18px; font-weight: 600; text-align: right; }
+.stat-row__bar { background: var(--bg3); border-radius: 3px; height: 5px; overflow: hidden; }
+.stat-row__bar-fill { height: 100%; transition: width .4s ease; }
+.stat-row__meta { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.stat-row__last { font-size: 13px; color: var(--text3); white-space: nowrap; }
+.stat-row__month { font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.stat-row__month--empty { color: var(--text4); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .stat-row { grid-template-columns: 1fr auto; grid-template-areas: "title num" "sub pct" "bar bar" "meta meta"; }
+  .stat-row__main { grid-area: title; }
+  .stat-row__num { grid-area: num; text-align: right; }
+  .stat-row__pct { grid-area: pct; text-align: right; }
+  .stat-row__bar { grid-area: bar; }
+  .stat-row__meta { grid-area: meta; flex-direction: row; gap: 12px; justify-content: flex-end; }
+}
+
+/* Memberships в виде link-card (см. .link-card в teacher detail) с двумя стат-показателями */
+.membership-card { padding: 14px 16px; }
+.membership-card .link-card-head { margin-bottom: 12px; }
+.membership-card__actions { display: flex; gap: 6px; }
+.membership-card__remove {
+  background: transparent; border: 1px solid var(--line-2); color: var(--text3);
+  width: 28px; height: 28px; border-radius: var(--r-sm); cursor: pointer;
+  font-size: 20px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s, border-color .12s;
+  flex-shrink: 0;
+}
+.membership-card__remove:hover { background: var(--bad-bg); color: var(--bad); border-color: var(--bad-line); }
+.membership-card__stats {
+  display: flex; gap: 32px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.membership-card__stat { display: flex; flex-direction: column; gap: 4px; }
+.membership-card__stat-label {
+  font-size: var(--fs-xs); font-weight: 400; color: var(--text2);
+}
+.membership-card__stat-value {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 22px; font-weight: 600; color: var(--text); letter-spacing: -0.02em;
+}
+/* Заголовок блока с действием справа (напр. «Группы ученика» + кнопка перевода). */
+.sub-header--with-action { justify-content: space-between; }
+.btn-sm { padding: 4px 10px; font-size: 13px; line-height: 1.4; }
+.membership-card__transferred-note {
+  font-size: 12px; color: var(--text3); padding-top: 8px; margin-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.transfer-modal__text { color: var(--text2); font-size: 14px; margin-bottom: 16px; }
+
+/* ── SLOT EDITOR ── */
+.slot-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.slot-row select, .slot-row input[type="time"] { background: var(--bg2); border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 6px 10px; font-size: 14px; color: var(--text2); outline: none; font-family: var(--font-sans); }
+.slot-row select:focus, .slot-row input[type="time"]:focus { border-color: var(--accent); }
+.slot-row__remove { background: var(--bg2); border: 1px solid var(--bad-line); border-radius: var(--r-sm); color: var(--bad); cursor: pointer; padding: 4px 9px; font-size: 18px; line-height: 1; transition: background var(--dur-1) var(--ease); }
+.slot-row__remove:hover { background: var(--bad-bg); }
+.slot-add { background: transparent; border: 1px dashed var(--line-3); border-radius: var(--r-sm); padding: 6px 12px; font-size: 14px; color: var(--text3); cursor: pointer; transition: border-color .15s, color .15s; font-family: var(--font-sans); margin-top: 4px; }
+.slot-add:hover { border-color: var(--text3); color: var(--text); }
+
+/* ── SLOTS BLOCK (в модалке группы) ── */
+.slots-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.slots-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.slots-block__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.slots-frequency {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.slots-block__empty {
+  font-size: 13px;
+  color: var(--text4);
+  font-style: italic;
+  padding: 2px 0;
+}
+.slots-block__hint {
+  font-size: 12px;
+  color: var(--text4);
+}
+
+/* ── ARCHIVE SECTIONS ── */
+.archive-section { margin-bottom: 20px; }
+.archive-section__head { font-size: var(--fs-xl); font-weight: 600; color: var(--text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.archive-section__count { background: var(--bg2); border: 1px solid var(--line-2); color: var(--text2); border-radius: var(--r-pill); padding: 2px 8px; font-family: var(--font-mono); font-size: var(--fs-2xs); font-weight: 500; }
+.archive-section__empty { padding: 20px; text-align: center; color: var(--text3); font-size: 14px; }
+
+/* ── BALANCE BLOCK (Финансы) ── */
+.balance-block {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--space-5);
+  margin: var(--space-4) 0;
+}
+.balance-block__head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: var(--space-3); flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
+.balance-block__head h3 {
+  margin: 0; font-size: var(--fs-xl); font-weight: 600;
+  letter-spacing: -0.01em; color: var(--text);
+}
+.balance-block__head-actions { display: flex; gap: var(--space-2); align-items: center; }
+.balance-neg { color: var(--danger); font-weight: 600; }
+
+/* Сводка — два стат-тайла */
+.balance-summary {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3); margin-bottom: var(--space-5);
+}
+@media (max-width: 560px) { .balance-summary { grid-template-columns: 1fr; } }
+.balance-tile {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: 14px 16px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.balance-tile__label {
+  font-size: var(--fs-xs); font-weight: 400; color: var(--text2);
+}
+.balance-tile__value {
+  font-family: var(--font-mono); font-size: 26px; font-weight: 600;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.03em; color: var(--text);
+}
+.balance-tile__value.is-neg { color: var(--danger); }
+
+/* ── Раскрывающиеся секции (аккордеон) ── */
+.fin-sections { display: flex; flex-direction: column; gap: var(--space-2); }
+.fin-acc {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--bg2);
+}
+.fin-acc.is-open { border-color: var(--line-3); }
+.fin-acc__trigger {
+  width: 100%;
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: none; border: none; cursor: pointer; font: inherit;
+  color: var(--text); text-align: left;
+  transition: background var(--dur-1) var(--ease);
+}
+.fin-acc__trigger:hover { background: var(--bg3); }
+.fin-acc.is-open .fin-acc__trigger { border-bottom: 1px solid var(--line); }
+.fin-acc__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.fin-acc__trigger:hover .fin-acc__icon { color: var(--accent); border-color: var(--accent); }
+.fin-acc.is-open .fin-acc__icon { color: var(--accent); border-color: var(--accent); }
+/* вертикальная штриха «+» гаснет при раскрытии → остаётся «−» */
+.fin-acc__icon-bar {
+  transform-origin: 8px 8px;
+  transition: transform var(--t-base) var(--ease), opacity var(--dur-1) var(--ease);
+}
+.fin-acc.is-open .fin-acc__icon-bar { transform: scaleY(0); opacity: 0; }
+.fin-acc__title { font-size: 14px; font-weight: 600; flex: 1; }
+.fin-acc__meta {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 20px; padding: 0 7px;
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--text3); background: var(--bg3);
+  border-radius: var(--r-pill);
+}
+.fin-acc__body { padding: var(--space-4); }
+
+/* Списки «по направлениям» */
+.fin-dir-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.fin-dir-row {
+  display: grid; grid-template-columns: 10px 1fr auto;
+  align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
+  transition: background var(--dur-1) var(--ease);
+}
+.fin-dir-row:hover { background: var(--bg3); }
+.fin-dir-dot { width: 10px; height: 10px; border-radius: 50%; }
+.fin-dir-name { font-size: 14px; font-weight: 500; color: var(--text2); }
+.fin-dir-value {
+  font-family: var(--font-mono); font-size: 14px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.fin-dir-unit { font-family: var(--font-sans); font-size: 12px; font-weight: 500; color: var(--text3); }
+
+/* ── История оплат: таблица ── */
+.fin-history { margin: calc(-1 * var(--space-4)); border: none; border-radius: 0; }
+.fin-history table { min-width: 100%; }
+.fin-history tbody tr { cursor: default; }
+.fin-history th, .fin-history td { padding: 9px var(--space-4); }
+/* Выравнивание заголовков под содержимое ячеек, чтобы значения не «уезжали» */
+.fin-history thead th.col-num { text-align: right; }
+.fin-history thead th.col-center { text-align: center; }
+/* Комментарий забирает всю лишнюю ширину — числовые колонки прижаты к контенту */
+.fin-history th.col-flex, .fin-history td.fin-history__note { width: 100%; }
+.fin-history__date { font-family: var(--font-mono); font-size: var(--fs-xs); white-space: nowrap; color: var(--text2); }
+.fin-history__num { text-align: right; white-space: nowrap; }
+.fin-history__subs { text-align: center; white-space: nowrap; }
+.fin-history__amount {
+  display: block; font-family: var(--font-mono); font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.fin-history__sub { display: block; font-size: 11px; color: var(--text4); font-variant-numeric: tabular-nums; }
+.fin-history__count { font-family: var(--font-mono); font-weight: 600; color: var(--text2); }
+.fin-history__author { color: var(--text2); white-space: nowrap; }
+.fin-history__note { color: var(--text3); }
+/* Комментарий: две строки по умолчанию, дальше — раскрытие по кнопке.
+   Было: одна строка с многоточием и текст только в нативном тултипе. */
+.note-cell { display: flex; flex-direction: column; gap: 2px; max-width: 360px; }
+.note-cell__text {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.note-cell__text.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+.note-cell__toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-2xs);
+  color: var(--accent);
+  cursor: pointer;
+}
+.note-cell__toggle:hover { text-decoration: underline; }
+.note-cell__toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.fin-history__action { text-align: right; width: 1%; white-space: nowrap; }
+.fin-history tr.is-refund .fin-history__amount { color: var(--danger); }
+.fin-history .muted { color: var(--text4); }
+
+.fin-tag {
+  display: inline-flex; align-items: center; padding: 2px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill); font-size: var(--fs-2xs); font-weight: 500;
+}
+.fin-tag--refund { color: var(--bad); background: var(--bad-bg); border-color: var(--bad-line); }
+.fin-tag--prepay { color: var(--info); background: var(--info-bg); border-color: var(--info-line); }
+/* Оплата с доплатами к абонементам — итог отличается от суммы этой строки. */
+.fin-tag--surcharge {
+  display: inline-block; margin-top: 2px;
+  color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Раскрытие строки оплаты — список её абонементов (Task 6, доплаты). */
+.fin-history__subs-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 0; border: none; background: none; cursor: pointer; font: inherit;
+  color: inherit;
+}
+.fin-history__subs-toggle:hover .fin-history__count { color: var(--accent); }
+.fin-history__subs-caret {
+  color: var(--text4);
+  transition: transform var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.fin-history__subs-caret.is-open { transform: rotate(180deg); color: var(--accent); }
+
+.fin-subs-row td { padding: 0; background: var(--bg3); }
+.fin-subs-list {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+.fin-subs-item {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.fin-subs-item__row {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  font-size: 13px;
+}
+.fin-subs-item__num { font-weight: 600; color: var(--text2); }
+.fin-subs-item__lessons { color: var(--text3); }
+.fin-subs-item__price {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text);
+  margin-right: auto;
+}
+.fin-subs-item__extras {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-left: var(--space-3); padding-left: var(--space-3);
+  border-left: 2px solid var(--line);
+}
+.fin-subs-extra {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: 12px; color: var(--text3);
+}
+.fin-subs-extra__date { font-family: var(--font-mono); white-space: nowrap; }
+.fin-subs-extra__amount {
+  font-family: var(--font-mono); font-weight: 600; color: var(--warning);
+  font-variant-numeric: tabular-nums;
+}
+.fin-subs-extra__note { color: var(--text4); overflow-wrap: anywhere; }
+
+/* Ghost-кнопка удаления в строке таблицы: краснеет только при наведении */
+.fin-history__action .btn-delete:not(.is-confirming) {
+  width: 30px; height: 30px; padding: 0;
+  background: transparent; border-color: transparent; color: var(--text4);
+}
+.fin-history__action .btn-delete:not(.is-confirming):hover {
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  border-color: transparent; color: var(--danger);
+}
+
+/* .btn-danger — единое определение в components.css. */
+.refund-modal { display: flex; flex-direction: column; gap: 10px; }
+.refund-modal__amount { font-size: 1.1rem; }
+
+/* ── BTN-LINK (inline текстовая кнопка) ── */
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: opacity .15s;
+}
+.btn-link:hover { opacity: .75; }
+
+/* ── INLINE EDIT (SubscriptionsPage) ── */
+.inline-edit { display: inline-flex; gap: 8px; align-items: center; }
+
+/* ── ОПЕРАЦИИ ПЛАНА (GroupPlanActions) — toolbar кнопок над календарём ── */
+.plan-actions__toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* ── РАСПИСАНИЕ ГРУППЫ (GroupScheduleBlock) ── */
+.schedule-block { display: flex; flex-direction: column; }
+.schedule-block__subtitle {
+  font-size: 13px; font-weight: 600; color: var(--text2);
+  margin: var(--space-4) 0 var(--space-2);
+}
+.schedule-block__subtitle:first-child { margin-top: 0; }
+
+.schedule-slots { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.schedule-slot-chip {
+  display: inline-flex; align-items: baseline; gap: var(--space-2);
+  border: 1px solid var(--line); border-radius: var(--r-pill);
+  padding: 4px 12px; background: var(--bg2);
+}
+.schedule-slot-chip.is-active { border-color: var(--accent); background: var(--bg2); }
+.schedule-slot-chip.is-history { opacity: .6; }
+.schedule-slot-chip__label { font-size: 13px; font-weight: 600; color: var(--text); }
+.schedule-slot-chip.is-active .schedule-slot-chip__label { color: var(--text); }
+.schedule-slot-chip__period { font-family: var(--font-mono); font-size: 11px; color: var(--text3); }
+
+/* Базовый вид details/summary — в .details-toggle (components.css). */
+.schedule-history { margin-top: var(--space-2); }
+.schedule-history .schedule-slots { margin-top: var(--space-2); }
+
+.schedule-exception-item {
+  border: 1px solid var(--line); border-radius: var(--r);
+  padding: var(--space-3); margin-bottom: var(--space-2); background: var(--bg2);
+}
+.schedule-exception-item__main { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.schedule-exception-item__kind {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--r-pill);
+  font-size: 11px; font-weight: 600;
+}
+.schedule-exception-item__kind--reschedule { color: var(--info); background: var(--info-bg); border-color: var(--info-line); }
+.schedule-exception-item__kind--cancel { color: var(--bad); background: var(--bad-bg); border-color: var(--bad-line); }
+.schedule-exception-item__kind--extra { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-line); }
+.schedule-exception-item__dates { font-family: var(--font-mono); font-size: 13px; color: var(--text2); }
+.schedule-exception-item__teacher {
+  font-size: 12px; color: var(--text3); border: 1px solid var(--line);
+  border-radius: var(--r-pill); padding: 1px 8px;
+}
+.schedule-exception-item__note { font-size: 13px; color: var(--text2); margin-top: var(--space-2); }
+.schedule-exception-item__footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: var(--space-2);
+}
+.schedule-exception-item__created { font-size: 11px; color: var(--text4); font-family: var(--font-mono); }
+
+.schedule-block__forms {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5);
+  margin-top: var(--space-5); padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 900px) { .schedule-block__forms { grid-template-columns: 1fr; } }
+.schedule-form { display: flex; flex-direction: column; gap: var(--space-3); }
+.schedule-form__hint { font-size: 12px; color: var(--text3); line-height: 1.5; }
+.schedule-form__row { display: flex; gap: var(--space-3); }
+.schedule-form__row > * { flex: 1; min-width: 0; }
+.schedule-form__submit { margin-top: var(--space-2); align-self: flex-start; }
+.schedule-day-select { min-width: 148px; }
+
+.affected-ops-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.affected-ops-list__item { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; font-size: 13px; color: var(--text2); }
+
+/* ── «Состояние плана» (GroupPlanHealthBlock, вкладка «Расписание») ──
+   Три тона на одном инсет-приёме (см. .reg-stream__row--unmarked / .notif-toggle__banner
+   в других страницах): чисто — нейтральная строка без рамки-акцента; можно
+   починить — жёлтый инсет; чинить нельзя — красный. Цвет и текст обязаны
+   совпадать (в блокировке нет кнопки вовсе), поэтому тона три: ok / warn / blocked. */
+.plan-health {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4); border-radius: var(--r);
+  border: 1px solid var(--line); background: var(--bg2);
+}
+.plan-health--ok {
+  flex-direction: row; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text2); font-size: var(--fs-sm);
+}
+.plan-health__icon { color: var(--ok); font-weight: 600; }
+.plan-health--warn {
+  border-color: var(--warn-line);
+  background: var(--warn-bg);
+  box-shadow: inset 3px 0 0 var(--warning);
+}
+.plan-health--blocked {
+  border-color: var(--bad-line);
+  background: var(--bad-bg);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.plan-health__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+}
+.plan-health__title { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+.plan-health__findings {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.plan-health__blockers { display: flex; flex-direction: column; gap: var(--space-1); }
+.plan-health__blockers-title { font-size: var(--fs-sm); font-weight: 600; color: var(--danger); }
+.plan-health__check { display: flex; flex-direction: column; gap: 2px; }
+.plan-health__check-label { font-size: var(--fs-sm); font-weight: 600; color: var(--text2); }
+.plan-health__rows {
+  list-style: none; margin: 2px 0 0; padding: 0 0 0 var(--space-3);
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: var(--fs-xs); color: var(--text3); font-family: var(--font-mono);
+}
+.plan-health__warning { font-size: var(--fs-sm); color: var(--text2); line-height: 1.5; }
+.plan-health__preview-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); margin-top: var(--space-2); }
+.plan-health__preview-table th, .plan-health__preview-table td {
+  text-align: left; padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+.plan-health__preview-table th { color: var(--text3); font-weight: 500; }
+.plan-health__freed { margin-top: var(--space-3); }
+
+/* Состояние «Точно?» кнопки .btn-delete — в components.css. */
+
+/* ============================================================
+ *  Комментарии к ученику (вкладка «Комментарии» карточки)
+ *  Личность как у всего SPA: слейт + акцент, borders-only, 4px-сетка.
+ * ============================================================ */
+.comments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 680px;
+}
+
+/* Композер — крафтовый объект: карточка с фокус-кольцом, футер с кнопкой */
+.comments__composer {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.comments__composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.comments__input {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  resize: vertical;
+  min-height: 76px;
+  padding: var(--space-3) var(--space-4);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.comments__input:focus { outline: none; }
+.comments__input::placeholder { color: var(--text4); }
+.comments__composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+.comments__hint {
+  font-size: 12px;
+  color: var(--text4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Лента */
+.comments__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.comments__item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+.comments__item:first-child { padding-top: 0; }
+.comments__item:last-child { border-bottom: 0; padding-bottom: 0; }
+.comments__avatar {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.comments__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.comments__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 26px;
+}
+.comments__author {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.comments__time {
+  font-size: 11px;
+  color: var(--text4);
+  font-variant-numeric: tabular-nums;
+}
+.comments__text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Удаление — деликатная иконка, проявляется на hover строки (только у админа) */
+.comments__delete {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--r-sm);
+  color: var(--text4);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease), color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.comments__item:hover .comments__delete,
+.comments__delete:focus-visible { opacity: 1; }
+.comments__delete:hover { color: var(--danger); background: var(--bg3); }
+.comments__delete:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.comments__delete svg { width: 15px; height: 15px; }
+
+/* Инлайн-подтверждение вместо нативного confirm */
+.comments__confirm {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.comments__confirm-yes,
+.comments__confirm-no {
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.comments__confirm-yes {
+  color: var(--on-accent);
+  background: var(--bad);
+  border: 1px solid var(--bad);
+}
+.comments__confirm-yes:disabled { opacity: 0.6; cursor: not-allowed; }
+.comments__confirm-no {
+  color: var(--text3);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+}
+.comments__confirm-no:hover { background: var(--bg3); color: var(--text); }
+
+.comments__more { align-self: flex-start; }
+
+/* Пустое состояние */
+.comments__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-10) var(--space-4);
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  color: var(--text3);
+}
+.comments__empty svg { width: 28px; height: 28px; color: var(--text4); }
+.comments__empty p { font-size: 14px; font-weight: 600; color: var(--text2); }
+.comments__empty span { font-size: 12px; color: var(--text4); }
+
+.comments__loading {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text3);
+  font-size: 13px;
+}
+
+/* Последний комментарий в шапке карточки (рядом с возрастом/телефоном) */
+.hero-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.hero-comment:hover {
+  border-color: var(--line-3);
+  background: var(--bg3);
+}
+.hero-comment:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.hero-comment-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text3);
+}
+.hero-comment-head svg { width: 13px; height: 13px; color: var(--text4); }
+.hero-comment-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.hero-comment-meta {
+  font-size: 11px;
+  color: var(--text4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Матрица посещаемости «Прогресс» переехала в shared/progress/progress.css
+   (общая с teacher SPA — страница группы). */
+
+/* ── STUDENT STATUS MODAL / RESUME DIALOG ── */
+.status-form { display: flex; flex-direction: column; gap: 16px; }
+.status-form__hint { font-size: 13px; color: var(--text3); line-height: 1.5; }
+.status-form__warn {
+  font-size: 13px;
+  color: var(--amber);
+  background: color-mix(in oklab, var(--amber) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--amber) 25%, transparent);
+  border-radius: var(--r);
+  padding: 10px 14px;
+}
+.status-form__group { display: flex; flex-direction: column; gap: 10px; }
+.status-form__group-label {
+  font-size: 12px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--text3);
+}
+.status-form__subgroup { display: flex; flex-direction: column; gap: 6px; }
+.status-form__subgroup-label { font-size: 12px; font-weight: 600; color: var(--text4); }
+.status-form__membership-preview {
+  font-size: 12px;
+  color: var(--text4);
+  margin: 2px 0 0 24px;
+}
+.status-form__summary { font-size: 14px; color: var(--text2); padding: 4px 0; }
+.status-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
+
+/* Вкладка «Обучение»: блок направлений + свёрнутые прочие поля под ним. */
+.student-learning { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* ============================================================
+   Карточка преподавателя
+   ============================================================ */
+
+.tstats { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.month-nav { display: flex; align-items: center; gap: var(--space-2); }
+.month-nav__btn {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.month-nav__btn:hover { background: var(--bg3); color: var(--text); }
+.month-nav__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.month-nav__label {
+  font-size: 13px; font-weight: 600; color: var(--text2);
+  min-width: 130px;
+}
+
+/* ── ОБЗОР: расшифровка по направлениям + спарклайн нагрузки ── */
+.tbreak {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-6);
+}
+.tbreak__col { min-width: 0; }
+
+.tdir-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.tdir {
+  display: grid;
+  grid-template-columns: minmax(0, 140px) minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: var(--space-3);
+}
+.tdir__name {
+  font-size: 13px; color: var(--text2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tdir__bar {
+  height: 5px; border-radius: 3px;
+  background: var(--bg3); overflow: hidden;
+}
+.tdir__fill {
+  height: 100%; border-radius: 3px;
+  background: var(--entity-c);
+  transition: width .4s var(--ease);
+}
+.tdir__count {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 600; color: var(--text); text-align: right;
+}
+
+.tspark { width: 100%; }
+
+@media (max-width: 900px) {
+  .tbreak { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── ГРУППЫ ПРЕПОДАВАТЕЛЯ: активные + свёрнутый архив ── */
+.tgroups { display: flex; flex-direction: column; gap: var(--space-3); }
+.tgroups__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+}
+.tgroups__head .sub-header { margin-bottom: 0; }
+.tgroups__search { min-width: 220px; }
+.tgroups__list { display: flex; flex-direction: column; }
+
+.tgroup {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.tgroup:hover { background: var(--bg2); }
+.tgroup:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tgroup.is-archived { opacity: .62; }
+
+.tgroup__head { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
+.tgroup__name { font-size: 14px; font-weight: 600; color: var(--text); }
+.tgroup__dir {
+  font-size: 12px; color: var(--entity-c);
+  padding: 1px 8px; border-radius: var(--r-pill);
+  border: 1px solid color-mix(in oklab, var(--entity-c) 40%, var(--bg2));
+  background: color-mix(in oklab, var(--entity-c) 10%, var(--bg2));
+}
+.tgroup__id {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 12px; color: var(--text4);
+}
+
+.tgroup__meta {
+  display: flex; gap: var(--space-3); flex-wrap: wrap;
+  font-size: 12px; color: var(--text3);
+}
+.tgroup__mono {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 12px; color: var(--text3); white-space: nowrap;
+}
+
+.tgroup__stats {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  font-size: 12px; color: var(--text3);
+}
+.tgroup__students b { font-size: 14px; font-weight: 600; color: var(--text2); }
+.tgroup__nocourse { color: var(--text4); }
+.tgroup__bar {
+  flex: 1; min-width: 80px; max-width: 200px; height: 5px;
+  border-radius: 3px; background: var(--bg3); overflow: hidden;
+}
+.tgroup__fill {
+  display: block; height: 100%; border-radius: 3px;
+  background: var(--entity-c); transition: width .4s var(--ease);
+}
+.tgroup__pct {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 13px; font-weight: 600; color: var(--text2);
+}
+
+.tgroups__toggle {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  align-self: flex-start;
+  padding: 6px 0;
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; font-weight: 600; color: var(--text2);
+}
+.tgroups__toggle:hover { color: var(--text); }
+.tgroups__toggle svg { transition: transform var(--dur-1) var(--ease); }
+.tgroups__toggle svg.is-open { transform: rotate(90deg); }
+
+/* ── Задачи ученика (вкладка «Задачи», StudentTasksBlock) — тот же ритм
+   строк, что .tgroup, и та же свёртка архива, что .tgroups__toggle. ── */
+.stasks { display: flex; flex-direction: column; gap: var(--space-3); }
+.stasks__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+}
+.stasks__head .sub-header { margin-bottom: 0; }
+.stasks__list { display: flex; flex-direction: column; }
+.stasks__loading { font-size: 13px; color: var(--text3); padding: var(--space-3) 0; }
+
+.stasks__row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--dur-1) var(--ease);
+}
+.stasks__row:hover { background: var(--bg2); }
+.stasks__row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.stasks__row.is-closed { opacity: .62; }
+
+.stasks__id {
+  font-family: var(--font-mono); font-size: 12px; color: var(--text4);
+  flex-shrink: 0;
+}
+.stasks__title {
+  font-size: 14px; font-weight: 600; color: var(--text);
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stasks__stage {
+  flex-shrink: 0;
+  font-size: 12px; color: var(--stage-c, var(--text3));
+  padding: 1px 8px; border-radius: var(--r-pill);
+  background: color-mix(in oklab, var(--stage-c, var(--text3)) 14%, transparent);
+  white-space: nowrap;
+}
+.stasks__assignee {
+  flex-shrink: 0;
+  font-size: 12px; color: var(--text3);
+  max-width: 160px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stasks__due {
+  flex-shrink: 0;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 12px; color: var(--text3);
+}
+.stasks__due.is-overdue { color: var(--bad); font-weight: 500; }
+
+.stasks__toggle {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  align-self: flex-start;
+  padding: 6px 0;
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; font-weight: 600; color: var(--text2);
+}
+.stasks__toggle:hover { color: var(--text); }
+.stasks__toggle svg { transition: transform var(--dur-1) var(--ease); }
+.stasks__toggle svg.is-open { transform: rotate(90deg); }
+
+/* Полоса «требует действия» на карточке преподавателя. Не плитка в общем ряду:
+   это единственные числа, которые зовут что-то сделать, и среди нейтральных
+   «занятий»/«часов» они бы потерялись. Плюс они не за выбранный месяц. */
+.tattention {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+}
+.tattention__item {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 7px var(--space-3);
+  border-radius: var(--r-sm);
+  background: color-mix(in oklab, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--warning) 28%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: none;
+  transition: background var(--dur-1) var(--ease);
+}
+.tattention__item:hover {
+  background: color-mix(in oklab, var(--warning) 20%, transparent);
+}
+.tattention__item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tattention__count {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 15px; font-weight: 600; color: var(--warning);
+}
+.tattention__since { color: var(--text3); }
+
+/* Столбики нагрузки по дням недели. */
+.tweek {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2); align-items: end;
+}
+.tweek__day { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.tweek__track {
+  width: 100%; height: 72px;
+  display: flex; align-items: flex-end;
+  background: var(--bg4); border-radius: var(--r-sm); overflow: hidden;
+}
+.tweek__fill {
+  width: 100%; background: var(--accent);
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  transition: height .4s var(--ease);
+}
+.tweek__n {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 12px; font-weight: 600; color: var(--text2); min-height: 15px;
+}
+.tweek__label { font-size: 11px; color: var(--text3); }
+
+/* Исходы пропусков за месяц. */
+.tmd { display: flex; flex-direction: column; }
+.tmd__row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-3);
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px; color: var(--text2);
+}
+.tmd__row:first-child { border-top: none; }
+.tmd__row dd {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 600; color: var(--text);
+}
+.tmd__empty { font-size: 13px; color: var(--text4); }
+
+/* Нижний ряд «Обзора» — три блока (дни недели, пропуски, продления). */
+.tbreak--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) {
+  .tbreak--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .tbreak--three { grid-template-columns: minmax(0, 1fr); }
+}
+.tmd__note {
+  margin-top: var(--space-2);
+  font-size: 11px; line-height: 1.4; color: var(--text4);
+}
+
+/* Вкладка «Уроки» карточки ученика: сумма и пометка долга в одной ячейке. */
+.slessons__money {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.slessons__debt {
+  color: var(--text3);
+  font-size: var(--fs-xs);
+}
+
+/* Ряд контролов над таблицей (период дашборда): поля в строку, перенос на узком. */
+.page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}

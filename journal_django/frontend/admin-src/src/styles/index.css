@@ -1,0 +1,27 @@
+@import './tokens.css';
+@import './base.css';
+@import './brand.css';
+@import './shell.css';
+@import './components.css';
+@import './table.css';
+@import './forms.css';
+@import './modal.css';
+@import './pages/detail.css';
+@import './pages/payroll.css';
+@import './pages/dashboard.css';
+@import './pages/changelog.css';
+@import './pages/renewals.css';
+@import './pages/tasks.css';
+@import './pages/admin-calendar.css';
+@import './pages/sync.css';
+@import './pages/reports.css';
+@import './pages/notifications.css';
+/* Shared презентационный календарь (GroupDetailPage вкладка «Расписание»,
+   см. shared/calendar/CalendarView.tsx) — те же классы, что и teacher-src,
+   которая импортирует этот же файл через alias '@shared/shared/calendar/*'. */
+@import '../shared/calendar/calendar.css';
+@import '../shared/calendar/modal.css';
+/* Матрица посещаемости «Прогресс» (GroupProgressView) — общая с teacher SPA. */
+@import '../shared/progress/progress.css';
+/* Wiki — читатель (DocumentView) и редактор (DocumentEditor). */
+@import './knowledge.css';

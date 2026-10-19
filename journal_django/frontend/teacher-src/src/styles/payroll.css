@@ -1,0 +1,179 @@
+/* ── ЗАРПЛАТА ──
+ * Экран читается сверху вниз как расчётный лист: сначала итог, затем строки,
+ * каждая со своим правилом. Числа — моноширинные и табличные, чтобы колонка
+ * сумм выстраивалась в столбец. Язык Eduson: панели с линией 1px, без теней,
+ * цвет только у смысла (штраф, замена/перенос, сгоревшее). Только токены. */
+
+.pr-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* ── Итог за месяц (.stat Eduson, шире обычной плитки) ── */
+
+.pr-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4) var(--space-6);
+  padding: 14px var(--space-4);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.pr-summary-label {
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.pr-summary-value {
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.pr-summary-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  text-align: right;
+}
+.pr-summary-line {
+  font-size: var(--fs-sm);
+  color: var(--text2);
+}
+.pr-summary-line b {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--text);
+}
+.pr-summary-penalty { color: var(--bad); }
+.pr-summary-line b.pr-summary-penalty { color: var(--bad); }
+.pr-summary-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+/* ── Список уроков (.t-panel задаёт рамку и скругление) ── */
+
+.pr-row {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  align-items: start;
+  gap: var(--space-4);
+  padding: 11px var(--space-4);
+}
+.pr-row + .pr-row { border-top: 1px solid var(--line); }
+
+.pr-date {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.pr-date-day { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.pr-date-dow { font-size: var(--fs-2xs); color: var(--text3); }
+
+.pr-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.pr-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+/* Код группы — моно, как в Eduson. */
+.pr-group {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Бейдж типа урока: рецепт .chip (заливка + рамка + ink того же тона). */
+.pr-badge {
+  flex-shrink: 0;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  background: var(--bg2);
+  padding: 2px 8px;
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  color: var(--text2);
+}
+.pr-badge--substitution,
+.pr-badge--reschedule { color: var(--info); background: var(--info-bg); border-color: var(--info-line); }
+.pr-badge--burned     { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
+
+/* Формула — то, ради чего экран существует: почему сумма именно такая. */
+.pr-formula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text2);
+}
+.pr-rule {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: help;
+}
+.pr-sep { color: var(--text3); }
+
+.pr-note { font-size: var(--fs-xs); color: var(--text3); }
+.pr-penalty { font-size: var(--fs-xs); color: var(--bad); }
+
+.pr-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  text-align: right;
+}
+.pr-net {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+}
+.pr-gross {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+}
+
+/* ── Узкий экран: дата и сумма в одну строку, подробности — под ними ── */
+
+@media (max-width: 600px) {
+  .pr-summary { flex-direction: column; align-items: flex-start; }
+  .pr-summary-side { align-items: flex-start; text-align: left; }
+
+  .pr-row {
+    grid-template-columns: 1fr auto;
+    gap: var(--space-2) var(--space-3);
+  }
+  .pr-date {
+    grid-column: 1; grid-row: 1;
+    flex-direction: row; align-items: baseline; gap: var(--space-2);
+  }
+  .pr-amount { grid-column: 2; grid-row: 1; }
+  .pr-main { grid-column: 1 / -1; grid-row: 2; }
+}

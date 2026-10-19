@@ -1,0 +1,67 @@
+/* ── МОИ УРОКИ ──
+   История по месяцам: панель-список (.t-panel), строка кликабельна и
+   раскрывает учеников. Время/дата и код группы — моно, курс — точка. Строка
+   устроена как в «Зарплате» (.pr-*), но без денег. */
+
+.mlh-row + .mlh-row { border-top: 1px solid var(--line); }
+
+.mlh-toggle {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  align-items: start;
+  gap: var(--space-4);
+  width: 100%;
+  padding: 11px var(--space-4);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.mlh-toggle:hover { background: var(--bg); }
+/* Фокус строки — чёрная полоса слева (table.tbl Eduson). */
+.mlh-toggle:focus-visible { outline: none; box-shadow: inset 3px 0 0 var(--accent); }
+
+.mlh-chevron { color: var(--text3); transition: transform var(--dur-1) var(--ease); margin-top: 2px; }
+.mlh-row.is-open .mlh-chevron { transform: rotate(180deg); }
+
+.mlh-students {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-3) calc(60px + var(--space-4) * 2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.mlh-students--empty { font-size: var(--fs-xs); color: var(--text3); }
+
+.mlh-student {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
+}
+.mlh-name { color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Отметки: цвет только у смысла — «был» зелёный, «не был» красный, сгоревший жёлтый. */
+.mlh-mark { flex-shrink: 0; font-size: var(--fs-xs); font-weight: 500; }
+.mlh-mark--present { color: var(--ok); }
+.mlh-mark--free    { color: var(--ok); }
+.mlh-mark--absent  { color: var(--bad); }
+.mlh-mark--skip    { color: var(--text3); font-weight: 400; }
+.mlh-mark--burned  { color: var(--warn); }
+
+/* Порог и раскладка — те же, что у строки «Зарплаты» (payroll.css, ≤600px):
+   дата и шеврон сверху в одну линию, группа с посещаемостью — на всю ширину под
+   ними. .pr-date и .pr-main перестраивает общее правило payroll.css — здесь
+   только сетка самой кнопки и место шеврона (у «Зарплаты» там сумма). */
+@media (max-width: 600px) {
+  .mlh-toggle {
+    grid-template-columns: 1fr auto;
+    gap: var(--space-2) var(--space-3);
+  }
+  .mlh-chevron { grid-column: 2; grid-row: 1; }
+  .mlh-students { padding-left: var(--space-4); }
+}

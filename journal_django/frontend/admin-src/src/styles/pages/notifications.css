@@ -1,0 +1,285 @@
+/* journal_django/frontend/admin-src/src/styles/pages/notifications.css */
+/* Раздел «Уведомления»: лента доставки + расписание регулярных задач. */
+
+/* ── Колонка «Текст»: зачин сообщения одной строкой ──────────────────────────
+   Тексты многострочные; без ограничения ширины одна строка дайджеста растянет
+   таблицу горизонтально. max-width в ch, а не в px: держится за кегль, а не за
+   случайное число. */
+.notifications-text {
+  display: block;
+  max-width: 46ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text2);
+}
+
+/* ── Модалка сообщения ─────────────────────────────────────────────────────── */
+
+.notification-detail {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.notification-detail__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+.notification-detail__row {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.notification-detail__label {
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+.notification-detail__value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.notification-detail__chat {
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+}
+
+.notification-detail__error {
+  padding: var(--space-3);
+  border: 1px solid var(--bad-line);
+  background: var(--bad-bg);
+  border-radius: var(--r-sm);
+  color: var(--bad);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Текст целиком: сообщения бота свёрстаны переносами строк, поэтому <pre>. */
+.notification-detail__text {
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--bg3);
+  border-radius: var(--r-sm);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Общешкольный выключатель рассылки ───────────────────────────────────────
+   Виден на обеих вкладках раздела — это состояние всей отправки, а не одной
+   из них. Плашка предупреждения при выключении сделана заметной намеренно:
+   это состояние, в котором систему легко забыть, а цена ошибки — молчание
+   для сотни преподавателей. */
+.notif-toggle {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.notif-toggle__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.notif-toggle__meta {
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+.notif-toggle__banner {
+  padding: var(--space-3) var(--space-4);
+  /* Красная, в тон перечёркнутому колокольчику: состояние одно — и цвет один,
+     иначе глаз читает их как два разных сообщения. */
+  border: 1px solid var(--bad-line);
+  background: var(--bad-bg);
+  border-radius: var(--r);
+  /* Полоса слева — не тень, а часть рамки: border-left толще остальных. */
+  border-left: 3px solid var(--bad);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+/* Тумблер рассылки: колокольчик, который перечёркивается и краснеет.
+   Кнопка, а не чекбокс — состояние читается иконкой с расстояния, а
+   выключение всё равно идёт через подтверждение, так что мгновенного
+   переключения по клику здесь нет. */
+.notif-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.notif-switch:hover:not(:disabled) {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.notif-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.notif-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Выключено — красный перечёркнутый колокольчик. Это не ошибка, а состояние,
+   в котором систему легко забыть, поэтому оно намеренно бросается в глаза. */
+.notif-switch--off {
+  border-color: var(--bad-line);
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+.notif-switch--off:hover:not(:disabled) {
+  background: var(--bad-bg);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.notif-switch svg { flex: none; }
+
+/* ── Вкладка «Расписание» ──────────────────────────────────────────────────── */
+
+.schedule-panel {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.schedule-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.schedule-count {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+/* KPI Eduson: число — mono 26px. */
+.schedule-count__value {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.schedule-count__label {
+  font-size: var(--fs-sm);
+  color: var(--text3);
+}
+
+.schedule-count--sent .schedule-count__value { color: var(--ok); }
+.schedule-count--failed .schedule-count__value { color: var(--bad); }
+
+.schedule-cards {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.schedule-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+/* Молчащая задача — единственный отказ, который не виден по данным: подсвечиваем. */
+.schedule-card--stale {
+  border-color: var(--warn-line);
+  background: var(--warn-bg);
+}
+
+.schedule-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.schedule-card__title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.schedule-card__when {
+  font-size: var(--fs-sm);
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-card__last {
+  font-size: var(--fs-sm);
+  color: var(--text2);
+}
+
+.schedule-card__warn {
+  font-size: var(--fs-sm);
+  color: var(--warn);
+}
+
+/* Карточка привязки Telegram в шапке преподавателя. Раньше это было голое поле
+   формы между карточкой данных и списком групп — без контейнера и с кнопками
+   разной высоты. */
+.tg-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.tg-card__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-2);
+}
+.tg-card__title {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-2xs); font-weight: 500; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--text3);
+}
+.tg-card__status { font-size: var(--fs-xs); color: var(--text3); }
+.tg-card__status--ok { color: var(--ok); }
+.tg-card__status--error { color: var(--bad); }
+.tg-card__account {
+  font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tg-card__actions { display: flex; gap: var(--space-2); }
+.tg-card__actions button { flex: 1; }
+.tg-card__hint { font-size: var(--fs-2xs); color: var(--text4); }

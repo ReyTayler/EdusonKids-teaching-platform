@@ -1,0 +1,414 @@
+/* journal_django/frontend/admin-src/src/styles/pages/reports.css */
+/* Раздел «Отчёты»: список отчётов (таблица) + страница одного отчёта с формой.
+   Истории нет — отчёты не хранятся, файл скачивается по готовности. */
+
+/* Название отчёта — единственная колонка списка, поэтому набрано как ссылка-
+   заголовок строки, а не как обычная ячейка данных. */
+.report-list__name {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.report-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Форма узкая: поля отчёта — это два-три коротких значения, растянутые на всю
+   ширину экрана они читались бы хуже, а не лучше. */
+.report-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  max-width: 480px;
+  padding: var(--space-4);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.report-form__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.report-form__fields .field { width: 100%; }
+
+.report-form__toggle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.report-form__submit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.report-form__submit .btn-add { align-self: flex-start; }
+
+.report-form__status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Пустой статус не должен оставлять после кнопки полосу воздуха. */
+.report-form__status:empty { display: none; }
+
+.report-form__hint {
+  font-size: var(--fs-sm);
+  color: var(--text3);
+  line-height: 1.5;
+}
+
+/* Статусы формы — смысловые тона; в тёмной теме токены сами светлеют. */
+.report-form__hint--warn { color: var(--warn); }
+.report-form__hint--error { color: var(--bad); }
+.report-form__hint--ok { color: var(--ok); }
+
+/* ============================================================
+ *  ДАШБОРД «ФИНАНСЫ» (/admin/reports/dashboard/finance)
+ *  Переехал со страницы «Дашборд» (2026-09): плитки + графики по месяцам.
+ *  Сетка плиток (.dashboard__kpis) и .kpi-card остаются в dashboard.css —
+ *  их делят «Реестр» и аналитика продлений.
+ * ============================================================ */
+
+.finance-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+
+/* ── Revenue / Orders + график поступлений (спека 2026-09-18) ── */
+.finance-overview {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2.4fr);
+  gap: var(--space-4);
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+/* Пока грузится новый период — старые цифры приглушены. */
+.finance-overview--stale {
+  opacity: 0.6;
+}
+
+.finance-overview__totals {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.finance-overview__totals .kpi-card {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Orders и AOV — рядом, под крупной Revenue. */
+.finance-overview__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  flex: 1;
+}
+
+/* KPI — как в Eduson: крупное моно-число основным цветом текста. Цвет у
+   чисел был декоративным (зелёный/розовый), смысла в нём нет. */
+.finance-overview__recognized .kpi-card__value,
+.finance-overview__revenue .kpi-card__value {
+  font-size: var(--fs-6xl);
+}
+
+.finance-overview__chart {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .finance-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+ *  КАРТОЧКА ГРАФИКА И ПОДСКАЗКА
+ *  Оболочка графиков за период («Финансы») и аналитики продлений.
+ *  Монохром: основная серия — --text, сравнительная — --text3, сетка — --line.
+ *  Цвета передаются в Recharts строкой "var(--…)": SVG-атрибуты fill/stroke
+ *  принимают var(), значение пересчитывается при смене темы без перерисовки
+ *  графика — getComputedStyle пришлось бы перечитывать на каждое
+ *  переключение темы.
+ * ============================================================ */
+
+/* ── Individual chart card ── */
+.chart-card {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--space-5);
+}
+
+/* Title + legend row */
+.chart-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.chart-card__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* ── Recharts SVG text already themed via inline tick fill — no overrides needed ── */
+
+/* ── Chart tooltip: рецепт .pop — белый, рамка --line-2, тень всплывающего ── */
+.chart-tooltip {
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-2) var(--space-3);
+}
+
+.chart-tooltip__label {
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.chart-tooltip__value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Multi-year tooltip rows (year-over-year) */
+.chart-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 2px;
+}
+
+.chart-tooltip__year {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  min-width: 32px;
+}
+
+.chart-tooltip__row .chart-tooltip__value {
+  font-size: var(--fs-sm);
+}
+
+/* ============================================================
+ *  ЛЕГЕНДА-ФИЛЬТР ГРАФИКА ПОСТУПЛЕНИЙ
+ *  Цвет и штрих засечки повторяют линию серии. Эти же засечки использует
+ *  подсказка при наведении — чтобы легенда и тултип не разъезжались.
+ * ============================================================ */
+
+.revenue-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Кнопка: клик оставляет на графике только эту серию, повторный — возвращает все. */
+.revenue-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-2);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text2);
+  cursor: pointer;
+}
+
+.revenue-legend__item:hover {
+  background: var(--bg3);
+}
+
+.revenue-legend__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Серия скрыта выбором другой — приглушаем подпись, но засечку оставляем цветной. */
+.revenue-legend__item--dimmed {
+  color: var(--text4);
+}
+
+.revenue-legend__item--active {
+  background: var(--bg3);
+  font-weight: 600;
+}
+
+.revenue-legend__swatch {
+  width: 14px;
+  height: 0;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* Серии различаются не цветом, а штрихом и тоном серого: сумма — сплошная
+   чёрная, заказы — пунктир --text3, средний чек — точки --text2. */
+.revenue-legend__swatch--revenue {
+  border-top: 2px solid var(--text);
+}
+
+.revenue-legend__swatch--orders {
+  border-top: 2px dashed var(--text3);
+}
+
+.revenue-legend__swatch--aov {
+  border-top: 2px dotted var(--text2);
+}
+
+/* Признанная выручка — единственная серия своего графика; засечка нужна подсказке. */
+.revenue-legend__swatch--recognized {
+  border-top: 2px solid var(--text);
+}
+
+.revenue-legend__item--dimmed .revenue-legend__swatch {
+  opacity: 0.45;
+}
+
+/* ============================================================
+ *  СВОДНАЯ ТАБЛИЦА ПО КУРСАМ (дашборд «Финансы»)
+ *  Оболочка — общая .dash-card, сама таблица — общая .data-table;
+ *  здесь только числовые колонки, сортировка и полоска Revenue.
+ * ============================================================ */
+
+/* Сетка: общая .data-table даёт только горизонтальные разделители строк —
+   в сводке с шестью числовыми колонками нужны и вертикальные, иначе глаз
+   теряет столбец. Линии те же, что между строками (--border2), чтобы таблица
+   не читалась как чертёж. */
+.products-table th + th,
+.products-table td + td {
+  border-left: 1px solid var(--border2);
+}
+
+.products-table thead th {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Строки таблицы никуда не ведут — общий курсор-указатель здесь не нужен. */
+.products-table tbody tr {
+  cursor: default;
+}
+
+.products-table__note {
+  font-size: var(--fs-xs);
+  color: var(--text4);
+}
+
+.products-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Заголовок-кнопка: сортировка по клику, вид — как у обычного заголовка. */
+.products-table__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.products-table__num .products-table__sort {
+  flex-direction: row-reverse;
+}
+
+.products-table__sort:hover {
+  color: var(--text);
+}
+
+.products-table__sort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.products-table__arrow {
+  width: 8px;
+  color: var(--text3);
+}
+
+/* Полоска под суммой: доля курса от самого прибыльного. Само число всегда
+   поверх полоски, поэтому читается и на узких колонках. */
+.products-table__bar-wrap {
+  position: relative;
+  display: inline-block;
+  min-width: 120px;
+  padding: 2px 6px;
+}
+
+/* Заливка — --text с прозрачностью: монохромная шкала, в тёмной теме тон
+   уезжает вместе с палитрой. Колонки различаются плотностью. */
+.products-table__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--r-sm);
+}
+
+.products-table__bar--revenue {
+  background: color-mix(in oklab, var(--text) 14%, transparent);
+}
+
+.products-table__bar--asp {
+  background: color-mix(in oklab, var(--text) 10%, transparent);
+}
+
+.products-table__bar--arpm {
+  background: color-mix(in oklab, var(--text) 7%, transparent);
+}
+
+.products-table__bar-value {
+  position: relative;
+}
+
+
+.products-table__legacy {
+  color: var(--text3);
+  font-style: italic;
+}
+
+.products-table__total td {
+  background: var(--bg3);
+  font-weight: 600;
+}
+
+.products-table__empty {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text3);
+}

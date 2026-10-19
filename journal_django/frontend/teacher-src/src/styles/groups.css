@@ -1,0 +1,77 @@
+/* ── МОИ ГРУППЫ ── язык Eduson: панели с линией 1px, прогресс 5px чёрный,
+   курс отмечен точкой, цвет — только у смысла (долг, остаток). */
+
+.grp-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.grp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+
+.grp-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 14px var(--space-4);
+}
+
+.grp-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+/* Код группы — моно, точка слева — курс. */
+.grp-name {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.grp-meta-row { display: flex; align-items: center; gap: var(--space-3); font-size: var(--fs-xs); color: var(--text2); }
+.grp-type { color: var(--text2); font-weight: 500; }
+.grp-count { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.grp-progress { display: flex; flex-direction: column; gap: 6px; }
+.grp-progress-track { height: 5px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
+.grp-progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width var(--dur-2) var(--ease); }
+.grp-progress-label { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--fs-2xs); color: var(--text3); }
+
+/* Кликабельная карточка — открывает страницу группы. Hover — только рамка,
+   без подъёма и тени (тень у Eduson только у всплывающего). */
+.grp-card--link {
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+.grp-card--link:hover { border-color: var(--text3); }
+.grp-card--link:focus-visible { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+/* ── СТРАНИЦА ГРУППЫ (/groups/:group) ── */
+
+.grp-back { align-self: flex-start; }
+.grp-detail-name { display: inline-flex; align-items: center; gap: var(--space-2); }
+.grp-detail-code { font-family: var(--font-mono); letter-spacing: -0.02em; }
+.grp-detail-sec { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.grp-students {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-2);
+}
+.grp-student {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+.grp-student-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.grp-student-name {
+  font-size: var(--fs-sm); font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.grp-student-age { font-size: var(--fs-2xs); color: var(--text3); }
+/* Остаток оплаченных уроков — .chip (ok / warn / bad), число моно. */
+.grp-student-balance { flex-shrink: 0; font-family: var(--font-mono); }

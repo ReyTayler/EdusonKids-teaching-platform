@@ -1,0 +1,19 @@
+# journal_django — production dependencies
+Django==5.1.4
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1   # JWT-auth (HttpOnly-cookie), architecture_v2 фаза 1
+psycopg2-binary==2.9.10
+django-cors-headers==4.6.0
+django-environ==0.11.2
+django-ratelimit==4.1.0                # rate-limit на auth-вьюхах (было в коде, не в requirements)
+django-pghistory==3.9.2                # журнал изменений: PG-триггеры + контекст (спека 2026-07-06)
+django-pgtrigger==4.17.0               # зависимость pghistory (триггеры декларативно из миграций)
+pyotp==2.9.0
+bcrypt==4.2.1                          # 4.x усекает пароль >72 байт; 5.x бросает ValueError — обновлять только вместе с тестом длинного пароля (auth_app/tests/test_eduson_bcrypt.py)
+qrcode==8.0
+Pillow==12.2.0          # qrcode.make() рендерит PNG через PIL (2FA-enrollment)
+gunicorn==23.0.0        # WSGI app-server за nginx (cutover, раздел 08)
+openpyxl==3.1.5         # Excel-отчёты (apps/finances/reports.py и соседние)
+django-redis==5.4.0     # кэш снимка «Реестра куратора» (apps/dashboard/registry_service); активен ТОЛЬКО при REDIS_URL — локально/тесты идут на LocMemCache без redis. redis-py ставится как зависимость
+celery==5.4.0           # прогрев кэша реестра (beat → apps/dashboard/tasks); broker=Redis. Локально не запускается (config/__init__.py импортирует под try/except). Юниты — deploy/systemd/celery-*.service
+requests==2.34.2        # транспорт Telegram Bot API (apps/notifications/telegram.py)

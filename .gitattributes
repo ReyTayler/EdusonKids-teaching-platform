@@ -1,0 +1,8 @@
+# git на Windows с autocrlf=true превращает переводы строк в CRLF, а bash
+# спотыкается о \r в конце строк — shell-скрипты держим строго в LF.
+*.sh text eol=lf
+# Конфиги nginx — LF: они уезжают на Linux-сервер как есть, а nginx на Windows
+# LF читает так же. .ps1 — CRLF: родной формат Windows PowerShell 5.1
+# (UTF-8 BOM при этом обязателен — его git не трогает, держит сам файл).
+deploy/nginx/**/*.conf text eol=lf
+*.ps1 text eol=crlf

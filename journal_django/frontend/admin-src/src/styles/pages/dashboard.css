@@ -1,0 +1,581 @@
+/* ============================================================
+ *  ERROR FALLBACK
+ *  Centered card shown when ErrorBoundary catches a render crash.
+ * ============================================================ */
+
+.error-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-height: 320px;
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+}
+
+.error-fallback__title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.error-fallback__text {
+  font-size: 14px;
+  color: var(--text3);
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+/* Reuse .btn-save styles; cancel its auto left-margin via higher specificity */
+.error-fallback .error-fallback__btn {
+  margin-left: 0;
+}
+
+/* ============================================================
+ *  DASHBOARD PAGE
+ * ============================================================ */
+
+/* Поля и потолок ширины задаёт .page (base.css) — дашборд больше не раздаёт
+   свой padding и не отменяет max-width. */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+
+
+
+/* ── KPI grid — 4 cols → 2 → 1 ── */
+.dashboard__kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .dashboard__kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard__kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard {
+    padding: var(--space-4);
+  }
+}
+
+/* ── KPI card (.stat Eduson): 14×16, число 26px mono, подпись 12px обычным
+   регистром. Рамка --line вместо тени. ── */
+.kpi-card {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kpi-card__label {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--text2);
+}
+
+.kpi-card__value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.kpi-card__hint {
+  font-size: 12px;
+  color: var(--text4);
+}
+
+/* Tone modifiers — color on value text only, no loud backgrounds */
+.kpi-card--info .kpi-card__value {
+  color: var(--info);
+}
+
+.kpi-card--warning .kpi-card__value {
+  color: var(--warning);
+}
+
+/* ── Панель-список Eduson: рамка --line, шапка-строка 12×16 / 600 с линией ── */
+.dash-card {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.dash-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dash-card__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.dash-card__count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text3);
+}
+
+/* ── page-error utility (ошибка загрузки экрана) ── */
+.page-error {
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+  color: var(--text3);
+  font-size: 14px;
+}
+
+/* ============================================================
+ *  DASHBOARD TABS (Реестр | Заполнить)
+ * ============================================================ */
+.dash-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+/* Вкладки-пилюли — тот же рецепт, что .tabs__tab: активная чёрная. */
+.dash-tab {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--text2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: var(--r-tab);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.dash-tab:hover:not(.dash-tab--active) {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.dash-tab--active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* ── Clickable KPI (реестр — плашка-фильтр) ── */
+.kpi-card--clickable {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  appearance: none;
+  transition: border-color var(--dur-1) var(--ease);
+}
+
+.kpi-card--clickable:hover {
+  border-color: var(--line-3);
+}
+
+/* Выбранная плитка-фильтр — чёрная рамка 1px (не 2px). */
+.kpi-card--clickable.kpi-card--active,
+.kpi-card--active {
+  border-color: var(--accent);
+}
+
+/* 6 KPI в ряд → 3 → 2 → 1 */
+.dashboard__kpis--6 {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+@media (max-width: 1100px) {
+  .dashboard__kpis--6 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .dashboard__kpis--6 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard__kpis--6 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+ *  РЕЕСТР КУРАТОРА
+ * ============================================================ */
+
+/* Поток дня + Сигналы — две карточки в ряд */
+.reg-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 820px) {
+  .reg-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Поток дня ── */
+.reg-stream {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.reg-stream__empty {
+  padding: var(--space-6);
+  font-size: var(--fs-sm);
+  color: var(--text3);
+  text-align: center;
+}
+
+.reg-stream__row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.reg-stream__row:last-child {
+  border-bottom: none;
+}
+
+.reg-stream__time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text2);
+}
+
+.reg-stream__code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Метка курса — цветная точка 11px (цвет курса — токен --t-*; у группы без
+   известного курса — серая). */
+.course-dot {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--t-unknown);
+}
+.course-dot--scratch { color: var(--t-scratch); }
+.course-dot--python  { color: var(--t-python); }
+.course-dot--vibe    { color: var(--t-vibe); }
+.course-dot--groups  { color: var(--t-groups); }
+
+/* Преподаватель группы — третья колонка (1fr), длинное имя обрезается. */
+.reg-stream__teacher {
+  font-size: var(--fs-sm);
+  color: var(--text2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Статус потока — .chip с тоном (задаётся в разметке). Здесь только
+   выравнивание по правому краю и пульс у «идёт урок»: живой маркер. */
+.reg-stream__status {
+  margin-left: auto;
+}
+
+.reg-stream__status--running::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: reg-stream-pulse 2s ease-in-out infinite;
+}
+
+@keyframes reg-stream-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reg-stream__status--running::before { animation: none; }
+}
+
+/* Боковая метка строки — чтобы незакрытые уроки находились взглядом при
+   прокрутке, не вчитываясь в правую колонку. */
+.reg-stream__row--unmarked {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.reg-stream__row--running {
+  box-shadow: inset 3px 0 0 var(--info);
+}
+
+/* ── Сигналы менеджеру ── */
+.reg-signals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reg-signal {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 11px 16px;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.reg-signals li:last-child .reg-signal {
+  border-bottom: none;
+}
+
+.reg-signal:hover {
+  background: var(--bg);
+}
+
+.reg-signal--active {
+  background: var(--bg3);
+}
+
+.reg-signal__count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  min-width: 28px;
+  text-align: center;
+  color: var(--text3);
+}
+
+.reg-signal__count--ending {
+  color: var(--warn);
+}
+
+.reg-signal__count--closed {
+  color: var(--bad);
+}
+
+.reg-signal__count--idle {
+  color: var(--info);
+}
+
+.reg-signal__count--no_plan {
+  color: var(--text3);
+}
+
+.reg-signal__label {
+  font-size: var(--fs-sm);
+  color: var(--text2);
+}
+
+/* ── Статус-бейдж строки реестра: рецепт .chip (заливка + рамка + ink) ── */
+.reg-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  line-height: 1.45;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  white-space: nowrap;
+}
+
+.reg-badge--closed { color: var(--bad);  background: var(--bad-bg);  border-color: var(--bad-line); }
+.reg-badge--ending { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
+.reg-badge--idle   { color: var(--info); background: var(--info-bg); border-color: var(--info-line); }
+.reg-badge--ok     { color: var(--ok);   background: var(--ok-bg);   border-color: var(--ok-line); }
+.reg-badge--no_plan {
+  color: var(--text2);
+  background: var(--bg2);
+  border-color: var(--line-2);
+}
+
+/* ── Плашка активного сегмент-фильтра (снимает фильтр) ── */
+.reg-active-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.reg-active-filter__label {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+.reg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-pill);
+  padding: 3px var(--space-3);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+
+.reg-chip:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.reg-chip__x {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Переключатель режима «Без группы»: выключенный — нейтральная обводка,
+   включённый наследует акцентный вид базового .reg-chip. */
+.reg-chip--toggle {
+  color: var(--text2);
+  background: var(--bg2);
+  border-color: var(--line-2);
+}
+
+.reg-chip--toggle:hover {
+  background: var(--bg3);
+  border-color: var(--line-2);
+}
+
+.reg-chip--toggle.is-on {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.reg-chip--toggle.is-on:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* ── Ячейки таблицы реестра ── */
+.reg-cell-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.reg-cell-name {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.reg-balance {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.reg-balance--zero {
+  color: var(--bad);
+}
+
+.reg-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.reg-progress__num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text2);
+  min-width: 44px;
+}
+
+.reg-progress__bar {
+  flex: 1;
+  min-width: 40px;
+  height: 5px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.reg-progress__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+/* Текст ошибки под катом (ErrorBoundary): без него о поломке можно сообщить
+   только словами «не работает», а причина остаётся в консоли браузера. */
+.error-fallback__details {
+  max-width: 640px;
+  margin-top: var(--space-3);
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.error-fallback__details summary {
+  cursor: pointer;
+}
+
+.error-fallback__details code {
+  display: block;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
+  background: var(--bg3);
+  color: var(--text2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

@@ -1,0 +1,6 @@
+# journal_django — development & test dependencies
+-r requirements.txt
+pytest==8.3.4
+pytest-django==4.9.0
+factory-boy==3.3.1
+# requests — берётся из requirements.txt (здесь был конфликтующий пин 2.32.3)

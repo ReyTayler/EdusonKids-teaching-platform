@@ -1,0 +1,328 @@
+/* ── КАЛЕНДАРЬ ── язык Eduson, только на токенах.
+   Событие = светлая заливка цвета направления + рамка 1.5px того же цвета +
+   тёмный текст. Цвет направления приходит из данных (--subject-color =
+   Direction.color) и совпадает с --t-* курсов; заливка строится color-mix от
+   него, поэтому работает и для направлений с нестандартным цветом, и в тёмной
+   теме (подмешивается к поверхности темы). Общий файл: его берёт и teacher SPA. */
+
+.cal-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* Заголовок раздела + управление неделей */
+.cal-head {
+  display: flex; align-items: center; gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.cal-title {
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 600; letter-spacing: -0.02em;
+  color: var(--text);
+}
+.cal-week-nav { display: flex; align-items: center; gap: var(--space-2); }
+.cal-week-label {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px; color: var(--text2);
+  min-width: 168px; text-align: center;
+}
+.cal-nav-btn {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm); border: 1px solid var(--line-2);
+  background: var(--bg2); color: var(--text2); cursor: pointer;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.cal-nav-btn:hover { border-color: var(--text3); color: var(--text); }
+.cal-nav-btn:active { transform: var(--press); }
+.cal-today-btn {
+  height: 32px; padding: 0 12px;
+  border-radius: var(--r-sm); border: 1px solid var(--line-2);
+  background: var(--bg2); color: var(--text2); cursor: pointer;
+  font-family: inherit; font-size: var(--fs-xs); font-weight: 500;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.cal-today-btn:hover { border-color: var(--text3); color: var(--text); }
+.cal-today-btn:active { transform: var(--press); }
+
+.cal-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-left: auto; }
+
+/* Сегмент-контрол Неделя/Список */
+.seg { display: inline-flex; background: var(--bg2); border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 2px; gap: 2px; }
+.seg-btn {
+  height: 26px; padding: 0 12px; border: none; border-radius: var(--r-xs);
+  background: transparent; color: var(--text2); cursor: pointer;
+  font-family: inherit; font-size: var(--fs-xs); font-weight: 500;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.seg-btn:hover:not(.active) { color: var(--text); }
+.seg-btn.active { background: var(--accent); color: var(--on-accent); }
+
+/* Тумблер Мои/Все */
+.cal-scope-btn {
+  height: 28px; padding: 0 12px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: var(--bg2);
+  color: var(--text2); cursor: pointer;
+  font-family: inherit; font-size: var(--fs-xs); font-weight: 500;
+  transition: all var(--dur-1) var(--ease);
+}
+.cal-scope-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* KPI календаря.
+   Классы намеренно с префиксом cal-: общее имя .kpi-card занято дашбордом
+   (pages/dashboard.css), а calendar.css импортируется позже — календарный
+   вариант перебивал плитки дашборда, снимая с них тень и меняя отступ. */
+.cal-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-3);
+}
+@media (max-width: 1100px) { .cal-kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 560px)  { .cal-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+.cal-kpi {
+  background: var(--bg2); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 14px 16px;
+}
+/* KPI Eduson: число 26px mono, подпись 12px --text2 обычным регистром. */
+.cal-kpi__value {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 600; line-height: 1.2; letter-spacing: -0.03em; color: var(--text);
+}
+.cal-kpi__value--accent { color: var(--text); }
+.cal-kpi__value--warn { color: var(--warn); }
+.cal-kpi__value--ok { color: var(--ok); }
+.cal-kpi__label { font-size: var(--fs-xs); color: var(--text2); margin-top: 2px; }
+
+/* Легенда предметов */
+.legend { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text2); cursor: pointer; }
+/* Квадратик 10×10 r3 (цвет направления — из данных, инлайном). */
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.legend-item.muted { opacity: 0.4; }
+
+/* ── Недельная time-grid ── */
+.cal-grid-wrap {
+  border: 1px solid var(--line); border-radius: var(--r);
+  /* Внутренний скролл-контейнер: по горизонтали листаются плотные дни (ширина
+     колонки дня = число дорожек × LANE_W), по вертикали — часы сетки. Шапка и
+     колонка времени залипают. max-height оставляет место под шапку страницы/KPI. */
+  overflow: auto;
+  max-height: calc(100dvh - var(--topbar-h, 0px) - 200px);
+  background: var(--bg2);
+}
+.cal-grid-head {
+  display: grid; grid-template-columns: 56px repeat(7, 1fr);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 6; background: var(--bg2);
+}
+/* Липкая колонка времени (левый край) — остаётся видимой при горизонтальном скролле. */
+.cal-gutter { position: sticky; left: 0; z-index: 4; background: var(--bg2); }
+/* Угол (пересечение липкой шапки и липкой колонки времени) — поверх всего. */
+.cal-corner { position: sticky; left: 0; z-index: 7; background: var(--bg2); }
+.cal-col-head {
+  padding: var(--space-2) var(--space-1);
+  text-align: center; border-left: 1px solid var(--line);
+}
+.cal-col-head.today { background: color-mix(in oklab, var(--accent) 3%, transparent); }
+.cal-col-day { font-size: var(--fs-xs); font-weight: 600; color: var(--text2); }
+.cal-col-head.today .cal-col-day { color: var(--text); }
+.cal-col-date { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text3); margin-top: 1px; }
+
+.cal-grid-body { display: grid; grid-template-columns: 56px repeat(7, 1fr); position: relative; }
+/* .cal-gutter позиционируется как sticky выше (левый залипающий столбец времени);
+   sticky даёт контекст для абсолютных .cal-hour-label — отдельный position не нужен. */
+.cal-hour-label {
+  position: absolute; right: 6px; transform: translateY(-6px);
+  font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text3);
+}
+.cal-col {
+  position: relative; border-left: 1px solid var(--line);
+  background-image: repeating-linear-gradient(
+    to bottom, transparent 0, transparent calc(var(--row-h) - 1px),
+    var(--line) calc(var(--row-h) - 1px), var(--line) var(--row-h)
+  );
+}
+/* Сегодня — едва заметный фон. */
+.cal-col.today { background-color: color-mix(in oklab, var(--accent) 3%, transparent); }
+
+/* Блок урока в сетке: светлая заливка направления + рамка 1.5px его цвета,
+   тёмный текст (рецепт события Eduson). */
+.lb {
+  position: absolute; left: 2px; right: 2px;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--subject-color, var(--line-3));
+  background: color-mix(in oklab, var(--subject-color, var(--accent)) 12%, var(--bg2));
+  padding: 3px 6px; cursor: pointer; overflow: hidden;
+  display: flex; flex-direction: column; gap: 1px;
+  transition: box-shadow var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.lb:hover { box-shadow: var(--shadow-popover); transform: translateY(-1px); z-index: 2; }
+/* Не заполнен вовремя — статус warn поверх цвета направления. */
+.lb.overdue {
+  border-color: var(--warn);
+  background: color-mix(in oklab, var(--warn) 12%, var(--bg2));
+}
+/* Отработка / доп.урок — пунктирная рамка 2px. */
+.lb.makeup, .month-chip.makeup, .lrow.makeup { border-style: dashed; border-width: 2px; }
+.lb-time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 10.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-title { font-size: var(--fs-xs); font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-meta { font-size: var(--fs-2xs); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Месячная сетка (view=month) ── */
+.month-wrap {
+  border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden; background: var(--bg2);
+}
+.month-head {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--line);
+}
+.month-col-head {
+  padding: var(--space-2) var(--space-1);
+  text-align: center; font-size: var(--fs-xs); font-weight: 600; color: var(--text2);
+  border-left: 1px solid var(--line);
+}
+.month-col-head:first-child { border-left: none; }
+
+.month-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: minmax(96px, 1fr);
+}
+.month-cell {
+  border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+  padding: var(--space-2); min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.month-cell:nth-child(7n+1) { border-left: none; }
+.month-cell:nth-child(-n+7) { border-top: none; }
+.month-cell--out { background: color-mix(in oklab, var(--bg3) 55%, transparent); }
+.month-cell--out .month-daynum { color: var(--text3); }
+.month-cell--today { background: color-mix(in oklab, var(--accent) 3%, transparent); }
+.month-daynum {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 12px; font-weight: 600; color: var(--text2);
+}
+.month-cell--today .month-daynum {
+  color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; background: var(--accent);
+}
+.month-chips { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.month-chip {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  border: 1.5px solid var(--subject-color, var(--line-3));
+  background: color-mix(in oklab, var(--subject-color, var(--accent)) 12%, var(--bg2));
+  border-radius: var(--r-xs); padding: 1px 4px; cursor: pointer;
+  transition: box-shadow var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.month-chip:hover { box-shadow: var(--shadow-popover); transform: translateY(-1px); }
+.month-chip.overdue { border-color: var(--warn); background: color-mix(in oklab, var(--warn) 12%, var(--bg2)); }
+.month-chip-time {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 10.5px; font-weight: 600; color: var(--text); flex-shrink: 0;
+}
+.month-chip-title {
+  font-size: var(--fs-2xs); font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.month-more { font-size: var(--fs-2xs); color: var(--text3); font-family: var(--font-mono); padding: 0 4px; }
+
+/* Месяц не показываем на узких экранах (narrow принудительно уводит на 'list', сегмент скрыт) */
+@media (max-width: 768px) { .month-wrap { display: none; } }
+
+/* ── Список по дням (мобильный вид / view=list) ── */
+.day-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.day-block { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--bg2); }
+.day-hdr {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 12px 16px; background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent;
+}
+.day-hdr.today { border-left-color: var(--accent); }
+.day-hdr-name { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.day-hdr-date { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text3); }
+.day-hdr-cnt {
+  margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 500;
+  color: var(--text3);
+}
+.day-empty { padding: var(--space-3) var(--space-4); font-size: var(--fs-xs); color: var(--text3); }
+
+.lrow {
+  display: grid; grid-template-columns: 56px 1fr auto;
+  align-items: center; gap: var(--space-3);
+  padding: 9px 16px;
+  border-top: 1px solid var(--line); cursor: pointer;
+  border-left: 3px solid var(--subject-color, var(--line-3));
+  transition: background var(--dur-1) var(--ease);
+}
+.lrow:hover { background: var(--bg); }
+.lrow-time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.lrow-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lrow-meta { font-size: var(--fs-xs); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Статус-пилюли: рецепт .chip (заливка + рамка + ink того же тона) ── */
+.st { display: inline-flex; align-items: center; gap: 5px; border-radius: var(--r-pill); border: 1px solid var(--line-2); background: var(--bg2); color: var(--text2); padding: 2px 8px; font-size: var(--fs-2xs); font-weight: 500; white-space: nowrap; }
+.st-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.st--done { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-line); }
+.st--overdue { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
+.st--pending { color: var(--text2); }
+.st--notime { color: var(--text3); font-style: italic; }
+.st--cancelled { color: var(--text3); text-decoration: line-through; }
+.st--moved { color: var(--info); background: var(--info-bg); border-color: var(--info-line); }
+
+/* Отменённые занятия — приглушённо и зачёркнуто ВСЁ окно в любом представлении */
+.lrow.cancelled, .lb.cancelled, .month-chip.cancelled {
+  opacity: .6;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* Заполненные занятия — визуально погашены: урок уже отмечен, внимания не требует */
+.lrow.done, .lb.done, .month-chip.done {
+  opacity: .6;
+}
+
+/* Линия текущего времени — чёрная 2px с пульсом точки; только в колонке
+   сегодняшнего дня недельной сетки. */
+.cal-now-line {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 2px solid var(--accent);
+  z-index: 3; pointer-events: none;
+}
+.cal-now-dot {
+  position: absolute; left: -4px; top: -5px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+  animation: cal-now-pulse var(--dur-pulse) ease-out infinite;
+}
+@keyframes cal-now-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 40%, transparent); }
+  70%  { box-shadow: 0 0 0 7px color-mix(in oklab, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .cal-now-dot { animation: none; } }
+
+/* Метка «перенесён» — компактный ненавязчивый значок на занятии */
+.cal-moved {
+  color: var(--info);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.lb .cal-moved { position: absolute; top: 3px; right: 5px; font-size: 12px; line-height: 1; }
+
+/* Бейдж «N групп без расписания» — data-quality сигнал, ненавязчивый */
+.cal-unscheduled {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-size: var(--fs-xs); color: var(--text3); cursor: default;
+}
+.cal-unscheduled-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+
+/* Секция «без времени» */
+.notime-sec { border: 1px dashed var(--line-3); border-radius: var(--r); padding: var(--space-4); }
+.notime-hdr { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+.notime-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text2); }
+.notime-badge { font-family: var(--font-mono); font-size: var(--fs-2xs); font-weight: 500; color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: var(--r-pill); padding: 2px 8px; }
+.notime-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-2); }
+
+/* Состояния загрузки/ошибки/пусто */
+.cal-skel { height: 480px; border-radius: var(--r); background: var(--bg3); animation: t-pulse 1.4s ease-in-out infinite; }
+@keyframes t-pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+.cal-error { border: 1px solid var(--bad-line); background: var(--bad-bg); color: var(--bad); border-radius: var(--r); padding: var(--space-4); font-size: var(--fs-sm); }
+.cal-empty { text-align: center; padding: var(--space-10) var(--space-4); color: var(--text3); font-size: var(--fs-sm); }

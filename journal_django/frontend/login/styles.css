@@ -1,0 +1,593 @@
+/* ============================================================
+ *  Eduson Kids — страница входа / установки пароля
+ *  Визуальный язык Eduson (монохром Geist): значения токенов ниже —
+ *  зеркало admin-src/src/styles/tokens.css (docs/design-system.md §2).
+ *  Standalone-страница не собирается Vite, поэтому токены продублированы;
+ *  при правке tokens.css поправить и здесь. Вёрстка — каталог Eduson:
+ *  карточка 380px r12, поля/кнопки 36px, без теней и декора.
+ * ============================================================ */
+
+/* ── Шрифты: self-hosted из /admin/fonts/ (как в admin SPA, CSP font-src 'self').
+   Geist / Geist Mono — npm-пакет geist 1.7.2 (SIL OFL), variable, с кириллицей. ── */
+@font-face {
+  font-family: 'Geist'; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url('/admin/fonts/geist-v1.7.2-cyrillic_latin-variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono'; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url('/admin/fonts/geist-mono-v1.7.2-cyrillic_latin-variable.woff2') format('woff2');
+}
+
+/* ── Токены (зеркало tokens.css) ── */
+:root {
+  --bg:        #fafafa;
+  --bg2:       #ffffff;
+  --bg3:       #f4f4f4;
+  --bg4:       #ededed;
+
+  --border:        #eaeaea;
+  --border2:       #f0f0f0;
+  --border-strong: #d1d1d1;
+
+  --text:   #000000;
+  --text2:  #666666;
+  --text3:  #6f6f6f;
+  --text4:  #737373;
+
+  /* Акцент — чёрный; --on-accent — текст поверх акцентной заливки. */
+  --accent:        #000000;
+  --accent-hover:  #333333;
+  --accent-soft:   #f4f4f4;
+  --accent-soft-h: #ededed;
+  --accent-glow:   rgba(0, 0, 0, 0.18);
+  --on-accent:     #ffffff;
+
+  --danger:      #d12d36;
+  --danger-soft: #fff1f1;
+
+  --r-sm: 6px;
+  --r:    8px;
+  --r-lg: 12px;   /* карточка входа */
+  --r-xl: 12px;
+  --brand-size: 30px;
+  --r-brand: 7px;
+
+  --shadow-modal: 0 1px 2px rgba(0, 0, 0, 0.06), 0 14px 34px -12px rgba(0, 0, 0, 0.22);
+  --shadow-card:  none;
+  --focus-ring:   0 0 0 3px rgba(0, 0, 0, 0.08);
+
+  --font-sans:    'Geist', 'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono:    'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --ease:   cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-fast: 120ms;
+  --t-base: 180ms;
+  --t-slow: 240ms;
+
+  --topbar: #000000;
+  color-scheme: light;
+}
+
+/* ── Тёмная тема — ручное переключение через [data-theme="dark"]
+   (как в платформе): тумблер в топбаре, localStorage('eduson-theme'). ── */
+[data-theme="dark"] {
+  --bg:        #0a0a0a;
+  --bg2:       #111111;
+  --bg3:       #171717;
+  --bg4:       #1f1f1f;
+
+  --border:        #262626;
+  --border2:       #1f1f1f;
+  --border-strong: #333333;
+
+  --text:   #ededed;
+  --text2:  #a1a1a1;
+  --text3:  #8f8f8f;
+  --text4:  #858585;
+
+  --accent:        #ffffff;
+  --accent-hover:  #d4d4d4;
+  --accent-soft:   #1f1f1f;
+  --accent-soft-h: #292929;
+  --accent-glow:   rgba(255, 255, 255, 0.2);
+  --on-accent:     #000000;
+
+  --danger:      #ff6b73;
+  --danger-soft: #2d1214;
+
+  --shadow-modal: 0 1px 2px rgba(0, 0, 0, 0.5), 0 14px 34px -12px rgba(0, 0, 0, 0.7);
+  --focus-ring:   0 0 0 3px rgba(255, 255, 255, 0.12);
+
+  --topbar: #0a0a0a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ── Топбар с логотипом ── */
+/* Header прозрачный — сливается со светлым фоном страницы (как в личном кабинете).
+   Логотип остаётся: знак текстовый, цвет currentColor (var(--text)). */
+.topbar {
+  position: relative;
+  z-index: 2;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(20px, 4vw, 40px);
+  background: transparent;
+}
+/* Знак Eduson: чёрный квадрат с моно-«E» + название и подпись (как .brand/.logo
+   в Eduson). В тёмной теме квадрат белый — через --accent/--on-accent. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  animation: rise var(--t-slow) var(--ease) both;
+}
+.brand__logo {
+  width: var(--brand-size);
+  height: var(--brand-size);
+  border-radius: var(--r-brand);
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.brand__text { display: flex; flex-direction: column; line-height: 1.25; }
+.brand__name { font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+.brand__sub { font-size: 11px; color: var(--text3); }
+
+/* ── Переключатель темы (на прозрачном хедере — цвета из токенов) ── */
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  cursor: pointer;
+  padding: 0;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+  animation: rise var(--t-slow) var(--ease) both;
+}
+.theme-toggle:hover { background: var(--bg3); border-color: var(--border-strong); color: var(--text); }
+.theme-toggle:active { transform: scale(0.94); }
+.theme-toggle svg { width: 18px; height: 18px; display: block; transition: opacity var(--t-fast) var(--ease), transform var(--t-base) var(--ease-spring); }
+/* показываем луну в светлой теме (переключить на тёмную), солнце — в тёмной */
+.theme-toggle .ico-sun { display: none; }
+[data-theme="dark"] .theme-toggle .ico-moon { display: none; }
+[data-theme="dark"] .theme-toggle .ico-sun { display: block; }
+
+/* ── Каркас: по центру одна колонка 380px, фон плоский (--bg), без декора ── */
+.wrap {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: clamp(24px, 8vh, 72px) 20px 48px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Заголовок экрана выбора роли ── */
+.hero { margin-bottom: 20px; }
+.welcome {
+  display: block;
+  font-size: 11px;
+  color: var(--text3);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.title {
+  font-family: var(--font-display);
+  font-size: 21px;
+  margin: 6px 0 4px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+.subtitle { color: var(--text2); margin: 0; font-size: 13px; }
+
+/* ── Экран выбора роли: два пункта списком в рамке ── */
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  column-gap: 12px;
+  align-items: center;
+  cursor: pointer;
+  text-align: left;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  font-family: inherit;
+  color: var(--text);
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.card:hover { border-color: var(--border-strong); background: var(--bg3); }
+.card:focus-visible { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.card:active { background: var(--bg4); }
+
+.card-ico {
+  grid-row: 1 / span 2;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.card:hover .card-ico { background: var(--bg2); }
+.card-ico svg { width: 18px; height: 18px; display: block; }
+.card-title { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+.card-sub { color: var(--text2); font-size: 12px; margin-top: 1px; }
+
+/* ── Экраны логина / 2FA ── */
+.panel { width: 100%; position: relative; }
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  margin: 0 0 10px -8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text2);
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.back:hover { color: var(--text); background: var(--bg4); }
+
+/* Карточка: 380px, r12, рамка, без тени, паддинг 28 */
+.login-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 28px;
+  box-shadow: none;
+}
+.kicker {
+  font-size: 11px;
+  color: var(--text3);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.login-card h2 {
+  font-family: var(--font-display);
+  margin: 6px 0 16px;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+/* ── Поля ── */
+.field {
+  width: 100%;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  font-size: 13px;
+  margin-bottom: 10px;
+  font-family: var(--font-sans);
+  color: var(--text);
+  background: var(--bg2);
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.field::placeholder { color: var(--text4); }
+.field:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+/* ── Кнопки: primary чёрная во всю ширину, вторичная — белая с рамкой ── */
+.primary {
+  width: 100%;
+  height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.primary:active { transform: scale(0.98); }
+.primary:focus-visible, .ghost:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.login-card .primary + .ghost { margin-top: 8px; }
+
+.ghost {
+  width: 100%;
+  height: 36px;
+  padding: 0 13px;
+  margin-top: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg2);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.ghost:hover { border-color: var(--text3); }
+.ghost:active { transform: scale(0.98); }
+
+.primary:disabled,
+.ghost:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+.muted { color: var(--text2); font-size: 13px; margin: 0 0 14px; }
+
+/* ── Ошибки: плашка bad-тона ── */
+.err {
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 12px;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: var(--r);
+  background: var(--danger-soft);
+}
+
+/* ── QR: белая подложка в обеих темах — функциональный контраст для сканера ── */
+.qr { text-align: center; margin: 4px 0 14px; }
+.qr img {
+  width: 184px;
+  height: 184px;
+  padding: 10px;
+  background: #fff; /* сканер требует тёмный код на светлом фоне, тема не важна */
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+/* ── Резервные коды: mono в панели --bg3 с рамкой ── */
+.recovery {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg3);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+/* ── Резервные коды: экран сохранения (recovery.js) ──
+   Показываются один раз, их переписывают или копируют — отсюда сетка в две
+   колонки вместо сплошной строки и моноширинный шрифт с разрядкой. */
+.recovery-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 12px;
+  margin: 0 0 4px;
+  padding: 14px;
+  list-style: none;
+  white-space: normal;
+}
+.recovery-code {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  user-select: all;   /* клик выделяет код целиком */
+}
+@media (max-width: 380px) {
+  .recovery-list { grid-template-columns: 1fr; }
+}
+
+.recovery-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.recovery-actions .ghost {
+  margin-top: 0;
+  text-align: center;
+  text-decoration: none;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recovery-ack {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 4px;
+  color: var(--text2);
+  font-size: 14px;
+  cursor: pointer;
+}
+.recovery-ack input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex: none;
+}
+
+/* Поле ввода резервного кода: 10 символов с буквами, не сегментированное. */
+.field.mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+
+/* ── Сегментированный ввод кода (otp.js) ──
+   Реальный <input.code> лежит прозрачным слоем поверх ячеек:
+   нативные фокус/вставка/autofill/значение сохранены, визуал — ячейки. */
+.otp {
+  position: relative;
+  margin-bottom: 14px;
+}
+.otp-cells {
+  display: flex;
+  gap: 8px;
+}
+.otp-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease),
+              background var(--t-fast) var(--ease), transform var(--t-base) var(--ease-spring);
+}
+.otp-cell.is-filled {
+  border-color: var(--border-strong);
+  background: var(--bg2);
+  animation: pop 220ms var(--ease-spring);
+}
+.otp-cell.is-active {
+  border-color: var(--accent);
+  background: var(--bg2);
+  box-shadow: var(--focus-ring);
+}
+/* мигающая каретка в активной (пустой) ячейке */
+.otp-cell.is-active:empty::after {
+  content: '';
+  width: 2px;
+  height: 26px;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: caret 1.1s steps(1) infinite;
+}
+/* реальный input — прозрачный слой поверх ячеек */
+.otp input.code,
+.otp input.field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  text-align: center;
+  letter-spacing: 0;
+  font-size: 16px; /* >=16px — чтобы iOS не зумил при фокусе */
+  cursor: text;
+  box-shadow: none;
+}
+.otp input.code:focus,
+.otp input.field:focus { outline: none; box-shadow: none; background: transparent; }
+/* placeholder скрыт — за ячейками текст-заглушка не нужен */
+.otp input.code::placeholder,
+.otp input.field::placeholder { color: transparent; }
+
+/* ── Подвал ── */
+/* Футер скрыт визуально (полностью прозрачный), но остаётся в DOM:
+   в нём <span id="yr">, который читают login.js / set-password.js. */
+.foot {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  color: var(--text4);
+  font-size: 12.5px;
+  padding: 18px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hidden { display: none !important; }
+
+/* ── Keyframes ── */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pop {
+  0%   { transform: scale(0.92); }
+  60%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes caret {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* ── Узкие экраны ── */
+@media (max-width: 420px) {
+  .otp-cells { gap: 6px; }
+  .otp-cell { height: 50px; font-size: 21px; }
+  .login-card { padding: 24px 20px; }
+}
+
+/* ── Уважение к prefers-reduced-motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,361 @@
+/* ── MODAL (Eduson .overlay / .modal) ──
+   Затемнение 40%, панель r8 с рамкой --line-2 и тенью всплывающего, ширины
+   560 / 780. Шапка 15×20 с линией, тело 18×20, подвал 14×20 с линией и
+   выровненными вправо кнопками. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  display: flex; align-items: center; justify-content: center;
+  z-index: var(--z-overlay);
+  padding: var(--space-5);
+  animation: ov-in var(--dur-2) var(--ease-out);
+}
+@keyframes ov-in { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  width: 100%;
+  max-width: 560px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+  animation: mo-in var(--dur-3) var(--ease-out);
+}
+@keyframes mo-in { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+.modal--wide { max-width: 780px; }
+
+/* ── 2-колоночная сетка форм создания/редактирования сущностей ──
+   На десктопе поля идут в две колонки, экономя вертикаль и раскрывая
+   ширину «широкой» модалки. Заголовки секций, полноширинные поля и
+   вспомогательные блоки (слоты, membership) занимают всю строку. */
+.modal-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+  align-items: start;
+}
+.modal-form > .modal-section-label,
+.modal-form > .field--full,
+.modal-form > :not(.field) {
+  grid-column: 1 / -1;
+}
+@media (max-width: 640px) {
+  .modal-form { grid-template-columns: 1fr; }
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3);
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  display: flex; align-items: center; gap: 10px;
+}
+.modal-title-icon { width: 30px; height: 30px; border-radius: var(--r-sm); background: var(--bg3); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--text2); }
+.modal-close {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.modal-close:hover { background: var(--bg3); color: var(--text); }
+.modal-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--bg2);
+}
+.modal-section-label { font-size: var(--fs-2xs); font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--text3); padding: 4px 0 2px; margin-top: 4px; border-top: 1px solid var(--line); }
+.modal-section-label:first-child { border-top: none; margin-top: 0; }
+
+/* Поле с подписью (.field) вынесено в forms.css — его подключает и teacher SPA. */
+
+/* Тумблер на токенах: включённый — чёрный (--accent), бегунок — --on-accent. */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg2); border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 8px 11px; }
+.toggle-label { font-size: var(--fs-md); color: var(--text2); }
+.toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; border-radius: var(--r-pill); background: var(--bg4); border: 1px solid var(--line-2); cursor: pointer; transition: background var(--dur-2) var(--ease); }
+.toggle-slider::before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 2px; border-radius: 50%; background: var(--bg2); border: 1px solid var(--line-3); box-sizing: border-box; transition: transform var(--dur-2) var(--ease), background var(--dur-2) var(--ease); }
+.toggle-switch input:checked+.toggle-slider { background: var(--accent); border-color: var(--accent); }
+.toggle-switch input:checked+.toggle-slider::before { transform: translateX(16px); background: var(--on-accent); border-color: var(--on-accent); }
+
+/* ── FORMAT TOGGLE (segmented: индивидуальный / групповой) ── */
+.format-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.format-toggle__btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  color: var(--text2);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color var(--dur-1) var(--ease),
+              background var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease);
+}
+.format-toggle__btn:hover:not(.is-active):not(:disabled) { border-color: var(--text3); color: var(--text); }
+.format-toggle__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Заблокировано (редактирование): активную кнопку показываем как есть, неактивную — приглушаем. */
+.format-toggle__btn:disabled { cursor: default; }
+.format-toggle__btn:disabled:not(.is-active) { opacity: .45; }
+.format-toggle__title { font-size: var(--fs-md); font-weight: 500; }
+.format-toggle__dot {
+  width: 16px; height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--line-3);
+  background: var(--bg2);
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+/* Выбранный формат — чёрная рамка и залитая точка («радио»). Прежние синий и
+   жёлтый для «индивидуального» и «группового» убраны: это не статусы, а два
+   равноправных варианта выбора, и цвет у них не нёс смысла. */
+.format-toggle__btn.is-active {
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: var(--focus-ring);
+}
+.format-toggle__btn.is-active .format-toggle__dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--bg2);
+}
+
+@media (max-width: 480px) {
+  .format-toggle { grid-template-columns: 1fr; }
+}
+
+/* ── BLOCK SELECTOR ──
+   Цвет ячейки (--dir-color) приходит из данных направления. */
+.block-selector { display: flex; flex-direction: column; gap: 8px; }
+.block-selector__row { display: flex; flex-wrap: wrap; gap: 6px; }
+.block-selector__legend { font-size: var(--fs-xs); color: var(--text3); }
+
+.block-cell {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r);
+  border: 2px solid var(--line);
+  background: var(--bg3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease);
+  padding: 0;
+  flex-shrink: 0;
+}
+.block-cell__icons {
+  font-size: var(--fs-2xs);
+  letter-spacing: 2px;
+  color: var(--text3);
+  user-select: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  width: 24px;
+}
+.block-cell:hover:not(:disabled) { border-color: var(--dir-color); }
+.block-cell--selected {
+  background: color-mix(in srgb, var(--dir-color) 18%, transparent);
+  border-color: var(--dir-color);
+}
+.block-cell--selected .block-cell__icons { color: var(--dir-color); }
+.block-cell--hover {
+  background: color-mix(in srgb, var(--dir-color) 10%, transparent);
+  border-color: color-mix(in srgb, var(--dir-color) 60%, transparent);
+}
+.block-cell--locked {
+  opacity: .45;
+  cursor: default;
+  border-style: dashed;
+}
+.block-cell:disabled { pointer-events: none; }
+
+/* ── PAYMENT FORM ── */
+.payment-form { display: flex; flex-direction: column; gap: 16px; }
+.payment-form__hint { font-size: var(--fs-sm); color: var(--text3); }
+/* Предупреждение в форме оплаты — статус warn (тройка ink/bg/line). */
+.payment-form__warn {
+  font-size: var(--fs-sm);
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+}
+.payment-form__price-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.payment-form__price { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+.payment-form__total { font-size: var(--fs-md); color: var(--text2); padding: 4px 0; }
+.payment-form__total strong { font-size: var(--fs-2xl); font-weight: 600; color: var(--text); }
+.payment-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
+/* Переключатель режима оплаты — .seg Eduson: белая кнопка с рамкой,
+   выбранная — чёрная с --on-accent. */
+.payment-form__segment { display: flex; gap: 8px; margin: 8px 0; }
+.payment-form__segment .seg {
+  flex: 1; padding: 7px 12px; border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); background: var(--bg2); cursor: pointer;
+  font: inherit; font-size: var(--fs-sm); font-weight: 500; color: var(--text2);
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.payment-form__segment .seg:hover:not(.seg--on) { border-color: var(--text3); }
+.payment-form__segment .seg:active { transform: var(--press); }
+.payment-form__segment .seg--on {
+  border-color: var(--accent); color: var(--on-accent);
+  background: var(--accent);
+}
+/* ── КНОПКА ЗАКРЫТИЯ БОКОВОЙ ПАНЕЛИ ──
+   Общая для панели сделки и панели задачи (там же, где общая ручка ресайза):
+   раньше правило было объявлено дважды — в renewals.css и tasks.css — двумя
+   одинаковыми копиями, и правка одной из них молча разошлась бы со второй.
+
+   Цель нажатия 36×36 (на телефоне 40×40): голый «крестик» 16px давал около
+   30×24 и читался как украшение шапки, а не как выход из панели. */
+.renewal-drawer__close,
+.task-drawer__close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text2);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+              border-color var(--dur-1) var(--ease);
+}
+.renewal-drawer__close:hover,
+.task-drawer__close:hover {
+  background: var(--bg3);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+@media (max-width: 480px) {
+  /* !important перебивает пользовательскую ширину из инлайнового style (см.
+     hooks/useDrawerResize.ts) — на телефоне панель всегда во весь экран. Ручку
+     ресайза прячет общее правило .drawer-resize-handle ниже. */
+  .renewal-drawer,
+  .task-drawer { width: 100% !important; padding: var(--space-4); }
+
+  /* Раз панель занимает весь экран, затемнения, по которому её закрывают на
+     большом экране, не остаётся вовсе — и крестик становится единственным
+     выходом. 40px — нижняя граница удобной цели для пальца; подложка стоит
+     постоянно, а не по наведению, которого на тач-экране нет. */
+  .renewal-drawer__close,
+  .task-drawer__close {
+    width: 40px;
+    height: 40px;
+    background: var(--bg3);
+    border-color: var(--line);
+    color: var(--text);
+  }
+}
+
+/* ── DRAWER RESIZE HANDLE ──
+   Общая ручка изменения ширины боковых панелей (TaskDrawer, RenewalDrawer —
+   см. hooks/useDrawerResize.ts + components/ui/DrawerResizeHandle.tsx).
+   Родитель обязан быть position:relative — сама ручка абсолютно спозиционирована
+   на левом крае и не участвует в потоке/скролле панели.
+   Зона захвата мышью (14px) заметно шире видимого «захвата» (4px): попасть
+   курсором в тонкую полоску иначе нереально. Захват виден уже В ПОКОЕ, не
+   только по hover — иначе пользователь не находит ручку, пока случайно не
+   подведёт курсор. */
+.drawer-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* ВНУТРИ панели, а не поверх затемнения: вынесенная наружу ручка висела
+     светлым пятном на тёмном фоне и читалась как посторонний элемент. */
+  left: 0;
+  width: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  z-index: 1;
+  touch-action: none;
+}
+
+/* Линии во всю высоту нет намеренно: у панели уже есть своя рамка слева,
+   и вторая вертикаль рядом с ней читалась как визуальный мусор. Ручку
+   обозначает только «захват» по центру высоты. */
+.drawer-resize-handle__grip {
+  width: 4px;
+  height: 44px;
+  background: var(--line-3);
+  border-radius: var(--r-pill);
+  transition: background-color var(--dur-1) var(--ease),
+              height var(--dur-1) var(--ease),
+              width var(--dur-1) var(--ease);
+}
+
+.drawer-resize-handle:hover .drawer-resize-handle__grip,
+.drawer-resize-handle:focus-visible .drawer-resize-handle__grip,
+.drawer-resize-handle.is-resizing .drawer-resize-handle__grip {
+  background: var(--accent);
+  width: 5px;
+  height: 64px;
+}
+
+.drawer-resize-handle:focus-visible {
+  outline: none;
+}
+
+@media (max-width: 480px) {
+  /* На мобильных обе панели идут на весь экран (правило — в стилях каждой
+     страницы, у своего класса .task-drawer/.renewal-drawer) — ручка ресайза
+     там не нужна ни одной из них. */
+  .drawer-resize-handle { display: none; }
+}

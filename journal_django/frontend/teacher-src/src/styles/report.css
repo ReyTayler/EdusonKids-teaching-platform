@@ -1,0 +1,48 @@
+/* ── ОТЧЁТ ПО УРОКУ ── */
+.rep-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* Фильтры — сегменты Eduson: белая кнопка с рамкой, выбранная — чёрная.
+   Цвет только у смысловых («Заполнено» — ok, «Надо заполнить» — warn). */
+.rf-chips { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.rf-chip {
+  padding: 5px var(--space-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  background: var(--bg2);
+  color: var(--text2); cursor: pointer;
+  font-family: inherit; font-size: var(--fs-xs); font-weight: 500;
+  white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.rf-chip:hover { border-color: var(--text3); color: var(--text); }
+.rf-chip:active { transform: var(--press); }
+.rf-chip:focus-visible { box-shadow: var(--focus-ring); }
+.rf-chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.rf-chip.active.done { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+.rf-chip.active.overdue { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+
+/* KPI-плитки (.stat Eduson): 14×16, число 26px моно, подпись 12px. */
+.rstat-bar {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3);
+}
+.rstat {
+  background: var(--bg2); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 14px var(--space-4);
+}
+.rstat-num {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 600; letter-spacing: -0.03em;
+  color: var(--text);
+}
+.rstat-num.ok { color: var(--ok); }
+.rstat-num.warn { color: var(--warn); }
+.rstat-num.mut { color: var(--text2); }
+.rstat-lbl { font-size: var(--fs-xs); color: var(--text2); margin-top: 2px; }
+
+/* Строка занятия (.lrow общий): тело даёт обрезку длинного названия. */
+.lrow-body { min-width: 0; }
+
+@media (max-width: 600px) {
+  .rstat-bar { grid-template-columns: 1fr; }
+}

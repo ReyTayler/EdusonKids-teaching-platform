@@ -1,0 +1,2039 @@
+/*
+ * Типографика документа базы знаний.
+ *
+ * Все значения — из tokens.css (docs/design-system.md). Ни одного захардко-
+ * женного цвета, радиуса или отступа. Кегли/веса заголовков намеренно не
+ * заводят новых токенов: используется существующая шкала --fs-* и числовые
+ * font-weight 600/700, как в остальной admin SPA (components.css,
+ * pages/reports.css) — отдельного --font-weight-* токена в проекте нет.
+ */
+
+.kb-doc {
+  max-width: 76ch;
+  color: var(--text);
+  /* Кегль и интерлиньяж статьи — из --kb-*: интерфейс живёт на 14px и плотно,
+     а текст, который читают подряд, требует 16px и воздуха между строк. */
+  font-family: var(--kb-font);
+  font-size: var(--kb-fs-body);
+  line-height: var(--kb-lh-body);
+}
+
+/* Вертикальный ритм статьи.
+ *
+ * Второй селектор — не дубль. При чтении .kb-doc сам держит блоки документа, а
+ * в редакторе <EditorContent className="kb-doc"> кладёт внутрь ОДИН элемент —
+ * .ProseMirror, и уже он держит абзацы. То есть `.kb-doc > * + *` в режиме
+ * правки не совпадает ни с чем: глобальный сброс (tokens.css) обнуляет поля у
+ * всего, и набранный текст шёл сплошной простынёй, а после сохранения вдруг
+ * разъезжался. Правило обязано покрывать оба контейнера. */
+.kb-doc > * + *,
+.kb-doc > .ProseMirror > * + * {
+  margin-top: var(--space-4);
+}
+
+.kb-doc h1,
+.kb-doc h2,
+.kb-doc h3 {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Шкала заголовков статьи — ступенью над текстом, а не вдвое крупнее: при
+   h2 в 28px заголовок раздела спорил с названием страницы, а статья из
+   десятка разделов читалась как набор плакатов. */
+.kb-doc h1 { font-size: var(--kb-fs-h1); letter-spacing: -0.02em; }
+.kb-doc h2 { font-size: var(--kb-fs-h2); letter-spacing: -0.01em; }
+.kb-doc h3 { font-size: var(--kb-fs-h3); }
+
+/* Заголовок отбивается от предыдущего блока сильнее обычного абзаца. Пара
+   селекторов через .ProseMirror — ради веса: правило ритма выше состоит из
+   двух классов и иначе перебило бы этот отступ в режиме правки. */
+.kb-doc h2,
+.kb-doc h3,
+.kb-doc > .ProseMirror > h2,
+.kb-doc > .ProseMirror > h3 {
+  margin-top: var(--space-6);
+}
+
+.kb-doc ul,
+.kb-doc ol {
+  padding-left: var(--space-6);
+}
+
+.kb-doc li + li {
+  margin-top: var(--space-2);
+}
+
+.kb-doc a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.kb-doc blockquote {
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--border-strong);
+  color: var(--text3);
+}
+
+.kb-doc code {
+  padding: 0 var(--space-1);
+  border-radius: var(--r-sm);
+  background: var(--bg3);
+  font-family: var(--font-mono);
+  font-size: var(--kb-fs-small);
+}
+
+.kb-doc pre {
+  overflow-x: auto;
+  padding: var(--space-4);
+  border-radius: var(--r-lg);
+  background: var(--bg3);
+}
+
+.kb-doc pre code {
+  padding: 0;
+  background: none;
+}
+
+/* TipTap оборачивает таблицу в div.tableWrapper при Table.configure({
+   renderWrapper: true }) (см. DocumentView.tsx / DocumentEditor.tsx). Раньше
+   на нём висела горизонтальная прокрутка по ширине КОЛОНКИ текста: таблица
+   упиралась в меру строки и дальше обрезалась, хотя по бокам листа оставалось
+   пустое место. В редакторе таблица выходит за поля листа, а прокрутка живёт
+   на поле (.kb-editor-field). При чтении листа нет, таблица стоит в колонке
+   текста, и прокрутка — на самой обёртке: запасной выход для таблиц шире
+   колонки. */
+.kb-doc .tableWrapper {
+  overflow-x: auto;
+}
+
+.kb-doc table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kb-doc th,
+.kb-doc td {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.kb-doc th {
+  background: var(--bg3);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+ * Картинки статьи.
+ *
+ * В тексте картинка стоит по центру и в сжатом виде: ширина — по колонке,
+ * высота — не больше --kb-image-max-h. Без потолка по высоте вертикальный
+ * скриншот занимал целый экран и разрывал чтение пополам. Полный размер
+ * открывается по клику поверх страницы (ImageLightbox), поэтому «сжатый» здесь
+ * ничего не теряет.
+ *
+ * display:block + auto по бокам — то самое центрирование: строчная по природе
+ * картинка иначе прижимается к левому краю колонки.
+ * ========================================================================== */
+.kb-doc {
+  --kb-image-max-h: 440px;
+}
+
+/* width НЕ сбрасывается в auto намеренно: у картинки стоят атрибуты width и
+   height (см. KnowledgeImageExtension), и именно из них браузер знает размер
+   ДО загрузки файла — место под картинку резервируется, текст под ней не
+   прыгает. Пропорции при этом не страдают: когда картинка упирается в потолок
+   по ширине или высоте, браузер пересчитывает вторую сторону по соотношению. */
+.kb-doc img {
+  display: block;
+  max-width: 100%;
+  max-height: var(--kb-image-max-h);
+  height: auto;
+  margin-inline: auto;
+  border-radius: var(--r-lg);
+}
+
+/* Кнопка-обёртка вокруг картинки при чтении: даёт клавиатуре точку входа, а
+   мыши — понятный курсор «увеличить». Своих полей и фона не имеет, чтобы
+   картинка выглядела картинкой, а не кнопкой. */
+.kb-zoom {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+}
+
+.kb-zoom img {
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.kb-zoom:hover img { opacity: 0.9; }
+.kb-zoom:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--r-lg); }
+
+/* Выбранная в редакторе картинка. Узел атомарный: щелчок выделяет его целиком,
+   и следующий Delete удалит именно картинку — это состояние обязано быть
+   видно, иначе удаление выглядит случайностью. */
+.kb-editor .ProseMirror .ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-lg);
+}
+
+/* ==========================================================================
+ * Просмотрщик картинки (ImageLightbox) — оригинал поверх той же страницы.
+ * ========================================================================== */
+/* Раскладка повторяет .modal-overlay > .modal из modal.css: подложка сама
+   центрирует содержимое и остаётся отдельным элементом. Это не украшательство —
+   Radix закрывает окно по нажатию ВНЕ элемента содержимого, поэтому подложка
+   обязана быть кликабельной площадью, а не частью самого окна. */
+.kb-lightbox__overlay {
+  --kb-lightbox-close: 36px;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Боковые поля — не меньше, чем занимает крестик в углу с отступами: иначе
+     широкая картинка упиралась бы в край экрана прямо под кнопку. */
+  padding: var(--space-8) calc(var(--kb-lightbox-close) + var(--space-4) * 2);
+  background: var(--overlay);
+  backdrop-filter: blur(4px);
+  animation: overlayIn .15s ease;
+}
+
+.kb-lightbox {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.kb-lightbox__img {
+  display: block;
+  max-width: 100%;
+  /* Высота — вьюпорт минус поля подложки; иначе высокий скриншот вылезал бы
+     за экран, и низ картинки было бы не достать. */
+  max-height: calc(100vh - var(--space-8) * 2);
+  width: auto;
+  height: auto;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-modal);
+  /* Анимация появления — на картинке, а не на окне (.kb-lightbox): transform
+     на окне сделал бы его точкой отсчёта для кнопки закрытия, и на время
+     анимации крестик прыгал бы с угла экрана на угол картинки. */
+  animation: modalIn var(--dur-2) var(--ease-out);
+}
+
+/* Крестик — в правом верхнем углу всего слоя, а не на картинке: там он не
+   закрывает её содержимое и находится на привычном месте. Кнопка остаётся
+   внутри окна Radix (иначе ей не достанется фокус-ловушка), а отсчитывается
+   от подложки: у окна нет position, и ближайший позиционированный предок —
+   .kb-lightbox__overlay (position: fixed на весь экран). */
+.kb-lightbox__close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: var(--kb-lightbox-close);
+  height: var(--kb-lightbox-close);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  color: var(--text2);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-panel);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.kb-lightbox__close:hover { background: var(--bg3); color: var(--text); }
+.kb-lightbox__close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* На телефоне боковые поля под крестик съели бы треть ширины картинки —
+   там кнопке отдаётся полоса сверху, а картинка идёт почти от края до края. */
+@media (max-width: 640px) {
+  .kb-lightbox__overlay {
+    padding: calc(var(--kb-lightbox-close) + var(--space-4) * 2) var(--space-3) var(--space-4);
+  }
+  .kb-lightbox__img {
+    max-height: calc(100vh - var(--kb-lightbox-close) - var(--space-4) * 3);
+  }
+}
+
+/*
+ * Карточка редактора/чтения документа.
+ *
+ * .kb-doc-card — общая рамка (фон/граница/радиус/тень), одинаковая для
+ * редактора (kb-editor-card расширяет её реакцией на фокус) и для страницы
+ * чтения (KnowledgeDocumentPage оборачивает DocumentView без изменений в
+ * самом DocumentView — читатель и редактор выглядят как один и тот же
+ * объект-карточка, разница только в наличии тулбара).
+ * .kb-doc-surface — общие внутренние поля и минимальная высота, тоже
+ * переиспользуются в обоих местах, чтобы пустой документ не схлопывался.
+ */
+.kb-doc-card {
+  /* Мера строки внутри — 76ch (~700px). Без потолка карточка растягивалась бы
+     на всю ширину монитора, оставляя справа половину экрана пустой. */
+  max-width: 820px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden; /* контент не вылезает за скругление углов */
+}
+
+.kb-doc-surface {
+  padding: var(--space-6) var(--space-8);
+}
+
+/* Пояснение к статусу черновика — рядом с бейджем в мета-строке. */
+.kb-doc-meta__hint {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+}
+
+
+.kb-access {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Реакция на фокус всей карточки редактора — :focus-within ловит фокус
+   внутри .ProseMirror (реальный contenteditable-элемент) без ручного
+   отслеживания editor.on('focus'/'blur'). Пользователь должен видеть, что
+   печатает именно сюда, поэтому кольцо акцентом, а не только смена рамки. */
+/* ==========================================================================
+ * Режим правки — раскладка привычного текстового процессора: панель во всю
+ * ширину сверху, под ней белый «лист» по центру приглушённого поля.
+ * ========================================================================== */
+
+.kb-editor {
+  /* Гасим боковые отступы страницы, чтобы панель и поле шли от края до края.
+     Величина обязана совпадать с --page-pad-x из .app-page: раньше здесь стоял
+     --space-6 (24px против 32px) — на широком экране край не дотягивался, а на
+     планшетной ширине, где страница уже переключилась на --space-4, редактор
+     вылезал наружу и давал горизонтальную прокрутку. */
+  margin: var(--space-4) calc(-1 * var(--page-pad-x)) calc(-1 * var(--space-6));
+}
+
+.kb-editor-field {
+  padding: var(--space-6) var(--space-4) var(--space-10);
+  background: var(--bg);
+  min-height: 70vh;
+  /* Прокрутка широкой таблицы живёт здесь, на поле вокруг листа, а не на
+     обёртке таблицы. Так растянутая таблица действительно выходит за края
+     листа, а добраться до её правого края всё равно можно. */
+  overflow-x: auto;
+}
+
+.kb-editor-sheet {
+  /* Колонка текста внутри листа — ровно --kb-doc-width, как при чтении:
+     строка переносится на тех же словах, что увидит читатель. */
+  max-width: calc(var(--kb-doc-width) + 2 * var(--space-10));
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-10);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-raised);
+  min-height: 60vh;
+  transition: border-color var(--t-fast) var(--ease);
+}
+
+/* Линии вместо теней: фокус листа обозначает более тёмная рамка. */
+.kb-editor-sheet:focus-within { border-color: var(--line-3); }
+
+/* Меру строки при правке держит сам лист (см. .kb-editor-sheet). */
+.kb-editor .kb-doc { max-width: none; }
+
+/* Брейкпоинт 900px — тот же, на котором .app-page и .page-header переключают
+   свои отступы на --space-4. Разойдись они, редактор снова полез бы за край. */
+@media (max-width: 900px) {
+  .kb-editor { margin-left: calc(-1 * var(--space-4)); margin-right: calc(-1 * var(--space-4)); }
+  .kb-editor-field { padding: var(--space-3) var(--space-2) var(--space-8); }
+  .kb-editor-sheet { padding: var(--space-5) var(--space-4); border-radius: 0; }
+}
+
+/* Полотно редактора наследует ту же типографику — что видишь, то и сохранится.
+   outline снят: фокус-реакция теперь на всей карточке (.kb-editor-card),
+   не нужно дублировать её на самом ProseMirror. */
+.kb-editor .ProseMirror {
+  outline: none;
+}
+
+.kb-editor-canvas {
+  position: relative;
+}
+
+/* Подсказка в пустом документе — официальное расширение Placeholder
+   (@tiptap/extensions). Оно вешает data-атрибут с текстом на пустой узел, а
+   рисует подсказку CSS: своего элемента в разметке не появляется, поэтому она
+   не перехватывает клик по первому абзацу и не участвует в раскладке.
+
+   Здесь раньше жил свой компонент поверх полотна вместе с абсолютным
+   позиционированием — он воспроизводил ровно это поведение вручную. */
+.kb-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--text4);
+}
+
+.kb-editor__toolbar {
+  /* 52px — высота из ТЗ: в неё встают кнопки 32px с полями, и панель не
+     спорит по массе с шапкой страницы. */
+  min-height: 52px;
+  position: sticky;
+  /* Впритык под шапкой страницы, а не под ней самой: обе прокручиваются вместе,
+     и при top:0 панель наезжала бы на «Готово» и состояние сохранения.
+     Запаса нет намеренно — --header-h публикует настоящую высоту шапки
+     (PageHeader.tsx), и любая щель здесь показывала бы текст, проезжающий
+     между шапкой и панелью. */
+  top: var(--header-h);
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Выбор шрифта — не иконка, поэтому у него своя форма: подпись показывается
+   тем же шрифтом, который выберется, иначе выбирать пришлось бы вслепую. */
+.kb-toolselect {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  min-width: 148px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+.kb-toolselect:hover { background: var(--bg3); color: var(--text); }
+.kb-toolselect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.kb-toolselect__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.kb-tool-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Тонкая вертикальная линия между группами, не на всю высоту тулбара. */
+.kb-tool-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--space-1);
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* Иконочная кнопка тулбара. Не .ui-btn — та рассчитана на горизонтальные
+   поля вокруг подписи, а не на квадратную сетку 32×32 с одной иконкой. */
+.kb-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text2);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease),
+              color var(--t-fast) var(--ease);
+}
+.kb-tool:hover:not(:disabled) { background: var(--bg3); color: var(--text); }
+.kb-tool:active:not(:disabled) { background: var(--bg4); }
+/* Активный инструмент — мягкая заливка + акцентный цвет иконки, не сплошной
+   акцент: в ряду из 13 кнопок сплошная заливка была бы слишком кричащей. */
+.kb-tool.is-active { background: var(--accent-soft); color: var(--accent); }
+.kb-tool.is-active:hover:not(:disabled) { background: var(--accent-soft-h); }
+.kb-tool:disabled { opacity: 0.4; cursor: not-allowed; }
+.kb-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Мышь, не палец — 32px достаточно на десктопе. На узкой ширине (планшет/
+   мобильный вид админки) увеличиваем зону нажатия и даём тулбару переноситься
+   (flex-wrap уже есть на .kb-editor__toolbar). */
+@media (max-width: 640px) {
+  .kb-tool { width: 36px; height: 36px; }
+}
+
+.kb-tool-tip {
+  z-index: var(--z-popover);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-sm);
+  background: var(--bg4);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  box-shadow: var(--shadow-popover);
+  animation: fadeIn .12s ease;
+}
+.kb-tool-tip__shortcut {
+  color: var(--text3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+}
+.kb-tool-tip__arrow { fill: var(--bg4); }
+
+/* Спиннер кнопки «Картинка» во время загрузки. Вращение НЕ отключается под
+   reduced-motion — это единственный носитель состояния «идёт загрузка», а
+   не декоративная анимация; выключить его значило бы скрыть от пользователя
+   реальный статус. Вместо отключения — замедляем цикл. */
+.kb-spin { animation: kb-spin .8s linear infinite; transform-origin: 50% 50%; }
+@keyframes kb-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-editor-card,
+  .kb-tool,
+  .kb-sections__item,
+  .kb-zoom img {
+    transition: none;
+  }
+  .kb-tool-tip,
+  .kb-lightbox__img,
+  .kb-lightbox__overlay { animation: none; }
+  .kb-spin { animation-duration: 2.4s; }
+}
+
+.kb-roles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+}
+
+.kb-roles__legend {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.kb-roles__hint {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+}
+
+/* ==========================================================================
+ * Экран раздела (KnowledgeListPage): слева папки-разделы, справа содержимое.
+ *
+ * Раскладка — как в файловом менеджере: постоянная навигация по папкам,
+ * переключатель «сетка/список», действия в меню элемента. Для справочника это
+ * привычнее плоского списка ссылок: видно, где ты находишься и сколько где
+ * лежит.
+ * ========================================================================== */
+
+.kb-drive {
+  display: grid;
+  grid-template-columns: minmax(200px, 248px) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+  margin-top: var(--space-5);
+}
+
+/* --- Дерево разделов ------------------------------------------------------ */
+
+.kb-drive__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-panel);
+  position: sticky;
+  /* Как и панель редактора — ниже липкой шапки страницы. */
+  top: calc(var(--header-h) + var(--space-2));
+  /* Дерево бывает выше экрана: своя прокрутка вместо уехавших за край веток. */
+  max-height: calc(100vh - var(--header-h) - var(--space-8));
+  overflow-y: auto;
+}
+
+.kb-drive__nav-divider {
+  height: 1px;
+  margin: var(--space-2) var(--space-2);
+  background: var(--border);
+}
+
+.kb-tree,
+.kb-tree__group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kb-tree__item { min-width: 0; }
+
+/* Шаг вложенности. Уровень приходит из разметки переменной --kb-tree-level:
+   так отступ считает CSS в одном месте, а не каждая строка по-своему. */
+.kb-tree__row {
+  --kb-tree-level: 0;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-left: calc(var(--kb-tree-level) * 14px);
+  border-radius: var(--r);
+  transition: background var(--t-fast) var(--ease);
+}
+
+.kb-tree__row:hover { background: var(--bg3); }
+.kb-tree__row.is-active { background: var(--accent-soft); }
+.kb-tree__row.is-active .kb-tree__open { color: var(--accent); font-weight: 600; }
+.kb-tree__row.is-active:hover { background: var(--accent-soft-h); }
+
+/* Черновик в дереве приглушён: он там виден только администратору, и путать
+   его с опубликованным документом нельзя. */
+.kb-tree__row.is-muted .kb-tree__open { color: var(--text4); }
+
+/* Стрелка раскрытия — отдельная кнопка от названия: раскрыть папку и перейти
+   в неё это разные намерения. У листьев на её месте пустое место того же
+   размера, иначе названия «прыгали» бы по горизонтали. */
+.kb-tree__twist {
+  flex-shrink: 0;
+  width: 20px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text4);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+
+button.kb-tree__twist:hover { color: var(--text2); }
+.kb-tree__twist:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.kb-tree__chev { transition: transform var(--t-fast) var(--ease-out); }
+.kb-tree__chev.is-open { transform: rotate(90deg); }
+
+.kb-tree__open {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-2);
+  border: none;
+  background: none;
+  color: var(--text2);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: var(--r);
+}
+
+.kb-tree__open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.kb-tree__icon { display: inline-flex; flex-shrink: 0; color: var(--text4); }
+.kb-tree__row.is-active .kb-tree__icon { color: var(--accent); }
+
+.kb-tree__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Счётчик документов — цифры моноширинным, чтобы столбец не «дышал». */
+.kb-tree__count {
+  flex-shrink: 0;
+  color: var(--text4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Меню раздела появляется по наведению и при фокусе внутри — на сенсорных
+   устройствах hover не случается, поэтому там показываем всегда. */
+.kb-tree__menu { opacity: 0; padding-right: var(--space-1); transition: opacity var(--t-fast) var(--ease); }
+.kb-tree__row:hover .kb-tree__menu,
+.kb-tree__row:focus-within .kb-tree__menu { opacity: 1; }
+@media (hover: none) {
+  .kb-tree__menu { opacity: 1; }
+}
+
+/* Служебная строка ветки: «Загружаем…», «Пусто», «Ещё N». */
+.kb-tree__note {
+  --kb-tree-level: 2;
+  padding: var(--space-1) var(--space-2) var(--space-1)
+           calc(var(--kb-tree-level) * 14px + 20px + var(--space-2));
+  color: var(--text4);
+  font-size: var(--fs-xs);
+}
+
+.kb-tree__more {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.kb-tree__more:hover { text-decoration: underline; }
+
+/* --- Панель над содержимым ------------------------------------------------ */
+
+.kb-drive__main { min-width: 0; }
+
+.kb-drive__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.kb-drive__bar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Путь до текущей папки рисует штатный компонент шапки (.crumbs в
+   components.css) — собственных крошек у раздела нет. Здесь остаётся только
+   подпись со счётчиком слева от переключателя вида. */
+.kb-drive__count {
+  min-width: 0;
+  margin: 0 0 var(--space-3);
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-view {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg3);
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+}
+
+.kb-view__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text3);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.kb-view__btn:hover { color: var(--text); }
+/* Активная кнопка отличается заливкой и цветом, а не одной лишь тенью: белое
+   на светло-сером давало контраст около 1.1:1 — состояние было неразличимо. */
+.kb-view__btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.kb-view__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* --- Сетка карточек ------------------------------------------------------- */
+
+.kb-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.kb-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-panel);
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.kb-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-raised);
+}
+
+.kb-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  padding: var(--space-4);
+  color: inherit;
+  text-decoration: none;
+}
+.kb-card__body:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--r-lg); }
+
+.kb-card__icon { color: var(--text4); }
+
+.kb-card__title {
+  color: var(--text);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.35;
+  /* Название в две строки: третья строка почти всегда обрывок, а карточки
+     в сетке должны быть одной высоты. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kb-card__excerpt {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kb-card__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border2);
+}
+
+.kb-card__date {
+  margin-left: auto;
+  color: var(--text4);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Список --------------------------------------------------------------- */
+
+.kb-rows {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+
+.kb-rows__head,
+.kb-rows__row {
+  display: grid;
+  /* Название · Автор · Изменён · действия */
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 1fr) 84px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+}
+
+/* Вариант со столбцом «Раздел» — в подборке «Все документы».
+   Модификатор ставит React, а не селектор :has(): так правило не зависит от
+   порядка ячеек и поддержки :has() в браузере. */
+.kb-rows--with-section .kb-rows__head,
+.kb-rows--with-section .kb-rows__row {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) 84px;
+}
+
+.kb-rows__head {
+  height: 40px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.kb-rows__row + .kb-rows__row { border-top: 1px solid var(--border2); }
+
+/* Высота строки 72px: в неё встают название и фрагмент текста под ним. Строка
+   в одну строчку названия смотрится плотнее, но по «Регламенту №4» непонятно,
+   о чём документ, и приходится открывать каждый. */
+.kb-rows__row {
+  min-height: 72px;
+  transition: background var(--t-fast) var(--ease-out);
+}
+.kb-rows__row:hover {
+  background: var(--bg3);
+}
+
+.kb-rows__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.kb-rows__icon { color: var(--text4); display: inline-flex; flex-shrink: 0; }
+
+.kb-rows__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kb-rows__link {
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-rows__link:hover { color: var(--accent); }
+
+.kb-rows__excerpt {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-rows__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+/* Звёздочка «в избранном»: серая по умолчанию, жёлтая когда стоит. Цвет
+   предупреждения здесь не про предупреждение — это единственный тёплый тон в
+   палитре, и закладка им читается как закладка, а не как ошибка. */
+.kb-star { color: var(--text4); }
+.kb-star:hover:not(:disabled) { color: var(--warn); }
+.kb-star.is-active,
+.kb-star.is-on { background: none; color: var(--warn); }
+.kb-star.is-active:hover:not(:disabled) { background: var(--bg3); }
+
+.kb-rows__muted {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-rows__spacer { display: block; }
+
+/* --- Диалоги -------------------------------------------------------------- */
+
+.kb-dialog__hint,
+.kb-dialog__text {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.kb-dialog__text {
+  color: var(--text2);
+  font-size: var(--fs-md);
+}
+
+/* Отказ сервера в окне свойств. Красным и рядом с полями, а не всплывающим
+   сообщением: окно остаётся открытым, и причина обязана быть видна вместе с
+   тем, что её вызвало. */
+.kb-dialog__error {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+/* Форма названия и раздела: два поля в столбец на всю ширину окна. */
+.kb-props-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* --- Прочее --------------------------------------------------------------- */
+
+/* Собственных бейджей у раздела нет: статусы рисуются общими .status-badge
+   (см. components.css) — цвет в проекте закреплён за смыслом, а не за экраном. */
+
+@media (max-width: 860px) {
+  .kb-drive { grid-template-columns: 1fr; }
+  .kb-drive__nav { position: static; }
+
+  /* На узком экране остаются название, дата и меню: «раздел» и «кто читает»
+     не помещаются, а увидеть их можно в самом документе. Скрытые ячейки
+     помечены классом-модификатором, чтобы не считать позиции вручную. */
+  .kb-rows__head,
+  .kb-rows__row,
+  .kb-rows--with-section .kb-rows__head,
+  .kb-rows--with-section .kb-rows__row {
+    grid-template-columns: minmax(0, 1fr) auto 84px;
+  }
+  .kb-rows__optional { display: none; }
+}
+
+/* ==========================================================================
+ * Экран чтения документа: текст прямо на странице, от левого края под
+ * заголовком, справа — оглавление вплотную к тексту.
+ * ========================================================================== */
+
+.kb-reader {
+  display: grid;
+  /* Обе колонки фиксированной ширины и прижаты влево. При 1fr под текст
+     оглавление уезжало к краю монитора и отрывалось от статьи, к которой
+     относится. Оглавление — список коротких строк, растягивать его не на что. */
+  grid-template-columns: minmax(0, var(--kb-doc-width)) 240px;
+  justify-content: start;
+  gap: var(--space-10);
+  align-items: start;
+}
+
+/* Колонка статьи. Карточки с рамкой и полями больше нет: текст стоит на
+   странице, как в эталоне, а лист остаётся только у редактора. Мера строки —
+   --kb-doc-width: документ читают подряд, и она важнее плотности экрана. */
+.kb-doc-paper {
+  min-width: 0;
+  padding-bottom: var(--space-10);
+}
+
+.kb-doc-paper .kb-doc { max-width: none; }
+
+/* Боковая колонка статьи остаётся на месте при прокрутке: оглавление нужно
+   ровно тогда, когда до его места на странице уже не докрутить обратно. */
+.kb-side {
+  position: sticky;
+  top: calc(var(--header-h) + var(--space-4));
+  /* Своя прокрутка на случай длинного оглавления: без потолка по высоте
+     нижние пункты у большой методички просто уезжали бы за край экрана без
+     возможности до них добраться. */
+  max-height: calc(100vh - var(--header-h) - var(--space-8));
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.kb-side__title {
+  margin-bottom: var(--space-2);
+  color: var(--text4);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* --- Оглавление ----------------------------------------------------------- */
+
+.kb-toc__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-left: 1px solid var(--border);
+}
+
+.kb-toc__link {
+  display: block;
+  padding: var(--space-1) var(--space-3);
+  /* Полоса слева подсвечивает текущий раздел: она рисуется на месте общей
+     границы списка, поэтому текст не дёргается при переключении. */
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  color: var(--text3);
+  font-size: var(--kb-fs-caption);
+  line-height: 1.45;
+  text-decoration: none;
+  transition: color var(--t-fast) var(--ease-out),
+              border-color var(--t-fast) var(--ease-out);
+}
+.kb-toc__link:hover { color: var(--text); }
+.kb-toc__link.is-active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+.kb-toc__link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Вложенность заголовков — отступом, а не кеглем: иначе третий уровень
+   становится нечитаемо мелким. */
+.kb-toc__link--h2 { padding-left: var(--space-4); }
+.kb-toc__link--h3 { padding-left: var(--space-6); }
+
+/* --- Мета-строка документа ------------------------------------------------ */
+
+.kb-doc-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.kb-doc-meta__item {
+  color: var(--text3);
+  font-size: var(--fs-sm);
+}
+
+/* Точка-разделитель между сведениями — вместо вертикальных линий: она не рвёт
+   строку и переносится вместе с ней. */
+.kb-doc-meta__item + .kb-doc-meta__item::before {
+  content: "\00b7";
+  margin-right: var(--space-3);
+  color: var(--text4);
+}
+
+/* --- Состояние автосохранения --------------------------------------------- */
+
+.kb-savestate {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.kb-savestate--error,
+.kb-savestate--conflict { color: var(--bad); font-weight: 600; }
+
+/* Причина отказа: длинная и потому обрезается — полный текст в подсказке.
+   Обычным начертанием, чтобы не спорить за внимание с самим отказом. */
+.kb-savestate__reason {
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
+}
+
+/* --- История версий ------------------------------------------------------- */
+
+.kb-history {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: var(--space-5);
+  min-height: 320px;
+}
+
+.kb-history__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.kb-history__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--r);
+  background: none;
+  color: var(--text2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-out);
+}
+.kb-history__item:hover { background: var(--bg3); }
+.kb-history__item.is-active { background: var(--accent-soft); color: var(--accent); }
+.kb-history__item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.kb-history__date { font-size: var(--fs-sm); font-weight: 500; }
+.kb-history__author {
+  grid-column: 1;
+  color: var(--text4);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-history__delta {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  color: var(--text4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-history__preview { min-width: 0; }
+
+.kb-history__paper {
+  max-height: 52vh;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+.kb-history__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+/* ==========================================================================
+ * Блоки документа: выноски, чеклисты, код.
+ * ========================================================================== */
+
+/* Выноска. Цвет берётся от смыслового токена и приглушается до заливки — тон
+   здесь несёт значение (совет / ошибка), а не украшает. */
+.kb-callout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border-radius: var(--r);
+  border: 1px solid var(--kb-callout-line);
+  background: var(--kb-callout-bg);
+}
+
+.kb-callout__label {
+  color: var(--kb-callout-color);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.kb-callout__body > * + * { margin-top: var(--space-3); }
+
+/* Тон = статус по рецепту бейджа (ink / bg / line). «Важно» нейтральная: тонкая
+   рамка на сером, без цвета — цвет остаётся за смысловыми тонами. */
+.kb-callout--info      { --kb-callout-color: var(--info); --kb-callout-bg: var(--info-bg); --kb-callout-line: var(--info-line); }
+.kb-callout--tip       { --kb-callout-color: var(--ok);   --kb-callout-bg: var(--ok-bg);   --kb-callout-line: var(--ok-line); }
+.kb-callout--important { --kb-callout-color: var(--text); --kb-callout-bg: var(--bg3);     --kb-callout-line: var(--line-2); }
+.kb-callout--warning   { --kb-callout-color: var(--warn); --kb-callout-bg: var(--warn-bg); --kb-callout-line: var(--warn-line); }
+.kb-callout--error     { --kb-callout-color: var(--bad);  --kb-callout-bg: var(--bad-bg);  --kb-callout-line: var(--bad-line); }
+
+/* Чеклист. Свой список без маркеров: галочка сама по себе маркер. */
+.kb-doc .kb-tasks {
+  list-style: none;
+  padding-left: 0;
+}
+
+.kb-task {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.kb-task > input {
+  margin-top: 0.35em;      /* по центру первой строки текста, а не по верху блока */
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* Выполненный пункт приглушаем, но не зачёркиваем: зачёркнутый текст в
+   регламенте читается как «правило отменено», а не «пункт сделан». */
+.kb-task.is-done > div { color: var(--text3); }
+
+/* Блок кода: язык подписан в углу, если он выбран. */
+.kb-doc .kb-code { position: relative; }
+
+.kb-doc .kb-code[data-language]::after {
+  content: attr(data-language);
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-3);
+  color: var(--text4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ==========================================================================
+ * Адаптив экрана чтения.
+ * ========================================================================== */
+
+/* Правая панель уходит первой: оглавление — помощь, а не содержимое. Порог —
+   ширина, на которой колонка текста и оглавление ещё помещаются рядом с
+   раскрытой боковой панелью: 272 + 800 + 40 + 240 + поля 2×20 = 1392. */
+@media (max-width: 1400px) {
+  .kb-reader { grid-template-columns: minmax(0, 1fr); }
+  .kb-side { display: none; }
+}
+
+@media (max-width: 900px) {
+  .kb-history { grid-template-columns: minmax(0, 1fr); }
+  .kb-history__list { max-height: 200px; }
+}
+
+/* ==========================================================================
+ * Редактор: ручка блока, меню «/», выноска в правке, блок кода.
+ * ========================================================================== */
+
+/* Ручка блока висит на полях листа и появляется по наведению на строку.
+   Компонент из @tiptap/extension-drag-handle-react сам ставит её напротив
+   блока под курсором. */
+.kb-handle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* Отодвигаем за левое поле листа: ручка не должна наезжать на текст. */
+  padding-right: var(--space-2);
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease-out);
+}
+
+.kb-editor-sheet:hover .kb-handle,
+.kb-handle:focus-within { opacity: 1; }
+
+/* Над таблицей ручка блока прячется: левое поле там занято ручками строк
+   (TableControls), и две ручки на одном месте — это промах мышью вместо
+   действия. Саму таблицу можно перетащить за её угловую ручку. */
+.kb-handle.is-over-table,
+.kb-editor-sheet:hover .kb-handle.is-over-table {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kb-handle__btn,
+.kb-handle__grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text4);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+}
+.kb-handle__btn:hover,
+.kb-handle__grip:hover { background: var(--bg3); color: var(--text2); }
+.kb-handle__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Курсор «схватить» — единственный признак, что за элемент можно тянуть. */
+.kb-handle__grip { cursor: grab; }
+.kb-handle__grip:active { cursor: grabbing; }
+
+/* --- Меню «/» ------------------------------------------------------------- */
+
+.kb-slash {
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 268px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-popover);
+  animation: fadeIn .12s ease-out;
+}
+
+.kb-slash__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--r);
+  background: none;
+  color: var(--text2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kb-slash__item.is-active { background: var(--accent-soft); color: var(--accent); }
+
+.kb-slash__title { font-size: var(--fs-md); font-weight: 500; }
+.kb-slash__hint { color: var(--text4); font-size: var(--fs-xs); }
+.kb-slash__item.is-active .kb-slash__hint { color: var(--accent); opacity: 0.75; }
+
+.kb-slash__empty {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text4);
+  font-size: var(--fs-sm);
+}
+
+/* --- Выноска в режиме правки ---------------------------------------------- */
+
+.kb-callout__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Переключатель вида — пять цветных точек. Подписи у них нет намеренно:
+   ряд из пяти слов перевесил бы саму выноску, а значение каждой точки
+   сообщает aria-label. */
+.kb-callout__tones { display: inline-flex; gap: var(--space-1); }
+
+.kb-callout__tone {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--kb-tone-color);
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+}
+.kb-callout__tone:hover { opacity: 0.8; }
+.kb-callout__tone.is-active { opacity: 1; transform: scale(1.15); }
+.kb-callout__tone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.kb-callout__tone--info      { --kb-tone-color: var(--info); }
+.kb-callout__tone--tip       { --kb-tone-color: var(--ok); }
+.kb-callout__tone--important { --kb-tone-color: var(--text3); }
+.kb-callout__tone--warning   { --kb-tone-color: var(--warn); }
+.kb-callout__tone--error     { --kb-tone-color: var(--bad); }
+
+/* --- Блок кода ------------------------------------------------------------ */
+
+.kb-code-block {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--bg3);
+}
+
+.kb-code-block__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.kb-code-block__lang {
+  color: var(--text4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kb-code-block__copy {
+  padding: 2px var(--space-2);
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text3);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.kb-code-block__copy:hover { background: var(--bg4); color: var(--text); }
+.kb-code-block__copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Внутри блока рамка и фон уже есть у обёртки. */
+.kb-doc .kb-code-block > .kb-code {
+  border-radius: 0;
+  margin: 0;
+}
+
+/*
+ * Подсветка синтаксиса. Своя тема на токенах вместо готовой из highlight.js:
+ * те приходят с зашитыми цветами и не знают ни про тёмную тему, ни про
+ * палитру проекта. Классы — те, что реально выдаёт lowlight на наших девяти
+ * грамматиках.
+ */
+.kb-doc .hljs-comment,
+.kb-doc .hljs-quote { color: var(--text4); font-style: italic; }
+.kb-doc .hljs-keyword,
+.kb-doc .hljs-selector-tag,
+.kb-doc .hljs-literal,
+.kb-doc .hljs-section { color: var(--text); font-weight: 600; }
+.kb-doc .hljs-string,
+.kb-doc .hljs-attr,
+.kb-doc .hljs-attribute { color: var(--ok); }
+.kb-doc .hljs-number,
+.kb-doc .hljs-symbol,
+.kb-doc .hljs-bullet { color: var(--warn); }
+.kb-doc .hljs-title,
+.kb-doc .hljs-name,
+.kb-doc .hljs-selector-id,
+.kb-doc .hljs-selector-class { color: var(--info); }
+.kb-doc .hljs-built_in,
+.kb-doc .hljs-type { color: var(--text); font-weight: 600; }
+.kb-doc .hljs-deletion { color: var(--bad); }
+.kb-doc .hljs-emphasis { font-style: italic; }
+.kb-doc .hljs-strong { font-weight: 700; }
+
+/* --- Панель инструментов --------------------------------------------------- */
+
+/* Узкий вариант выпадающего списка — для языка блока кода: он короче
+   названий шрифтов и не должен занимать столько же места. */
+.kb-toolselect--narrow { min-width: 116px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-handle,
+  .kb-callout__tone { transition: none; }
+  .kb-slash { animation: none; }
+}
+
+/* ==========================================================================
+ * Прикреплённый файл.
+ *
+ * Карточка одна на редактор и на читалку: что видно при наборе, то и увидит
+ * читатель. Плашка слева несёт тип буквами, а не только цветом — иначе
+ * различие пропадает в чёрно-белой печати и при нарушении цветовосприятия.
+ * ========================================================================== */
+.kb-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg2);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+
+/* Ссылка внутри статьи по умолчанию подчёркнута и красится акцентом — карточке
+   это не нужно, она и так читается как отдельный объект. */
+.kb-doc a.kb-file { color: var(--text); text-decoration: none; }
+
+a.kb-file:hover { border-color: var(--border-strong); background: var(--bg3); }
+a.kb-file:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.kb-file__badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  /* Цвет семейства подмешивается к фону, а не заливает его: плашка обязана
+     оставаться подложкой под текст, а не спорить с ним за внимание. */
+  background: color-mix(in oklab, var(--kb-file-tone) 16%, var(--bg3));
+  color: var(--kb-file-tone);
+}
+
+/* Семейства форматов. Значения — из общей палитры, своих цветов не заводим. */
+.kb-file__badge--pdf     { --kb-file-tone: var(--bad); }
+.kb-file__badge--doc     { --kb-file-tone: var(--info); }
+.kb-file__badge--sheet   { --kb-file-tone: var(--ok); }
+.kb-file__badge--slides  { --kb-file-tone: var(--warn); }
+.kb-file__badge--archive { --kb-file-tone: var(--text3); }
+.kb-file__badge--plain   { --kb-file-tone: var(--text3); }
+
+.kb-file__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-file__name {
+  font-size: var(--kb-fs-small);
+  font-weight: 600;
+  /* Длинное имя обрезаем, а не переносим: карточка обязана держать одну высоту,
+     иначе ряд вложений в статье выглядит рваным. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-file__meta {
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+.kb-file__action {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--text3);
+}
+a.kb-file:hover .kb-file__action { color: var(--accent); }
+
+/* --- загрузка ------------------------------------------------------------- */
+
+.kb-file--uploading { position: relative; overflow: hidden; }
+
+.kb-file__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--bg3);
+}
+
+.kb-file__progress-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--t-fast) linear;
+}
+
+/* --- блок в редакторе ----------------------------------------------------- */
+
+/* Обёртка узла: сама карточка внутри неё не кликабельна (см. FileCard
+   downloadable=false), поэтому щелчок выделяет блок целиком и его можно
+   удалить или перетащить. */
+.kb-file-block { cursor: default; }
+.kb-file-block.is-selected .kb-file {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* ==========================================================================
+ * Изменение размера картинки в редакторе.
+ *
+ * Ручки живут только в правке: при чтении картинка тянуть не за что. Рисуются
+ * поверх краёв, а не рядом — иначе они смещали бы саму картинку и её положение
+ * в правке отличалось бы от того, что увидит читатель.
+ * ========================================================================== */
+
+/* Обёртка узла. Ширину задаёт внутренняя рамка, а не она сама: обёртка обязана
+   занимать всю колонку, чтобы центрирование работало как у обычной картинки. */
+.kb-image-block {
+  display: block;
+  text-align: center;
+}
+
+.kb-image-block__frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  /* Строчный элемент добавляет снизу место под свисающие буквы — у картинки
+     оно превращается в необъяснимую щель под рамкой выделения. */
+  line-height: 0;
+}
+
+/* Картинка занимает рамку целиком и сама пропорции не задаёт.
+ *
+ * width: 100% + height: auto — единственный способ гарантировать, что искажение
+ * невозможно в принципе: высота всегда вычисляется из ширины по настоящим
+ * пропорциям файла. Атрибуты width/height на самой картинке при этом остаются —
+ * из них браузер узнаёт пропорции ДО загрузки и резервирует место.
+ *
+ * max-height НЕ наследуется сюда из общего правила намеренно: потолок высоты
+ * перенесён на рамку (ниже). Останься он на картинке — вернулась бы ровно та
+ * поломка, ради которой всё это переписано: рамка держит одну ширину, CSS
+ * зажимает высоту, и картинка растягивается между ними. */
+.kb-image-block__frame img {
+  width: 100%;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin-inline: 0;
+}
+
+/* Потолок высоты держит рамка через свою ширину, а не картинка через свою
+   высоту. Разница принципиальная: зажатая высота при заданной ширине даёт
+   растянутую картинку, а зажатая ширина — просто картинку поменьше. */
+
+/* Потолок высоты — на рамке. Она пустая, поэтому зажать её высоту нельзя:
+   вместо этого ограничиваем ширину так, чтобы высота в потолок укладывалась.
+   Пересчёт делает JS при перетаскивании (limits в ImageNodeView), а здесь —
+   страховка для картинок, вставленных до появления ручек. */
+.kb-image-block__frame {
+  /* Значение читает JS (limits в ImageNodeView), чтобы предел перетаскивания и
+     предел показа были одним числом, а не двумя похожими. */
+  --kb-image-cap: var(--kb-image-max-h);
+}
+
+/* Ручка: узкая полоса во всю высоту края. Площадь захвата шире видимой части —
+   попасть в трёхпиксельную полоску мышью невозможно. */
+.kb-image-block__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: ew-resize;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.kb-image-block__handle--left  { left: -9px; }
+.kb-image-block__handle--right { right: -9px; }
+
+/* Видимая часть ручки — вертикальная пилюля по центру края. */
+.kb-image-block__handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 40px;
+  max-height: 60%;
+  transform: translate(-50%, -50%);
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Показываем ручки, когда есть намерение: навели на картинку, выделили её или
+   уже тянут. Постоянно висящие ручки спорят с текстом за внимание. */
+.kb-image-block:hover .kb-image-block__handle,
+.kb-image-block.is-selected .kb-image-block__handle,
+.kb-image-block.is-resizing .kb-image-block__handle {
+  opacity: 1;
+}
+
+.kb-image-block__handle:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Текущая ширина во время перетаскивания: без числа попасть в нужный размер
+   можно только на глаз, а картинки в статье обычно выравнивают между собой. */
+.kb-image-block__size {
+  position: absolute;
+  top: var(--space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px var(--space-2);
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  color: var(--text2);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  box-shadow: var(--shadow-panel);
+  pointer-events: none;
+}
+
+/* Пока тянут, курсор держится на всей странице: иначе он мигает, стоит увести
+   мышь с самой ручки, а увести её при перетаскивании — обычное дело. */
+body.kb-resizing,
+body.kb-resizing * {
+  cursor: ew-resize !important;
+  user-select: none;
+}
+
+/* ==========================================================================
+ * Цвет текста и выделение.
+ *
+ * Палитра закрытая и состоит из токенов (editorColors.ts) — цвет в проекте
+ * закреплён за смыслом, а произвольная раскраска ещё и ломалась бы при смене
+ * темы: сохранённый код цвета не знает, на каком фоне его покажут.
+ * ========================================================================== */
+
+/* Кнопка панели: буква «A» с цветной полосой под ней — так же, как в привычных
+   текстовых процессорах, и видно текущий выбор, не открывая меню. */
+.kb-colorpick {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-colorpick__glyph {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.kb-colorpick__bar {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  /* Пока цвет не выбран — серая полоса: пустое место читалось бы как поломка
+     иконки, а не как «цвета нет». */
+  background: var(--border-strong);
+}
+
+.kb-colors {
+  gap: var(--space-1);
+  padding: var(--space-2);
+}
+
+.kb-colors__title {
+  padding: 0 var(--space-1);
+  color: var(--text4);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kb-colors__row {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1) 0 var(--space-2);
+}
+
+.kb-colors__swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.kb-colors__swatch[data-highlighted] { border-color: var(--border-strong); }
+.kb-colors__swatch.is-active { border-color: var(--accent); }
+
+/* Образец заливки: квадрат с рамкой. Рамка обязательна — полупрозрачная
+   заливка на белом фоне иначе неотличима от пустого места. */
+.kb-colors__chip {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+
+/* Образец цвета букв — сама буква этим цветом, а не заливка: показывать цвет
+   текста квадратиком значит заставлять догадываться. */
+.kb-colors__chip--text {
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Блок с заливкой: абзац или заголовок, залитый целиком.
+ *
+ * Поля обязательны — без них текст лип бы к краям цветного прямоугольника, и
+ * заливка читалась бы как ошибка вёрстки. Отрицательные поля по бокам
+ * компенсируют внутренние: залитый абзац обязан стоять на той же левой границе,
+ * что и соседние, иначе колонка текста «дышит» в местах выделения.
+ *
+ * В редакторе класса нет — там заливку рисует сам инлайновый стиль из атрибута
+ * (BlockBackgroundExtension), поэтому правило берёт оба случая через атрибут. */
+.kb-doc .kb-block-bg,
+.kb-doc [data-block-bg] {
+  padding: var(--space-3) var(--space-4);
+  margin-inline: calc(-1 * var(--space-4));
+  border-radius: var(--r);
+}
+
+/* Заливка не должна съедать вертикальный ритм: у соседних блоков отступ
+   остаётся прежним, а собственные поля добавляются внутрь. */
+.kb-doc .kb-block-bg + .kb-block-bg,
+.kb-doc [data-block-bg] + [data-block-bg] {
+  margin-top: var(--space-2);
+}
+
+/* ==========================================================================
+ * Ручки таблицы (TableControls.tsx).
+ *
+ * Слой лежит поверх листа и ничего не перехватывает (pointer-events: none) —
+ * иначе он съедал бы щелчки по тексту. Указатель включается точечно, только на
+ * самих кнопках.
+ *
+ * Все размеры считает JS и передаёт инлайном (left/top/width/height): положение
+ * ручки — это положение строки или столбца в DOM, CSS его не знает. Здесь
+ * только вид и правила видимости.
+ * ========================================================================== */
+.kb-tablectl-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Над текстом, но под липкой панелью и всплывающими окнами. */
+  z-index: 1;
+}
+
+.kb-tablectl {
+  position: absolute;
+}
+
+/* Общее для всех кнопок слоя: они появляются вместе с таблицей под курсором,
+   поэтому им не нужен ни свой фон-подложка, ни тень — только различимая
+   форма. */
+.kb-tablectl__bar,
+.kb-tablectl__add,
+.kb-tablectl__corner {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg3);
+  color: var(--text4);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background var(--t-fast) var(--ease-out),
+              color var(--t-fast) var(--ease-out),
+              border-color var(--t-fast) var(--ease-out),
+              opacity var(--t-fast) var(--ease-out);
+}
+
+.kb-tablectl__bar:hover,
+.kb-tablectl__add:hover,
+.kb-tablectl__corner:hover,
+.kb-tablectl__bar[data-state='open'],
+.kb-tablectl__corner[data-state='open'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.kb-tablectl__bar:focus-visible,
+.kb-tablectl__add:focus-visible,
+.kb-tablectl__corner:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Полоса-ручка строки — слева от таблицы, столбца — над ней. Толщина у обеих
+   и у кнопок «дописать» одна (14px): все они стоят на полях таблицы и обязаны
+   читаться как один набор, а не как случайные кнопки разного калибра. */
+.kb-tablectl__bar--row {
+  left: -18px;
+  width: 14px;
+}
+
+.kb-tablectl__bar--col {
+  top: -18px;
+  height: 14px;
+}
+
+/* Дописать столбец справа и строку снизу — самые частые действия при наборе
+   таблицы, поэтому у них своя кнопка во всю сторону таблицы, а не пункт в
+   меню полосы: за одним и тем же действием не должно каждый раз открываться
+   меню. */
+.kb-tablectl__add--col {
+  top: 0;
+  right: -18px;
+  width: 14px;
+  height: 100%;
+}
+
+.kb-tablectl__add--row {
+  left: 0;
+  bottom: -18px;
+  height: 14px;
+  width: 100%;
+}
+
+.kb-tablectl__corner {
+  left: -18px;
+  top: -18px;
+  width: 14px;
+  height: 14px;
+}
+
+/* ==========================================================================
+ * Изменение ширины столбцов — штатный механизм @tiptap/extension-table
+ * (resizable: true). Разметку и имена классов задаёт он, здесь только вид.
+ * ========================================================================== */
+
+/* В редакторе таблица НЕ обрезается по колонке текста: растянутая мышью, она
+   спокойно вылезает за край листа (прокрутка — на .kb-editor-field). Своя
+   заливка нужна ровно из-за этого: выехавшая за лист часть иначе показывала бы
+   сквозь себя серое поле вокруг. */
+.kb-editor .ProseMirror .tableWrapper {
+  overflow: visible;
+}
+
+.kb-editor .ProseMirror table {
+  background: var(--bg2);
+}
+
+/* Заданные ширины действуют только при фиксированной раскладке: при auto
+   браузер считает столбцы по содержимому и colgroup игнорирует. Класс ставится
+   лишь тем таблицам, где ширины реально заданы, — остальные продолжают
+   подстраиваться под текст, как раньше. */
+.kb-doc table.kb-table--sized,
+.kb-editor .ProseMirror table {
+  table-layout: fixed;
+}
+
+/* Полоса захвата у правой границы столбца. Абсолютная — чтобы не влиять на
+   раскладку ячейки; видимая только при наведении, иначе таблица выглядит
+   расчерченной синим. */
+.kb-editor .ProseMirror .column-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: -2px;
+  right: -1px;
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* Ячейкам нужен ненулевой position, иначе полоса захвата позиционируется
+   относительно всей таблицы и уезжает к её краю. */
+.kb-editor .ProseMirror th,
+.kb-editor .ProseMirror td {
+  position: relative;
+}
+
+/* Курсор на всё время перетаскивания границы — класс вешает сам плагин. */
+.kb-editor .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* Выделенные ячейки. Без подсветки объединение и удаление работают вслепую:
+   непонятно, что именно захвачено. Полупрозрачная заливка поверх содержимого,
+   чтобы текст оставался читаемым. */
+.kb-editor .ProseMirror .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent-soft);
+  pointer-events: none;
+}

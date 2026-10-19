@@ -1,0 +1,39 @@
+/* Wiki в кабинете преподавателя.
+ *
+ * Основные стили раздела приезжают из admin (@shared/styles/knowledge.css) —
+ * там же, где живёт разметка документа. Здесь только то, чего в admin нет по
+ * построению: у него страница строится компонентом PageHeader, а у teacher —
+ * своей шапкой (.t-head), и стыковать их надо на месте. Поля и потолок ширины
+ * даёт общая область .t-main, поэтому у самой Wiki их нет.
+ */
+
+.kb-teacher {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.kb-teacher__head { align-items: flex-start; }
+
+/* Хлебные крошки документа. Мелким и приглушённым: путь нужен, чтобы вернуться,
+   а не чтобы его читали вместо названия. */
+.kb-teacher__crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+/* Ссылки пути — акцентом, как в крошках admin (.crumbs__link). */
+.kb-teacher__crumbs a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.kb-teacher__crumbs a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+/* Панель поиска у преподавателя одна кнопка в ширину меньше, чем у админа
+   (нет фильтра по статусу и переключателя вида), — поэтому поиск занимает
+   строку целиком, а не жмётся влево. */
+.kb-teacher .kb-drive__bar { justify-content: flex-start; }

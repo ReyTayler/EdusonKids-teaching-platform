@@ -1,0 +1,699 @@
+/* ============================================================
+ *  ПОЛЯ ВВОДА — язык Eduson (.input / .field / .pop)
+ *  Поле: padding 8×11, рамка --line-2, r6, плейсхолдер --text3; hover — рамка
+ *  чуть темнее; фокус / открытое состояние — чёрная рамка + кольцо --focus-ring.
+ *  Выпадающие панели (Floating) — как .pop: r8, рамка --line-2, --shadow-lg,
+ *  пункты 13px/500 r6, hover — --bg3. Отмеченное (галочка, выбранный день,
+ *  сегмент) — чёрное с --on-accent.
+ * ============================================================ */
+
+/* ── FILTERS ── */
+.filters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.filter-icon { color: var(--text3); display: flex; align-items: center; }
+.search-wrap { position: relative; flex: 1; min-width: 180px; }
+.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
+.filter-select { background: var(--bg2); border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 5px 9px; font-size: var(--fs-xs); color: var(--text2); outline: none; transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease); font-family: var(--font-sans); cursor: pointer; }
+.filter-select:hover:not(:disabled) { border-color: var(--line-3); }
+.filter-select:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.search-input {
+  width: 100%;
+  padding: 5px 9px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--text);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.search-input::placeholder { color: var(--text3); }
+.search-input:hover:not(:disabled) { border-color: var(--line-3); }
+.search-input:focus-visible { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.search-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.filter-select option { background: var(--bg2); }
+
+/* ── COLOR FIELD ── */
+.color-field {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg2); border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); padding: 6px 10px;
+}
+.color-field input[type="color"] {
+  -webkit-appearance: none; appearance: none;
+  width: 36px; height: 28px; border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); padding: 0; background: transparent;
+  cursor: pointer; flex-shrink: 0;
+}
+.color-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.color-field input[type="color"]::-webkit-color-swatch { border: none; border-radius: var(--r-xs); }
+/* HEX теперь редактируемый инпут, а не подпись: код цвета часто приходит
+   из макета, и вбить его быстрее, чем ловить пипеткой. */
+.color-field__hex {
+  flex: 1; min-width: 0;
+  border: none; background: transparent; outline: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-md); color: var(--text2); letter-spacing: .02em;
+  text-transform: lowercase;
+}
+.color-field__hex::placeholder { color: var(--text3); }
+.color-field__clear {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text3); font-size: 20px; line-height: 1;
+  padding: 4px 8px; border-radius: var(--r-sm);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.color-field__clear:hover { background: var(--bad-bg); color: var(--bad); }
+
+/* Готовая палитра под полем. */
+.color-field-wrap { display: flex; flex-direction: column; gap: var(--space-2); }
+.color-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.color-presets__dot {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--line-2);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.color-presets__dot:hover { transform: scale(1.12); }
+.color-presets__dot.is-active { box-shadow: 0 0 0 2px var(--bg2), 0 0 0 4px var(--accent); }
+.color-presets__dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ===== Floating popover surface (portaled dropdowns) = .pop Eduson ===== */
+/* Позицию (position:fixed + координаты) задаёт компонент Floating инлайном —
+   здесь только внешний вид «плашки» и скролл содержимого. */
+.floating-popover {
+  z-index: var(--z-popover);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+[data-floating-popover] {
+  animation: pop-in var(--dur-2) var(--ease-out);
+  transform-origin: top center;
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ===== Combobox ===== */
+.combobox { position: relative; width: 100%; }
+.combobox__input {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  font: inherit;
+  background: var(--bg2);
+  color: var(--text);
+  box-sizing: border-box;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.combobox__input::placeholder { color: var(--text3); }
+.combobox__input:hover:not(:focus) { border-color: var(--line-3); }
+.combobox__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.combobox__list {
+  margin: 0; padding: 0;
+  list-style: none;
+}
+/* height → min-height: жёсткая высота резала подписи, которые не влезали в одну
+   строку, — текст переносился и налезал на соседний пункт (список привязки
+   Telegram). Пункт теперь растёт под содержимое. */
+.combobox__item {
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  min-height: 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  box-sizing: border-box;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  transition: background var(--dur-1) var(--ease);
+}
+.combobox__item-label {
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.combobox__item-hint {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--text3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* :not(.is-selected) обязателен: без него приглушение (специфичность 0,3,0)
+   перебивает .is-selected (0,2,0), и выбранный занятый аккаунт красится как
+   невыбранный — ровно в том сценарии, ради которого muted и заводили вместо
+   disabled (перепривязка занятого аккаунта). */
+.combobox__item.is-muted:not(.is-selected) .combobox__item-label { color: var(--text3); }
+.combobox__item.is-highlighted {
+  background: var(--bg3);
+}
+/* Выбранный пункт — жирнее и чёрным; отдельной цветной подсветки нет. */
+.combobox__item.is-selected {
+  font-weight: 600;
+  color: var(--text);
+}
+.combobox__empty {
+  padding: 8px 10px;
+  color: var(--text3);
+  font-size: var(--fs-sm);
+}
+
+.payment-form__placeholder {
+  padding: 14px 16px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  font-size: var(--fs-md);
+  text-align: center;
+}
+
+/* ===== SelectInput (custom dropdown, заменяет native <select>) ===== */
+.select-input { position: relative; width: 100%; display: inline-block; }
+.select-input__trigger {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 8px 11px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  box-sizing: border-box;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.select-input__trigger:hover:not(:disabled) { border-color: var(--line-3); }
+.select-input.is-open .select-input__trigger { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.select-input__trigger:disabled { opacity: 0.45; cursor: not-allowed; }
+.select-input__value { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.select-input__value.is-placeholder { color: var(--text3); }
+.select-input__chevron {
+  flex-shrink: 0;
+  color: var(--text3);
+  transition: transform var(--dur-1) var(--ease);
+}
+.select-input.is-open .select-input__chevron { transform: rotate(180deg); color: var(--text); }
+/* Поле поиска — липкая шапка выпадающего списка (перекрывает прокручиваемые пункты) */
+.select-input__search {
+  position: sticky;
+  top: -6px; /* компенсируем padding:6px попапа */
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -6px -6px 6px;
+  padding: 8px 12px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+}
+.select-input__search-icon { flex-shrink: 0; color: var(--text3); }
+.select-input__search-field {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  outline: none;
+}
+.select-input__search-field::placeholder { color: var(--text3); }
+.select-input__list {
+  margin: 0; padding: 0;
+  list-style: none;
+}
+.select-input__item {
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  border-radius: var(--r-sm);
+  display: flex; align-items: center;
+  color: var(--text);
+  transition: background var(--dur-1) var(--ease);
+}
+.select-input__item.is-highlighted { background: var(--bg3); }
+.select-input__item.is-selected { font-weight: 600; color: var(--text); }
+.select-input__empty {
+  padding: 8px 10px;
+  color: var(--text3);
+  font-size: var(--fs-sm);
+}
+
+/* ===== DateInput (custom calendar popover) ===== */
+.date-input { position: relative; width: 100%; display: inline-block; }
+.date-input__trigger {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 8px 11px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.date-input__trigger:has(.date-input__field:hover):not(:has(.date-input__field:disabled)) { border-color: var(--line-3); }
+.date-input.is-open .date-input__trigger { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.date-input__trigger:has(.date-input__field:disabled) { opacity: 0.45; cursor: not-allowed; }
+.date-input__field {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.date-input__field::placeholder { color: var(--text3); }
+.date-input__field:disabled { cursor: not-allowed; }
+.date-input__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.date-input__icon-btn:disabled { cursor: not-allowed; }
+.date-input__icon { color: var(--text3); flex-shrink: 0; }
+.date-input.is-open .date-input__icon { color: var(--text); }
+
+/* Позиционирование задаёт Floating (портал, position:fixed) — здесь только вид. */
+.date-input__popover {
+  width: 264px;
+  padding: var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-popover);
+}
+.date-input__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.date-input__nav {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.date-input__nav:hover { background: var(--bg3); color: var(--text); }
+.date-input__title {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+}
+.date-input__dow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+.date-input__dow span {
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  text-align: center;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 0;
+}
+.date-input__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.date-input__day {
+  height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.date-input__day:hover { background: var(--bg3); }
+.date-input__day.is-muted { color: var(--text3); }
+.date-input__day.is-today { border-color: var(--line-3); font-weight: 600; }
+.date-input__day.is-selected {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.date-input__day.is-selected:hover { background: var(--accent-hover); }
+
+.date-input__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+.date-input__action {
+  padding: 5px 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.date-input__action:hover { background: var(--bg3); }
+.date-input__action--muted { color: var(--text2); }
+.date-input__action--muted:hover { background: var(--bg3); color: var(--text); }
+
+/* ===== Checkbox (custom, hides native input) ===== */
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--text2);
+  user-select: none;
+}
+.checkbox input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.checkbox__box {
+  width: 16px; height: 16px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-xs);
+  background: var(--bg2);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: transparent;
+  flex-shrink: 0;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.checkbox:hover .checkbox__box { border-color: var(--text3); }
+/* Отмеченный — чёрный (в тёмной теме белый), галочка — --on-accent. */
+.checkbox input:checked ~ .checkbox__box {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.checkbox input:focus-visible ~ .checkbox__box {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.checkbox.is-disabled { opacity: 0.45; cursor: not-allowed; }
+.checkbox__label { line-height: 1.4; }
+
+/* ===== MultiSelect — выбор нескольких значений (components/form/MultiSelect.tsx)
+   Триггер повторяет облик .select-input__trigger: два соседних поля в одной
+   панели не должны различаться ничем, кроме числа выбранных значений. Стрелки
+   у него нет — сводка выбранного бывает в две строки, и значок сбоку от неё
+   висел бы в пустоте. ===== */
+.multi-select__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 8px 11px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  box-sizing: border-box;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.multi-select__trigger:hover { border-color: var(--line-3); }
+.multi-select.is-open .multi-select__trigger { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.multi-select__value { min-width: 0; }
+.multi-select__value.is-placeholder { color: var(--text3); }
+
+/* Пункты выпадашки — те же галочки, что и у меток задачи, только столбиком. */
+.multi-select__list {
+  display: flex;
+  flex-direction: column;
+}
+.multi-select__item {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-sm);
+}
+.multi-select__item:hover { background: var(--bg3); }
+.multi-select__empty {
+  padding: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text3);
+}
+
+/* ===== Compact SelectInput inside DataTable filter row ===== */
+.data-table thead .select-input.search-input { width: 100%; }
+.data-table thead .select-input__trigger {
+  padding: 4px 8px;
+  font-size: var(--fs-xs);
+  min-height: 26px;
+}
+.data-table thead .select-input__chevron { width: 10px; height: 10px; }
+/* Список рендерится порталом в body, поэтому дескрипторы «.data-table thead …»
+   до него не достают — компактный вид самой плашки достигается общим стилем. */
+
+/* ============================================================
+ *  InlineField — строка свойства в панели (components/form/InlineField.tsx)
+ *  Используют панель задачи и панель сделки в «Продлениях».
+ * ============================================================ */
+
+/* Строка: слева иконка с подписью, справа контрол. Ширина колонки подписи
+   задана переменной — от неё же отсчитывает отступ довесок под контролом
+   (ссылка на карточку), и разъехаться они не могут. */
+.inline-field {
+  --inline-label-w: 132px;
+  display: grid;
+  grid-template-columns: var(--inline-label-w) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+/* Подпись без uppercase: раньше поля стояли колонками и заглавные буквы
+   отделяли подпись от значения сверху. В строке их разделяет сама колонка, а
+   uppercase на семи строках подряд превращается в шум. */
+.inline-field__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text3);
+}
+
+.inline-field__icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text3);
+}
+
+.inline-field__label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-field__control {
+  min-width: 0;
+}
+
+/* Довесок под контролом — ссылка на карточку ученика или группы. Стоит во
+   второй колонке, то есть ровно под контролом, а не под подписью. */
+.inline-field__below {
+  grid-column: 2;
+  padding-left: var(--space-2);
+}
+
+.inline-field__below .entity-link {
+  font-size: var(--fs-xs);
+}
+
+/* Поле, которое здесь не правят (ответственный по сделке — меняется на
+   странице ученика). Отбивка та же, что у контролов, чтобы значение стояло по
+   одной вертикали с ними. */
+.inline-field__readonly {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+/* Контрол в строке свойства не носит собственной рамки и подложки: строка не
+   должна менять облик от того, читают её или правят. Рамка появляется на
+   наведении и в фокусе — тогда, когда человек в поле целится. */
+.inline-field__control .combobox__input,
+.inline-field__control .select-input__trigger,
+.inline-field__control .multi-select__trigger,
+.inline-field__control .date-input__trigger {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--fs-sm);
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Наведение — состояние «целюсь в поле»: проступают подложка и рамка. Открытый
+   и сфокусированный контрол из этого правила исключён, иначе наведённый курсор
+   перебивал бы акцентную рамку правила ниже. */
+.inline-field__control .combobox__input:hover:not(:focus),
+.inline-field__control .select-input:not(.is-open) .select-input__trigger:hover:not(:disabled),
+.inline-field__control .multi-select:not(.is-open) .multi-select__trigger:hover,
+.inline-field__control .date-input:not(.is-open) .date-input__trigger:hover {
+  background: var(--bg3);
+  border-color: var(--line-3);
+}
+
+/* В фокусе/открытом состоянии — штатная акцентная рамка контрола: те же
+   значения, что задают .combobox__input:focus и .select-input.is-open /
+   .date-input.is-open выше, просто повторённые внутри строки, потому что
+   рамку в основном правиле мы погасили. */
+.inline-field__control .combobox__input:focus,
+.inline-field__control .select-input.is-open .select-input__trigger,
+.inline-field__control .multi-select.is-open .multi-select__trigger,
+.inline-field__control .multi-select__trigger:focus-visible,
+.inline-field__control .date-input.is-open .date-input__trigger {
+  background: var(--bg2);
+  border-color: var(--accent);
+}
+
+/* Пустое поле подсказывает, что в него положить, приглушённым тоном: у
+   SelectInput это .select-input__value.is-placeholder (см. выше), у остальных
+   двух — нативный placeholder инпута. */
+.inline-field__control .combobox__input::placeholder,
+.inline-field__control .date-input__field::placeholder {
+  color: var(--text3);
+}
+
+/* Стрелка селекта и календарик прячутся до наведения: семь строк с
+   постоянными иконками справа превращаются в частокол. */
+.inline-field__control .select-input__chevron,
+.inline-field__control .date-input__icon {
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+/* `.is-open` тоже проявляет иконку: у открытого селекта фокус уходит в поле
+   поиска, а оно живёт в портале — :focus-within его уже не видит. */
+.inline-field__control:hover .select-input__chevron,
+.inline-field__control:focus-within .select-input__chevron,
+.inline-field__control .select-input.is-open .select-input__chevron,
+.inline-field__control:hover .date-input__icon,
+.inline-field__control:focus-within .date-input__icon,
+.inline-field__control .date-input.is-open .date-input__icon {
+  opacity: 0.6;
+}
+
+/* ===== Выбор цвета из фиксированного набора (components/form/ColorSwatches.tsx)
+   Кружки, а не квадраты: набор читается как палитра, а не как ряд кнопок.
+   Заливка приходит инлайном — это цвет из набора, токеном его не выразить
+   (то же исключение, что у цвета стадии в шапке колонки). */
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.color-swatches__item {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  /* Кольцо заметное, а не еле видное: в наборе есть белый, и на белой
+     панели диалога без обводки его кружок просто исчезает. */
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--text) 22%, transparent);
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.color-swatches__item:hover { transform: scale(1.12); }
+
+.color-swatches__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── ПОЛЕ С ПОДПИСЬЮ (Eduson .field / .input) ──
+   Колонка, gap 5; подпись 12px/500 --text2 обычным регистром; поле 8×11,
+   рамка --line-2, r6, фокус — чёрная рамка + кольцо. */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.field label { font-size: var(--fs-xs); font-weight: 500; color: var(--text2); }
+.field input, .field select, .field textarea {
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  padding: 8px 11px;
+  font-size: var(--fs-md);
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+  font-family: inherit;
+  width: 100%;
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--text3); }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.field select { cursor: pointer; }
+.field select option { background: var(--bg2); }
+.field textarea { resize: vertical; min-height: 70px; }
+.field input[type="date"] { color-scheme: light; }
+.field-hint { font-size: var(--fs-xs); color: var(--text3); margin-top: 2px; }
+.field-hint--warn { color: var(--warn); }
+.field-req { color: var(--bad); }
+.field-error { font-size: var(--fs-xs); color: var(--bad); margin-top: 2px; }

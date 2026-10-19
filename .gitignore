@@ -1,0 +1,89 @@
+# Eduson Kids — форк KOTOKOD. Данные учеников Eduson (ПДн) и секреты — никогда в git.
+
+# ── Секреты / креды ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+service-account-key.json
+*.pem
+*.key
+*.p12
+*.tmp
+*.env
+secrets.conf
+.pgpass
+*credentials*.json
+
+# ── Данные / бэкапы (ПДн) ──────────────────────────────────
+backups/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+# Схема строится миграциями — отслеживаемых .sql в форке нет; любой .sql здесь —
+# дамп или выгрузка, а значит потенциально ПДн.
+*.sql
+# Исключение: DDL схемы Eduson для тестов импорта — дословная копия migrate() из
+# legacy db.js, без строк данных (выдуманные базы строит tests/factory.py).
+!journal_django/apps/eduson_import/tests/fixtures/eduson_schema.sql
+*.backup
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.xlsx
+*.xls
+*.csv
+*.ods
+*.docx
+
+# ── Логи ───────────────────────────────────────────────────
+logs/*
+!logs/.gitkeep
+*.log
+celerybeat-schedule*
+
+# ── Локальный nginx: рабочий каталог (pid, логи, temp, paths.conf с путями машины)
+deploy/nginx/local/.runtime/
+
+# ── Python ─────────────────────────────────────────────────
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+staticfiles/
+mediafiles/
+media/
+journal_django/reports/
+
+# ── Node / сборки (пересобираются локально) ────────────────
+node_modules/
+npm-debug.log*
+.vite/
+.eslintcache
+*.tsbuildinfo
+journal_django/frontend/admin-dist/
+journal_django/frontend/teacher-dist/
+
+# ── Тулинг ─────────────────────────────────────────────────
+.claude/
+.agents/
+skills-lock.json
+.superpowers/
+.worktrees/
+
+# ── ОС / редакторы ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+/*.png

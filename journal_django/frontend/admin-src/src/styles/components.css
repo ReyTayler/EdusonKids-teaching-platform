@@ -1,0 +1,917 @@
+/* ── COMPONENTS ── визуальный язык Eduson (docs/design-system.md §3).
+   Каталог: .btn, .chip, .seg, .spin, .toast, .pop, .stat. Старые имена классов
+   проекта (.btn-save, .ui-btn--*, .status-badge, .segmented…) остались — их
+   пишут сотни мест, — но рисуются по тем же рецептам, что и каталог Eduson. */
+
+/* ── AVATAR ──
+   В Eduson аватаров нет вовсе. Здесь они остались ради одного: в списках людей
+   и в стопке исполнителей на карточке задачи инициалы дают глазу якорь «кто
+   это» и позволяют сосчитать людей. Но цвет по хешу имени был чистым
+   украшением — теперь круг монохромный: светлая подложка, инициалы моно. */
+.avatar {
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  color: var(--text2);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* ── AVATAR STACK — несколько человек в одной строке (components/ui/AvatarStack.tsx).
+   Круги наезжают друг на друга, каждый обведён цветом подложки: без кольца
+   соседи сливаются в сплошное пятно и сосчитать людей нельзя. Величину наезда
+   компонент кладёт инлайном (--avatar-stack-overlap), она зависит от размера. ── */
+.avatar-stack {
+  display: inline-flex;
+  align-items: center;
+  /* Подложка по умолчанию — поверхность карточки. Там, где фон другой,
+     переменную переопределяют на месте (см. .inline-field__control ниже). */
+  --avatar-stack-ring: var(--bg2);
+}
+
+.avatar-stack__item {
+  display: inline-flex;
+  border-radius: 50%;
+  /* Кольцо — это не тень, а «вырез» цветом подложки между соседними кругами. */
+  box-shadow: 0 0 0 2px var(--avatar-stack-ring);
+}
+
+/* Наезд у всех, кроме первого: сдвигать первый значило бы утащить всю стопку
+   левее подписи, к которой она относится. */
+.avatar-stack__item + .avatar-stack__item {
+  margin-left: calc(-1 * var(--avatar-stack-overlap, 5px));
+}
+
+/* «+N» — тот же круг, что и аватар, но нейтральный: это не человек. */
+.avatar-stack__more {
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--bg3);
+  color: var(--text3);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.person-cell { display: flex; align-items: center; gap: 10px; }
+
+/* Кросс-сущностные ссылки (студент → группа, группа → ученик, и т.д.) */
+.entity-link { color: var(--text); text-decoration: none; border-bottom: 1px dashed transparent; transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); cursor: pointer; }
+.entity-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.entity-link--muted { color: var(--text3); }
+.entity-link--muted:hover { color: var(--accent); }
+.person-name { font-weight: 500; color: var(--text); }
+.person-sub { font-size: var(--fs-xs); color: var(--text3); margin-top: 1px; }
+
+/* ============================================================
+ *  .chip — единый рецепт бейджа Eduson: pill, 2×8, 11px/500,
+ *  светлая заливка + цветная рамка + «чернильный» текст того же тона.
+ *  Нейтральный вариант (по умолчанию) — белый с рамкой --line-2, текст --text2.
+ *  Все бейджи проекта (.status-badge, .badge, .dir-tag, .pill, .filter-chip,
+ *  .archive-tag) объявлены в этом же списке селекторов, чтобы форма была одна.
+ * ============================================================ */
+.chip,
+.status-badge,
+.badge,
+.dir-tag,
+.pill,
+.filter-chip,
+.archive-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  background: var(--bg2);
+  color: var(--text2);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Статусы: ok / warn / bad / info — единственное место, где бейдж получает цвет
+   за смысл. Имена .status-badge--positive/negative оставлены (их задаёт
+   stageTone() и десятки экранов): positive = ok, negative = bad. */
+.chip.ok,   .status-badge--positive, .badge--ok   { background: var(--ok-bg);   color: var(--ok);   border-color: var(--ok-line); }
+.chip.warn, .status-badge--warning,  .badge--warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+.chip.bad,  .status-badge--negative, .badge--bad,
+.archive-tag                                      { background: var(--bad-bg);  color: var(--bad);  border-color: var(--bad-line); }
+.chip.info, .status-badge--info,     .badge--info,
+.filter-chip                                      { background: var(--info-bg); color: var(--info); border-color: var(--info-line); }
+/* Нейтральные: «ничего не происходит» — белый с рамкой, без цвета. */
+.status-badge--muted, .badge--muted,
+.badge--inactive { background: var(--bg2); color: var(--text2); border-color: var(--line-2); }
+.badge--inactive { color: var(--text3); }
+
+/* Курсы (направления): .chip.scratch / .python / .vibe / .groups. */
+.chip.scratch { background: var(--t-scratch-bg); color: var(--t-scratch); border-color: var(--t-scratch-line); }
+.chip.python  { background: var(--t-python-bg);  color: var(--t-python);  border-color: var(--t-python-line); }
+.chip.vibe    { background: var(--t-vibe-bg);    color: var(--t-vibe);    border-color: var(--t-vibe-line); }
+.chip.groups  { background: var(--t-groups-bg);  color: var(--t-groups);  border-color: var(--t-groups-line); }
+
+/* Закрытая сделка (StudentStageBadge): та же семантика тона, меньше веса — бейдж
+   ушедшего ученика не спорит с бейджами активных. */
+.status-badge--dim { opacity: 0.6; }
+
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* Направление — цвет приходит ИЗ ДАННЫХ (Direction.color, задаёт администратор),
+   поэтому токеном его не выразить. DirTag кладёт цвет в --chip-c, а рецепт
+   «заливка + рамка + ink» строится от него через color-mix: заливка 10% и рамка
+   40% на поверхности, ink — цвет, подмешанный к тексту темы (в светлой теме
+   темнеет, в тёмной светлеет — контраст сохраняется при любом цвете). */
+.dir-tag {
+  background: color-mix(in srgb, var(--chip-c, var(--t-unknown)) 10%, var(--bg2));
+  border-color: color-mix(in srgb, var(--chip-c, var(--t-unknown)) 40%, var(--bg2));
+  color: color-mix(in srgb, var(--chip-c, var(--t-unknown)) 62%, var(--text));
+}
+
+/* Начертание и tabular-nums для .mono/.id-cell заданы одним правилом в base.css
+   (там же code/kbd/samp) — здесь только размер и цвет. */
+.mono { font-size: var(--fs-md); }
+/* ID сущности: рабочий идентификатор — его диктуют по телефону и сверяют с
+   выгрузкой, поэтому читается наравне с данными строки: моно, --text2. */
+.id-cell {
+  color: var(--text2);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+/* Числовые данные (счётчики, суммы) — моноширинные ради выравнивания разрядов,
+   но БЕЗ веса и контраста ID: это не идентификаторы. */
+.cell-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Метка направления в таблице: цвет направления приходит инлайном из данных. */
+.dir-swatch {
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px var(--line-3);
+}
+
+/* ── DETAILS/SUMMARY — общий паттерн сворачиваемых технических блоков ── */
+.details-toggle > summary {
+  cursor: pointer;
+  color: var(--text3);
+  font-size: 12px;
+  padding: 4px 0;
+  list-style-position: inside;
+  user-select: none;
+}
+.details-toggle > summary:hover { color: var(--text2); }
+
+/* ── PROGRESS ── */
+.progress-wrap { display: flex; flex-direction: column; gap: 5px; }
+.progress-blocks { display: flex; gap: 3px; }
+.progress-block { width: 10px; height: 10px; border-radius: 2px; transition: background var(--dur-2) var(--ease); }
+.progress-labels { display: flex; justify-content: space-between; font-size: 12px; }
+
+/* ── STAT CARDS (.stat Eduson) ──
+   14×16, число 26px/600 Geist Mono -.03em, подпись 12px --text2. */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; }
+.stat-label { font-size: var(--fs-xs); font-weight: 400; color: var(--text2); margin-top: 2px; }
+.stat-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 600; color: var(--text); letter-spacing: -0.03em; }
+
+/* ── PROGRESS CARD ── */
+.progress-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin-bottom: 16px; }
+.progress-card-label { font-size: var(--fs-xs); font-weight: 500; color: var(--text2); margin-bottom: 12px; }
+
+/* ============================================================
+ *  КНОПКИ — каталог Eduson: .btn
+ *  Базовая (вторичная): белая, рамка --line-2, 7×13, r6, 13px/500;
+ *  hover — рамка --text3; нажатие — scale(.96); disabled .45.
+ *  Варианты: primary (чёрная), danger/warn (белая с ink и line статуса,
+ *  hover — фон статуса), ghost (прозрачная --text2, hover --bg3), sm (5×9, 12px).
+ *
+ *  Классы проекта сведены к тем же вариантам одним списком селекторов:
+ *    primary  — .btn-save, .btn-add, .btn-primary, .ui-btn--primary
+ *    обычная  — .btn-cancel, .btn-secondary, .ui-btn--secondary
+ *    danger   — .btn-danger, .btn-delete, .ui-btn--danger
+ *    ghost    — .ui-btn--ghost
+ *    sm       — .ui-btn--sm, .btn-open, .btn-reset-filters
+ * ============================================================ */
+.btn,
+.btn-save, .btn-add, .btn-primary,
+.btn-cancel, .btn-secondary,
+.btn-danger, .btn-delete,
+.btn-open, .btn-reset-filters,
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease),
+              opacity var(--dur-1) var(--ease);
+}
+.btn:hover:not(:disabled),
+.btn-cancel:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled),
+.btn-open:hover, .btn-open:focus-visible,
+.btn-reset-filters:hover:not(:disabled),
+.ui-btn--secondary:hover:not(:disabled) { border-color: var(--text3); }
+.btn-open { text-decoration: none; }
+
+/* Нажатие — у всех кнопок каталога. */
+.btn:active:not(:disabled),
+.btn-save:active:not(:disabled), .btn-add:active:not(:disabled), .btn-primary:active:not(:disabled),
+.btn-cancel:active:not(:disabled), .btn-secondary:active:not(:disabled),
+.btn-danger:active:not(:disabled), .btn-delete:active:not(:disabled),
+.btn-open:active, .btn-reset-filters:active:not(:disabled),
+.ui-btn:active:not(:disabled) { transform: var(--press); }
+
+.btn:disabled,
+.btn-save:disabled, .btn-add:disabled, .btn-primary:disabled,
+.btn-cancel:disabled, .btn-secondary:disabled,
+.btn-danger:disabled, .btn-delete:disabled,
+.ui-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Основная — чёрная (в тёмной теме белая: --accent/--on-accent). */
+.btn.primary,
+.btn-save, .btn-add, .btn-primary,
+.ui-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.btn.primary:hover:not(:disabled),
+.btn-save:hover:not(:disabled), .btn-add:hover:not(:disabled), .btn-primary:hover:not(:disabled),
+.ui-btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.btn-save { margin-left: auto; }
+
+/* Опасные: белая, ink и line статуса, hover — фон статуса. */
+.btn.bad, .btn-danger, .btn-delete, .ui-btn--danger {
+  background: var(--bg2);
+  color: var(--bad);
+  border-color: var(--bad-line);
+}
+.btn.bad:hover:not(:disabled), .btn-danger:hover:not(:disabled),
+.btn-delete:hover:not(:disabled), .ui-btn--danger:hover:not(:disabled) { background: var(--bad-bg); border-color: var(--bad-line); }
+.btn.warn { background: var(--bg2); color: var(--warn); border-color: var(--warn-line); }
+.btn.warn:hover:not(:disabled) { background: var(--warn-bg); border-color: var(--warn-line); }
+/* «Точно?» — второе нажатие подтверждает удаление: сплошная заливка статуса.
+   Текст — цвет поверхности (белый в светлой теме, тёмный в тёмной, где --bad светлый). */
+.btn-delete.is-confirming { background: var(--bad); border-color: var(--bad); color: var(--bg2); }
+.btn-delete.is-confirming:hover:not(:disabled) { background: var(--bad); }
+
+/* Третичная. */
+.btn.ghost, .ui-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text2);
+}
+.btn.ghost:hover:not(:disabled), .ui-btn--ghost:hover:not(:disabled) { background: var(--bg3); color: var(--text); border-color: transparent; }
+
+/* Маленькая: 5×9, 12px. «Открыть ›» в строке таблицы и «Сбросить фильтры» —
+   тоже .btn.sm: белая с рамкой, hover — рамка --text3 (раньше серая заливка). */
+.btn.sm, .ui-btn--sm, .btn-open, .btn-reset-filters {
+  padding: 5px 9px;
+  font-size: var(--fs-xs);
+}
+.ui-btn__icon { display: inline-flex; align-items: center; }
+.btn:has(.spin) { min-width: 7.5em; }
+
+/* ============================================================
+ *  Tabs (components/ui/Tabs.tsx)
+ *  Вкладки-пилюли: тот же рецепт, что у активного пункта боковой колонки —
+ *  13px/500, --text2, радиус --r-tab, активная чёрная с --on-accent. Так во
+ *  всём интерфейсе один язык «выбранного» (чёрная заливка), а подчёркнутые
+ *  вкладки не спорят с сегментами и шапкой.
+ * ============================================================ */
+.tabs { display: flex; flex-direction: column; }
+.tabs__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: var(--space-4);
+}
+.tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--r-tab);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.tabs__tab:hover:not(:disabled):not(.is-active) { background: var(--bg3); color: var(--text); }
+.tabs__tab.is-active { background: var(--accent); color: var(--on-accent); }
+.tabs__tab:disabled { opacity: 0.45; cursor: not-allowed; }
+.tabs__panel { animation: fadeIn var(--dur-2) var(--ease-out); }
+.tabs__panel:focus-visible { outline: none; }
+
+/* ── TOASTS (Eduson .toast) ──
+   Снизу по центру, чёрный (--accent/--on-accent), ошибка — --bad; r6, тень
+   как у всплывающего, подъём на 8px. Единственное определение. */
+.toast-container {
+  position: fixed; bottom: 20px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  z-index: var(--z-toast);
+  /* Контейнер сам не ловит клики — кликабельны только тосты (у них бывает «Отменить»). */
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 11px 18px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-lg);
+  max-width: min(420px, calc(100vw - 32px));
+  animation: toast-in var(--dur-2) var(--ease-out);
+}
+/* Ошибка: фон --bad. Текст — цвет поверхности (в тёмной теме --bad светлый,
+   белый на нём не читается). ok и info — те же чёрные, как в Eduson. */
+.toast--error { background: var(--bad); color: var(--bg2); }
+.toast__text { flex: 1; }
+
+/* Действие в toast'е («Отменить»): подчёркнутая кнопка, не вторая заливка. */
+.toast__action {
+  flex: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 500;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ── MONO BADGE — код группы и подобные моно-метки ── */
+.mono-badge {
+  display: inline-flex; align-items: center;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs); font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  letter-spacing: -0.01em;
+}
+.mono-badge--active { color: var(--text); background: var(--bg3); }
+.mono-badge--inactive { color: var(--text3); background: var(--bg2); border-color: var(--line); }
+
+/* ── SPINNER (Eduson .spin) — 16px, серое кольцо с чёрным сегментом ── */
+.spin {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: sp var(--dur-spin) linear infinite;
+}
+@keyframes sp { to { transform: rotate(360deg); } }
+
+/* ── SKELETON LOADER ──
+   Плоский --bg3 без «блёсток»: бегущий блик на десятке строк — шум, а форму
+   будущего контента держит и сама заглушка. */
+.skeleton-row {
+  display: flex; gap: 12px; align-items: center;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+}
+.skeleton-row:last-child { border-bottom: none; }
+.skeleton-block {
+  border-radius: var(--r-sm); height: 12px;
+  background: var(--bg3);
+}
+.skeleton-avatar { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; }
+.skeleton-text-sm { width: 60px; }
+.skeleton-text-md { flex: 1; max-width: 180px; }
+.skeleton-text-lg { flex: 1; }
+
+/* ===== Discounts ===== */
+.discount-add {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  margin-bottom: 16px;
+}
+.discount-add__field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.discount-add__field input {
+  padding: 8px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  font: inherit;
+  background: var(--bg2);
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+}
+.discount-add .field-error {
+  color: var(--bad);
+  font-size: 12px;
+}
+
+.discounts-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.discounts-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.discounts-picker__row .btn-link {
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 8px;
+}
+.discounts-picker__summary {
+  margin-top: 4px;
+  padding: 8px 12px;
+  background: var(--bg3);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+}
+
+/* ============================================================
+ *  Экранный ридер: подпись только для ассистивных технологий.
+ * ============================================================ */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── СКЕЛЕТОН СТРАНИЦЫ ──
+   Контур будущего контента держит высоту и не даёт вёрстке прыгнуть. */
+.page-skeleton { display: flex; flex-direction: column; gap: var(--space-5); }
+.page-skeleton__head { display: flex; flex-direction: column; gap: var(--space-2); }
+.page-skeleton__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+.page-skeleton__tile {
+  height: 72px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg2);
+}
+.page-skeleton__rows {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg2);
+  overflow: hidden;
+}
+.sk-w-40  { width: 40%; }
+.sk-w-25  { width: 25%; }
+.sk-h-20  { height: 20px; }
+
+/* ── СКЕЛЕТОН БЛОКА (внутри вкладки/карточки) ── */
+.block-skeleton { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) 0; }
+
+/* ── ПУСТОЕ СОСТОЯНИЕ ──
+   Eduson: серый текст --text3 по центру с отступом 24, без рамок и плашек. */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text3);
+}
+.empty-state__icon {
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: var(--space-1);
+  color: var(--text3);
+}
+.empty-state__icon svg { width: 22px; height: 22px; }
+.empty-state__title { font-size: var(--fs-md); font-weight: 500; color: var(--text3); }
+.empty-state__hint { font-size: var(--fs-sm); color: var(--text3); max-width: 320px; line-height: 1.5; }
+.empty-state__action { margin-top: var(--space-2); }
+
+/* ── СЕГМЕНТИРОВАННЫЙ ПЕРЕКЛЮЧАТЕЛЬ (Eduson .seg) ──
+   Белая подложка с рамкой, выбранный сегмент — чёрный с --on-accent. */
+.segmented {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+}
+.segmented__btn {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+              transform var(--dur-1) var(--ease);
+}
+.segmented__btn:hover:not(.is-active) { color: var(--text); }
+.segmented__btn:active { transform: var(--press); }
+.segmented__btn.is-active { background: var(--accent); color: var(--on-accent); }
+
+/* Ряд действий над содержимым вкладки (кнопка справа). */
+.view-actions { display: flex; justify-content: flex-end; margin-bottom: var(--space-3); }
+
+/* Фильтр-чип с крестиком (активный фильтр сущности в журнале изменений):
+   цвет и рамка — из общего списка бейджей выше (info), здесь только крестик. */
+.filter-chip { gap: var(--space-1); padding-right: 4px; }
+.filter-chip__clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  border: 0; border-radius: 50%;
+  background: transparent; color: inherit;
+  font-size: 14px; line-height: 1; cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.filter-chip__clear:hover { background: var(--info-line); }
+
+/* Селект фильтра операций в шапке журнала изменений. */
+.changelog-op-filter { width: 208px; }
+
+
+/* ============================================================
+ *  IconButton — квадратная кнопка с одной иконкой.
+ * ============================================================ */
+.ui-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+              transform var(--dur-1) var(--ease);
+}
+.ui-iconbtn--sm { width: 28px; height: 28px; }
+.ui-iconbtn--md { width: 32px; height: 32px; }
+.ui-iconbtn:hover:not(:disabled) { background: var(--bg3); color: var(--text); }
+.ui-iconbtn:active:not(:disabled) { background: var(--bg4); transform: var(--press); }
+/* Нажатое состояние (тумблер панели инструментов): плотный серый, а не
+   чёрная заливка — в ряду из десятка кнопок чёрные квадраты кричат громче
+   содержимого. Выбранность держат фон --bg4 и цвет текста. */
+.ui-iconbtn.is-active { background: var(--bg4); color: var(--text); }
+.ui-iconbtn.is-active:hover:not(:disabled) { background: var(--bg4); }
+.ui-iconbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Палец вместо мыши — на узком экране зона нажатия больше. */
+@media (max-width: 640px) {
+  .ui-iconbtn--md { width: 36px; height: 36px; }
+  .ui-iconbtn--sm { width: 32px; height: 32px; }
+}
+
+/* ============================================================
+ *  SearchInput — поле поиска с иконкой и очисткой (поле Eduson: 8×11, r6).
+ * ============================================================ */
+.ui-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.ui-search__icon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text3);
+  pointer-events: none;
+}
+
+.ui-search__input {
+  width: 100%;
+  padding: 8px var(--space-8) 8px var(--space-8);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--bg2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.ui-search__input::placeholder { color: var(--text3); }
+.ui-search__input:hover { border-color: var(--line-3); }
+.ui-search__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+/* Штатный крестик WebKit убираем: он появляется поверх нашего и в тёмной теме
+   рисуется чёрным квадратом. */
+.ui-search__input::-webkit-search-cancel-button { display: none; }
+
+.ui-search__clear {
+  position: absolute;
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: none;
+  color: var(--text3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ui-search__clear:hover { background: var(--bg3); color: var(--text); }
+.ui-search__clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ===== Шапка колонки доски =====
+   Общая для «Задач» и «Продлений» (components/board/BoardColumnHead.tsx).
+   Живёт здесь, а не в pages/tasks.css: вторая копия в renewals.css неизбежно
+   разъехалась бы с первой.
+
+   Заливка и цвет текста приходят инлайном из stageTone() — цвет стадии задаёт
+   суперадмин, токеном его не выразить. Это то же исключение из правила «только
+   токены», что и цвет направления. */
+.board-col-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border-radius: var(--r) var(--r) 0 0;
+}
+
+.board-col-head__label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-col-head__count {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+/* Кнопки наследуют цвет подписи: на цветной заливке иконка токеном --text
+   местами исчезает. */
+.board-col-head__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: inherit;
+}
+
+.board-col-head__actions .ui-iconbtn {
+  color: inherit;
+}
+
+/* Меню «…» стадии: своя светлая подложка и рамка на цветной плашке читаются
+   как чужеродная кнопка, а серый --text3 на тёмной заливке почти исчезает.
+   Гасим фон и рамку, цвет берём от подписи. Правило локальное — на белом фоне
+   карточек исходный вид триггера правильный, глобально его менять нельзя. */
+.board-col-head__actions .action-menu__trigger {
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+}
+
+.board-col-head__actions .action-menu__trigger:hover,
+.board-col-head__actions .action-menu__trigger[data-state="open"] {
+  background: color-mix(in oklab, currentColor 18%, transparent);
+  border-color: transparent;
+  color: inherit;
+}
+
+/* ============================================================
+ *  ЛЕНТЫ ВЫЕЗЖАЮЩИХ ПАНЕЛЕЙ (components/ui/DrawerFeed.tsx)
+ *  Комментарии и история задач и сделок оформлены одинаково, поэтому классы
+ *  общие: копия в двух разделах неизбежно разъехалась бы.
+ * ============================================================ */
+
+/* Сворачиваемая секция панели: заголовок с шевроном, по умолчанию раскрыт. */
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.drawer-section__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: var(--text3);
+  text-align: left;
+  cursor: pointer;
+}
+
+.drawer-section__head:hover .drawer-section__title { color: var(--text2); }
+
+.drawer-section__title {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.drawer-section__chevron {
+  flex: none;
+  transition: transform var(--t-fast) var(--ease);
+}
+
+.drawer-section.is-collapsed .drawer-section__chevron { transform: rotate(-90deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-section__chevron { transition: none; }
+}
+
+.drawer-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* История — лента фраз: аватар автора, одна связная фраза, время справа.
+   Ни точек, ни вертикальной нити: строка и так читается как предложение,
+   а нить только добавляла графики там, где хватает текста. */
+
+.drawer-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.drawer-activity__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text2);
+}
+
+.drawer-activity__phrase {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.drawer-activity__author {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Время — справа и приглушённо: в ленте оно уточнение, а не содержание. */
+.drawer-activity__time {
+  flex: none;
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+.drawer-activity__empty {
+  font-size: var(--fs-sm);
+  color: var(--text3);
+}
+
+/* Комментарии — переписка, а не журнал: разделитель дня по центру и пузыри.
+   Аватар и время прижаты к НИЗУ пузыря — так строка «имя + текст» читается
+   единым блоком, а служебные мелочи не тянут взгляд вверх. */
+
+.drawer-comments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.drawer-comments__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.drawer-comments__divider {
+  align-self: center;
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+}
+
+.drawer-comments__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.drawer-comments__item {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.drawer-comments__bubble {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg3);
+  border-radius: var(--r-lg);
+  /* Угол у аватара срезан — пузырь «указывает» на автора. */
+  border-bottom-left-radius: var(--r-sm);
+}
+
+.drawer-comments__author {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.drawer-comments__text {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.drawer-comments__time {
+  flex: none;
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+.drawer-comments__empty {
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}

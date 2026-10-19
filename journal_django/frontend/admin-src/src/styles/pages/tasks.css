@@ -1,0 +1,1498 @@
+/* ============================================================
+ *  TASKS PAGE (раздел «Задачи»)
+ *  Пока — только каркас: выбор воронки + переключатель вида.
+ *  Доска и недельная сетка приезжают следующими задачами и получат
+ *  собственные классы рядом с этими.
+ * ============================================================ */
+
+/* Доска шире потолка --content-max: колонки стадий тянутся по горизонтали, и
+   упирать их в 1440px значит терять пару колонок на широком мониторе. Тот же
+   приём, что у доски продлений (.app-page:has(> .renewals-page--board)).
+   Поля по краям остаются от .app-page — своих страница не заводит. */
+.app-page:has(> .tasks-page) { max-width: none; }
+
+.tasks-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tasks-page__loading {
+  padding: var(--space-6);
+  color: var(--text3);
+  font-size: var(--fs-md);
+}
+
+/* Рабочая область: слева полоса воронок, справа сам вид. Фильтр-бар остаётся
+   выше и во всю ширину — он про содержимое вида, а не про выбор воронки. */
+.tasks-page__work {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* min-width:0 обязателен: без него флекс-элемент раздувается по ширине ленты
+   колонок, и горизонтально едет вся страница вместо самой ленты. */
+.tasks-page__view {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Лента колонок вылезает за поля страницы отрицательным margin-inline (см.
+   .task-board и .task-week__grid ниже). Слева этот приём теперь ломается —
+   лента залезла бы под полосу воронок, — поэтому слева поле обнуляем, а
+   справа оставляем: колонки по-прежнему скроллятся до правого края экрана. */
+.tasks-page__view .task-board,
+.tasks-page__view .task-week__grid {
+  margin-left: 0;
+  padding-left: 0;
+  margin-right: calc(-1 * var(--page-pad-x));
+  padding-right: var(--page-pad-x);
+}
+
+@media (max-width: 900px) {
+  .tasks-page__view .task-board,
+  .tasks-page__view .task-week__grid {
+    margin-right: calc(-1 * var(--space-4));
+    padding-right: var(--space-4);
+  }
+}
+
+/* ============================================================
+ *  ФИЛЬТР-БАР (общий для доски и недели)
+ *  Один ряд управления на весь раздел: слева — что показываем (сегменты,
+ *  быстрые селекторы, «Фильтры», поиск), справа — чем показываем. Выбор
+ *  воронки уехал в полосу слева, редкие фильтры — под кнопку «Фильтры»,
+ *  поэтому отдельного ряда-тулбара и строки сброса больше нет.
+ * ============================================================ */
+.tasks-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.tasks-filterbar__select { width: 170px; }
+.tasks-filterbar__select .select-input__trigger {
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  padding: 0 var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  outline: none;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.tasks-filterbar__select .select-input__trigger:focus,
+.tasks-filterbar__select.is-open .select-input__trigger {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.tasks-filterbar__select .select-input__value { font-size: var(--fs-sm); }
+
+@media (max-width: 720px) {
+  /* На узком экране ряд разваливается в столбец: каждый контрол во всю ширину. */
+  .tasks-filterbar > * { flex: 1 1 100%; }
+  .tasks-filterbar__select { width: 100%; }
+}
+
+/* ============================================================
+ *  НЕДЕЛЯ (вид «Неделя»)
+ *  Колонки = дни недели пн-вс, карточка — по due_date. Без drag&drop: смена
+ *  срока перетаскиванием не входит в этот вид (см. спеку раздела).
+ * ============================================================ */
+.task-week {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.task-week__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.task-week__nav-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.task-week__nav-btn:hover { background: var(--bg3); border-color: var(--accent); color: var(--accent); }
+
+.task-week__range {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+  min-width: 220px;
+}
+
+.task-week__today-btn {
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.task-week__today-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+/* На текущей неделе кнопка остаётся на месте, но никуда не ведёт: приглушаем
+   и снимаем указатель-руку, чтобы не обещать действие. */
+.task-week__today-btn:disabled { cursor: default; opacity: 0.6; }
+
+.task-week__updating {
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  margin-left: auto;
+}
+
+.task-week__loading,
+.task-week__error {
+  padding: var(--space-6);
+  color: var(--text3);
+  font-size: var(--fs-md);
+}
+
+/* Горизонтальная прокрутка сетки — внутри своего контейнера, страница
+   целиком по горизонтали не скроллится (см. .task-board с тем же приёмом). */
+.task-week__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(200px, 1fr));
+  gap: var(--space-2);
+  margin-inline: calc(-1 * var(--page-pad-x));
+  padding-inline: var(--page-pad-x);
+  padding-bottom: var(--space-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+@media (max-width: 900px) {
+  .task-week__grid {
+    margin-inline: calc(-1 * var(--space-4));
+    padding-inline: var(--space-4);
+  }
+}
+
+.task-week__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 200px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--space-2);
+}
+
+/* Сегодня — едва заметный фон и чёрная рамка. */
+.task-week__col.is-today {
+  background: color-mix(in oklab, var(--accent) 3%, var(--bg));
+  border-color: var(--accent);
+}
+
+.task-week__col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.task-week__col-dow {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.task-week__col.is-today .task-week__col-dow { color: var(--accent); }
+
+.task-week__col-date {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+.task-week__col.is-today .task-week__col-date {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.task-week__col-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 40px;
+}
+
+.task-week__col-empty {
+  padding: var(--space-3) var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  text-align: center;
+}
+
+/* Карточка недели не тащится (нет DndContext) — курсор не должен обещать
+   drag, которого не будет. */
+.task-week .task-card { cursor: pointer; }
+
+/* ============================================================
+ *  ДОСКА (вид «Доска»)
+ *  Колонки = стадии воронки, карточки = задачи. Тот же приём drag&drop, что
+ *  в разделе «Продления» (RenewalBoard/RenewalColumn): DndContext поверх
+ *  useDroppable-колонок и useDraggable-карточек, подсветка колонки под
+ *  курсором, «призрак» карточки летит отдельно в DragOverlay.
+ * ============================================================ */
+
+/* Сколько от viewport'а съедено над колонками: шапка приложения, шапка
+   раздела, фильтр-бар и зазоры. Было 260px, пока в шапке раздела жил ряд табов
+   воронок; выбор воронки уехал в полосу слева, ряд исчез — шапка стала ниже
+   примерно на строку табов (~32px), и колонкам можно отдать эту высоту. */
+.tasks-page { --tsk-board-top: calc(228px + var(--topbar-h)); }
+
+.task-board__loading,
+.task-board__error {
+  padding: var(--space-6);
+  color: var(--text3);
+  font-size: var(--fs-md);
+}
+
+.task-board {
+  display: flex;
+  gap: var(--space-3);
+  margin-inline: calc(-1 * var(--page-pad-x));
+  padding-inline: var(--page-pad-x);
+  padding-bottom: var(--space-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+@media (max-width: 900px) {
+  .task-board {
+    margin-inline: calc(-1 * var(--space-4));
+    padding-inline: var(--space-4);
+  }
+}
+
+.task-col {
+  /* Тянутся на свободном месте, но не ужимаются — на широком мониторе колонки
+     не жмутся в левый угол, на узком включается горизонтальный скролл ленты. */
+  flex: 1 0 272px;
+  min-width: 272px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  /* Ни зазора, ни полей: шапка-плашка тянется от края до края и лежит вплотную
+     к верху колонки. Вертикальные интервалы держат сами дети (см. ниже). */
+  gap: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 0;
+  /* Без обрезки прямой угол колонки срезал бы скругление плашки. */
+  overflow: hidden;
+  max-height: calc(100vh - var(--tsk-board-top));
+}
+
+.task-col--over {
+  border-color: var(--info);
+  background: color-mix(in oklab, var(--info) 6%, var(--bg));
+}
+
+/* Поля колонки обнулены, поэтому боковые отступы поле быстрого добавления
+   держит само. Живёт внизу колонки — нижний отступ вместо верхнего. */
+/* Поле повторяет геометрию кнопки «+ Добавить задачу» (.task-col__add): те же
+   отступы, тот же кегль, ни рамки, ни подложки. Иначе клик по ссылке подменяет
+   её другим по виду контролом — место прыгает, и глаз каждый раз заново ищет,
+   куда попал курсор. Фокус показываем подложкой, а не рамкой: рамка сдвинула бы
+   содержимое на свою толщину. */
+.task-col__quick-add {
+  margin: 0 var(--space-3) var(--space-3);
+  padding: var(--space-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  outline: none;
+}
+.task-col__quick-add::placeholder { color: var(--text3); }
+.task-col__quick-add:focus { background: var(--bg2); }
+
+.task-col__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-y: auto;
+  min-height: 40px;
+  /* Сверху/снизу меньше, чем по бокам: после сплошной плашки полные поля
+     смотрятся пустовато. */
+  padding: var(--space-2) var(--space-3);
+}
+
+.task-col__note {
+  padding: var(--space-3) var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  text-align: center;
+}
+
+.task-col__body .empty-state { padding: var(--space-4) var(--space-2); }
+.task-col__body .empty-state__title { font-size: var(--fs-sm); }
+.task-col__body .empty-state__hint { font-size: var(--fs-xs); max-width: none; }
+
+/* Вид кнопки — .btn ghost sm (классы в разметке); здесь только отступы. */
+.task-col__more {
+  margin: 0 var(--space-3) var(--space-3);
+}
+
+/* Свёрнутое быстрое добавление: ссылка во всю ширину колонки. Боковые отступы,
+   как и у .task-col__more, держит сама — поля колонки обнулены. */
+.task-col__add {
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--space-2);
+  margin: 0 var(--space-3) var(--space-3);
+  text-align: left;
+  cursor: pointer;
+}
+.task-col__add:hover { color: var(--text); background: var(--bg2); }
+
+/* Карточка задачи. */
+/* Плотность: вертикальный padding урезан на ступень шкалы (8px → 4px), gap
+   переведён с хардкода на токен. Колонка доски длинная, и каждый лишний
+   пиксель воздуха стоит примерно одной видимой карточки на экран. */
+.task-card {
+  position: relative;   /* якорь для .task-card__actions */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--space-1) var(--space-3);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.task-card:hover {
+  border-color: var(--line-3);
+}
+
+/* Карточка-источник во время драга тускнеет на месте, сам «полёт» рисует
+   .task-card--overlay внутри DragOverlay (см. TaskBoard.tsx). */
+.task-card--dragging { opacity: 0.35; }
+
+.task-card--overlay {
+  width: 248px;
+  cursor: grabbing;
+  box-shadow: var(--shadow-popover);
+}
+
+.task-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.task-card__id {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+}
+
+/* Ученик — приглушённая подпись справа в шапке: имя длинное, поэтому режем
+   многоточием, а не переносим на вторую строку. */
+.task-card__student {
+  min-width: 0;
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-card__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-card__title.is-closed { color: var(--text3); text-decoration: line-through; }
+.task-card__check { color: var(--success); flex: none; }
+
+.task-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+}
+
+.task-card__comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text3);
+}
+
+/* Просрочка: только цвет текста и точка-маркер. Заливать всю карточку красным
+   нельзя — на доске с десятком просроченных задач читать станет нечего. */
+.task-card__due {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.task-card__due.is-overdue { color: var(--bad); font-weight: 500; }
+
+.task-card__overdue-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bad);
+}
+
+/* Ряд чипов карточки: сейчас в нём только приоритет, и рисуется он лишь у
+   неординарного (см. TaskCard.tsx) — пустой строки не остаётся. */
+.task-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.task-card__chip {
+  font-size: var(--fs-2xs);
+  color: var(--text2);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  padding: 1px var(--space-2);
+}
+.task-card__chip.is-high { color: var(--bad); background: var(--bad-bg); }
+.task-card__chip.is-low { color: var(--text3); opacity: 0.75; }
+
+/* Быстрые действия висят поверх карточки и проявляются только при наведении
+   (и при фокусе с клавиатуры — иначе кнопки недостижимы табом). */
+.task-card__actions {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  opacity: 0;
+  transition: opacity 0.12s var(--ease-out);
+}
+.task-card:hover .task-card__actions,
+.task-card:focus-within .task-card__actions { opacity: 1; }
+
+/* ============================================================
+ *  ПАНЕЛЬ КАРТОЧКИ (TaskDrawer)
+ *  Устройство 1-в-1 с .renewal-drawer (см. renewals.css) — тот же выезд
+ *  справа, тот же ритм секций и ленты активности.
+ * ============================================================ */
+
+.task-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  display: flex;
+  justify-content: flex-end;
+  /* var(--z-overlay), а не прежние «40 на глаз». Боковая панель — модальная
+     поверхность: она обязана закрывать собой и содержимое, и навигацию. С 40
+     её накрывала верхняя панель узкого режима (--z-nav, 900), которая появилась
+     позже, — и срезала ровно первую строку панели, то есть имя и кнопку
+     закрытия. Шкала слоёв объявлена в tokens.css именно чтобы такие столкновения
+     разрешались порядком уровней, а не сравнением случайных чисел. */
+  z-index: var(--z-overlay);
+}
+
+/* Ширина панели — пользовательская (ручка на левом крае, TaskDrawer.tsx),
+   поэтому базовое значение здесь — только запасной вариант до применения
+   инлайнового style. container-type включает контейнерные запросы ниже:
+   раскладка полей реагирует на фактическую ширину ПАНЕЛИ, а не окна. */
+.task-drawer {
+  position: relative;
+  width: min(440px, 100%);
+  height: 100%;
+  background: var(--bg2);
+  border-left: 1px solid var(--line);
+  padding: var(--space-6);
+  /* Запас снизу: без него последний блок (обычно «История») упирается в край
+     экрана, и не видно, что список кончился. */
+  padding-bottom: var(--space-10);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow-y: auto;
+  overflow-x: hidden;
+  container-type: inline-size;
+}
+
+/* Ручка изменения ширины — общий .drawer-resize-handle (modal.css) +
+   DrawerResizeHandle.tsx, механика в hooks/useDrawerResize.ts. От панели ей
+   нужен только position:relative (см. .task-drawer выше) — самой ручке
+   ничего специфичного для раздела «Задачи» не нужно. */
+
+.task-drawer__loading {
+  color: var(--text3);
+  font-size: 14px;
+  padding: var(--space-4) 0;
+}
+
+/* Шапка в три ряда: служебный (номер, ссылка, меню, закрытие) → действие и
+   состояние с автором справа → заголовок. Раньше номер, заголовок и кнопки
+   стояли одной строкой, и длинный заголовок выдавливал кнопки за край. */
+.task-drawer__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.task-drawer__head-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.task-drawer__head-spacer { flex: 1; }
+
+.task-drawer__head-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.task-drawer__id {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+/* Копирование ссылки на задачу — рядом с её номером: это и есть то, чем
+   делятся с коллегой. */
+.task-drawer__link-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text3);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.task-drawer__link-btn:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+/* Кто поставил задачу и когда — прижато вправо, мелким: это справка, а не
+   свойство карточки, и в списке полей ниже читалось как ещё одно поле. */
+.task-drawer__author {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.task-drawer__author-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.task-drawer__author-name {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-drawer__author-date {
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Заголовок в покое — текст, а не поле ввода: карточку чаще читают, чем правят.
+   Инпут появляется по клику (task-drawer__title-input ниже) и повторяет ту же
+   типографику, чтобы текст не прыгнул при переключении. */
+.task-drawer__title {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: var(--space-1) var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
+  cursor: text;
+}
+
+.task-drawer__title:hover {
+  background: var(--bg3);
+}
+
+.task-drawer__title-input {
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: var(--space-1) var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
+}
+
+.task-drawer__title-input:hover {
+  border-color: var(--border);
+}
+
+.task-drawer__title-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg3);
+}
+
+/* .task-drawer__close живёт в modal.css — общий вид с кнопкой закрытия
+   панели сделки. */
+
+/* Текущая стадия: точка её цветом + подпись. Стоит в ряду действий шапки
+   рядом с кнопкой «Выполнить». */
+.task-drawer__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.task-drawer__status-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.task-drawer__status-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.task-drawer__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.task-drawer__section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Свойства идут одним столбцом, а не парами, даже на широкой панели: строка
+   теперь горизонтальная (подпись слева, значение справа), и две таких пары в
+   ряд дают четыре колонки текста — читать их глазом уже тяжело. */
+.task-drawer__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Исполнители в покое: стопка аватаров и следом имена. Имена обрезаются
+   многоточием — пятеро назначенных иначе растянули бы строку свойства на
+   две-три и разъехались бы с соседними полями. Кого не видно, подскажет
+   аватар: у каждого свой title (см. AvatarStack). */
+.task-drawer__assignees {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.task-drawer__assignees-names {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Пустое описание — одна строка-приглашение вместо textarea на четыре строки:
+   у большинства задач описания нет, и пустое поле только занимало место. */
+.task-drawer__add-description {
+  align-self: flex-start;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text3);
+  background: transparent;
+  border: none;
+  padding: var(--space-1) var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  cursor: text;
+}
+
+.task-drawer__add-description:hover {
+  background: var(--bg3);
+  border-radius: var(--r-sm);
+  color: var(--text2);
+}
+
+.task-drawer__description-input {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: var(--space-2);
+}
+
+/* Поле комментария — во всю ширину и скруглённое: под лентой переписки оно
+   читается как строка ввода сообщения, а не как ещё одно поле формы. */
+.task-drawer__comment-input {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  color: var(--text);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* Кнопка отправки появляется только с набранным текстом (см. TaskDrawer). */
+.task-drawer__comment-send {
+  align-self: flex-start;
+}
+
+.task-drawer__meta {
+  gap: var(--space-1);
+}
+
+.task-drawer__meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+.task-drawer__meta-row > :last-child {
+  color: var(--text2);
+}
+
+/* На широкой панели три строки метаданных встают в ряд (метка над значением)
+   вместо столбца label:value — иначе пустует вся правая половина панели. */
+@container (min-width: 560px) {
+  .task-drawer__meta {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  .task-drawer__meta-row {
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 160px;
+  }
+}
+
+/* Комментарий и лента активности — на узкой панели друг под другом (как
+   раньше), на широкой — двумя колонками бок о бок, чтобы использовать
+   освободившееся место. */
+/* Переписка и история идут строго друг под другом на любой ширине. Раньше
+   широкая панель ставила их двумя колонками — при растягивании блоки прыгали
+   на один уровень, и читать ленту сверху вниз становилось нечем. */
+.task-drawer__lower {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+}
+
+.task-drawer__timeline-section {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Раскрытие панели на весь экран на телефоне — в modal.css, одним правилом
+   с панелью сделки. */
+
+/* ============================================================
+ *  ШАПКА РАЗДЕЛА: полоса воронок, сегменты, поповер «Фильтры»
+ *  Три ряда (заголовок / воронка+вид / фильтр-бар) сжаты в два: выбор воронки
+ *  уехал в полосу слева от доски, редкие фильтры — под кнопку «Фильтры».
+ * ============================================================ */
+
+/* ------------------------------------------------------------
+ *  ПОЛОСА ВОРОНОК (слева от доски, по образцу Weeek)
+ *  Две ширины — свёрнутая и развёрнутая; это единственные размеры блока,
+ *  которых нет в шкале токенов: свёрнутая равна плитке с аббревиатурой,
+ *  развёрнутая — минимуму, на котором название воронки не переносится.
+ * ------------------------------------------------------------ */
+.task-rail {
+  --task-rail-w: 290px;
+  --task-rail-w-collapsed: 48px;
+
+  box-sizing: border-box;
+  flex: 0 0 var(--task-rail-w);
+  width: var(--task-rail-w);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  /* Только ширина: анимировать переключение содержимого нечем — списки
+     карточек и плиток разные, они просто подменяются. */
+  transition: width var(--t-fast) var(--ease), flex-basis var(--t-fast) var(--ease);
+}
+
+.task-rail--collapsed {
+  flex-basis: var(--task-rail-w-collapsed);
+  width: var(--task-rail-w-collapsed);
+  align-items: center;
+}
+
+.task-rail__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* Свёрнутая полоса — один шеврон по центру узкой колонки. */
+.task-rail--collapsed .task-rail__head { justify-content: center; }
+
+.task-rail__toggle {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text3);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+              border-color var(--t-fast) var(--ease);
+}
+.task-rail__toggle:hover { background: var(--bg3); border-color: var(--accent); color: var(--accent); }
+.task-rail__toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Кнопка «Добавить доску» занимает всё, что осталось от шеврона: подпись
+   длинная, а полоса узкая — на своей ширине она бы обрезалась. */
+.task-rail__head .ui-btn { flex: 1 1 auto; min-width: 0; }
+
+/* ---- развёрнутый список ---- */
+/* Тот же потолок, что у колонок доски: длинный список воронок скроллится
+   внутри полосы, а не растягивает страницу мимо доски. */
+.task-rail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: calc(100vh - var(--tsk-board-top));
+  overflow-y: auto;
+}
+
+/* Строка списка: карточка + меню «…». Меню лежит поверх карточки абсолютом, а
+   не рядом с ней флекс-соседом: полоса узкая (290px), и отнятые у названия
+   26px переносили бы его на вторую строку почти у каждой воронки. */
+.task-rail__row {
+  position: relative;
+}
+
+.task-rail__row-menu {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: inline-flex;
+}
+
+/* Общий триггер — 34px квадрат с рамкой (detail.css); в карточке полосы он
+   выше самой строки названия, поэтому ужимаем и снимаем рамку, как это уже
+   сделано для шапки колонки доски (.board-col-head__actions). */
+.task-rail__row-menu .action-menu__trigger {
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text3);
+}
+
+.task-rail__row-menu .action-menu__trigger:hover,
+.task-rail__row-menu .action-menu__trigger[data-state="open"] {
+  background: var(--bg3);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* Поле переименования замещает карточку целиком — повторяем её кегль и
+   насыщенность, чтобы список не «прыгал» при входе в правку. */
+.task-rail__rename-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  outline: none;
+}
+
+.task-rail__rename-input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.task-rail__card {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font: inherit;
+  color: var(--text2);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+              color var(--t-fast) var(--ease);
+}
+.task-rail__card:hover:not(.is-active) { background: var(--bg3); color: var(--text); }
+.task-rail__card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.task-rail__card.is-active {
+  background: var(--bg3);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.task-rail__name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  /* Длинное название переносим, а не обрезаем: воронок мало, вертикали хватает. */
+  overflow-wrap: anywhere;
+  /* Место под меню «…», висящее поверх правого верхнего угла карточки:
+     26px триггера + 4px его отступа от края. */
+  padding-right: var(--space-8);
+}
+
+.task-rail__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--fs-2xs);
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+.task-rail__meta-sep { color: var(--text4); }
+
+/* ---- свёрнутые плитки ---- */
+.task-rail__tiles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* Поле по кругу — не воздух, а место под значок: он свисает с угла плитки на
+     4px, а прокручиваемый контейнер обрезает всё, что вышло за padding-box. */
+  padding: var(--space-1);
+  max-height: calc(100vh - var(--tsk-board-top));
+  overflow-y: auto;
+}
+
+.task-rail__tile {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg3);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font: inherit;
+  color: var(--text2);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+              color var(--t-fast) var(--ease);
+}
+.task-rail__tile:hover:not(.is-active) { border-color: var(--border-strong); color: var(--text); }
+.task-rail__tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.task-rail__tile.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.task-rail__abbr {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Значок открытых задач висит на углу плитки — в 32px рядом с аббревиатурой
+   он бы не поместился. */
+.task-rail__tile-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  /* На узком экране полоса ложится над доской горизонтальной лентой плиток:
+     290px слева отняли бы у доски целую колонку.
+
+     align-items: stretch обязателен. У .tasks-page__work в основном правиле
+     стоит flex-start — при горизонтальной раскладке это выравнивание по
+     ВЕРХУ, ровно то, что нужно. Но с flex-direction: column поперечная ось
+     становится горизонтальной, и то же flex-start означает уже другое:
+     «не растягивать по ширине, сжать по содержимому». Полосе это когда-то
+     залатали костылём width: 100%, а вот область вида осталась без ширины —
+     и сжималась по содержимому ленты колонок, то есть на всю её длину. Лента
+     переставала быть прокручиваемой (ей хватало места), и горизонтально
+     ехала вся страница вместе с шапкой и фильтрами. */
+  .tasks-page__work { flex-direction: column; align-items: stretch; }
+  .task-rail,
+  .task-rail--collapsed { flex-basis: auto; width: 100%; align-items: stretch; }
+
+  /* Развёрнутый список воронок не прокручивается внутри себя: та же ловушка
+     вложенной прокрутки, что и у колонки доски ниже. Воронок единицы, список
+     короткий — пусть просто занимает свою высоту. */
+  .task-rail__list { max-height: none; overflow-y: visible; }
+
+  /* ── СВЁРНУТАЯ ПОЛОСА ──
+     Здесь она перестаёт быть вертикальной колонкой и становится одной
+     горизонтальной строкой: аббревиатуры слева, кнопка разворота справа.
+
+     Прежде свёрнутое состояние сохраняло раскладку рабочего стола, где полоса
+     стоит слева узким столбцом. Растянутое на всю ширину, оно выглядело
+     поломанным: кнопка разворота висела по центру пустой плашки, а плитки
+     жались в её левый нижний угол.
+
+     Отдельная причина, по которой это состояние вообще попадается на телефоне:
+     «свёрнута или нет» хранится в localStorage и общее с рабочим столом. То
+     есть человек сворачивал полосу под свой монитор, а получал этот вид на
+     телефоне, ничего там не нажимая. */
+  .task-rail--collapsed {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  /* Кнопка остаётся ПЕРВОЙ — то есть слева, ровно там же, где она стоит в
+     развёрнутом состоянии (там .task-rail__head — верхняя строка полосы, и
+     кнопка в ней первая). Иначе при переключении она перескакивала бы с одного
+     края блока на другой: попасть по органу управления, который меняет место
+     от собственного нажатия, заметно труднее, чем по неподвижному. */
+  .task-rail--collapsed .task-rail__tiles {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    max-height: none;
+    overflow-x: auto;
+    /* Значок открытых задач свисает с угла плитки на 4px, а прокручиваемый
+       контейнер режет всё, что вышло за padding-box, — отсюда поле сверху. */
+    padding: 6px var(--space-1);
+  }
+  .task-rail--collapsed .task-rail__tile {
+    flex: 0 0 auto;
+    /* 32px хватало указателю мыши, пальцу — нет. */
+    width: 38px;
+    height: 38px;
+  }
+  .task-rail--collapsed .task-rail__abbr { font-size: var(--fs-xs); }
+
+  /* Шеврон показывает НАПРАВЛЕНИЕ разворота, а здесь полоса разворачивается
+     вниз, а не вправо. Поворот на 90° переводит «влево» в «вверх», а «вправо»
+     в «вниз» — обе стрелки разом, без ветвления в разметке. */
+  .task-rail__toggle svg { transform: rotate(90deg); }
+
+  /* Ни один контрол фильтр-бара не имеет права распереть ряд шире экрана:
+     без min-width флекс-элемент не сжимается меньше своего содержимого, а
+     подписи сегментов набраны nowrap. */
+  .tasks-filterbar > * { min-width: 0; }
+
+  /* Колонка перестаёт прокручиваться внутри себя. На телефоне страница и так
+     листается вертикально, и вложенная прокрутка внутри колонки превращается
+     в ловушку: жест попадает то в колонку, то в страницу. Высота колонки
+     считалась от 100vh минус фиксированные 228px — величина подобрана под
+     широкий экран и верхнюю панель узкого режима не учитывает вовсе. */
+  .task-col { max-height: none; }
+  .task-col__body { overflow-y: visible; }
+}
+
+/* На телефоне колонка занимает почти весь экран, оставляя краешек следующей.
+   272px из основного правила рассчитаны на монитор: на 390px они дают полторы
+   колонки в кадре — половинка сбоку читается как обрезанная вёрстка, а не как
+   «листай дальше». */
+@media (max-width: 560px) {
+  .task-col {
+    flex: 0 0 86%;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+/* Плотный вариант .segmented: тот же переключатель, но в один ряд с фильтрами,
+   поэтому кегль и отступы на шаг меньше. */
+.task-segments {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+}
+
+.task-segments__btn {
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.task-segments__btn:hover:not(.is-active) { color: var(--text); }
+
+/* Выбранный сегмент — чёрная заливка (общий язык «выбранного»). */
+.task-segments__btn.is-active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.task-segments__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.task-filters__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 34px;
+  padding: 0 var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+              color var(--t-fast) var(--ease);
+}
+
+.task-filters__trigger:hover { color: var(--text); border-color: var(--text3); }
+.task-filters__trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.task-filters__trigger.is-active,
+.task-filters__trigger[data-state="open"] {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--bg2);
+}
+
+.task-filters__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);   /* как .ui-btn--primary: единственный текст поверх акцента */
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.task-filters__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 260px;
+  padding: var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-popover);
+}
+
+/* Radix кладёт Content в свою обёртку с transform, а transform создаёт stacking
+   context — z-index на самой панели остаётся внутри него. Чтобы панель не ушла
+   под модалку, поднимаем именно обёртку. */
+/* Обёртка Radix позиционируется transform'ом и создаёт свой контекст
+   наложения — z-index самой панели остаётся внутри него. Поднимаем обёртку,
+   иначе всплывашка уедет под модалку. */
+[data-radix-popper-content-wrapper]:has(> .task-filters__panel),
+[data-radix-popper-content-wrapper]:has(> .task-view__panel) { z-index: var(--z-popover); }
+
+/* ============================================================
+ *  ПЕРЕКЛЮЧАТЕЛЬ ВИДА (TaskViewSwitcher.tsx)
+ *  Кнопка с текущим видом в левом краю ряда управления; остальные виды —
+ *  плиткой во всплывающей панели. Сегментированный ряд из двух кнопок занимал
+ *  место наравне с фильтрами, хотя вид переключают редко.
+ * ============================================================ */
+.task-view__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 34px;
+  padding: 0 var(--space-3);
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+
+.task-view__trigger:hover { border-color: var(--text3); }
+.task-view__trigger[data-state='open'] { border-color: var(--accent); background: var(--bg2); }
+
+.task-view__trigger-icon {
+  display: inline-flex;
+  color: var(--text3);
+}
+
+.task-view__chevron {
+  color: var(--text3);
+  transition: transform var(--t-fast) var(--ease);
+}
+
+.task-view__trigger[data-state='open'] .task-view__chevron { transform: rotate(180deg); }
+
+.task-view__panel {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-popover);
+  padding: var(--space-2);
+  z-index: var(--z-popover);
+}
+
+/* Плитка, а не список: виды различают по иконке быстрее, чем по подписи. */
+.task-view__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 76px);
+  gap: var(--space-1);
+}
+
+.task-view__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.task-view__tile:hover { background: var(--bg3); color: var(--text); }
+
+.task-view__tile.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 500;
+}
+
+.task-view__tile-icon { display: inline-flex; }
+
+/* ============================================================
+ *  НАСТРОЙКА СТАДИЙ ПРЯМО НА ДОСКЕ
+ *  Переименование в шапке колонки, плитка «Добавить колонку» в конце ленты,
+ *  диалог настроек стадии. Отдельной страницы настроек у раздела больше нет.
+ * ============================================================ */
+
+/* Поле переименования замещает плашку стадии — размеры повторяют
+   .board-col-head, чтобы колонка не «прыгала» при входе в правку. */
+.task-col__rename {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.task-col__rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  background: var(--bg2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  outline: none;
+}
+
+.task-col__rename-input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Плитка «Добавить колонку»: ширина колонки, но приглушённая — это
+   приглашение, а не такая же колонка с карточками. */
+.task-col--add {
+  background: transparent;
+  border-style: dashed;
+  justify-content: flex-start;
+  align-self: flex-start;
+}
+
+.task-col--add:hover { border-color: var(--border-strong); }
+
+.task-col__add-stage {
+  background: transparent;
+  border: none;
+  border-radius: var(--r);
+  color: var(--text3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--space-3);
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-col__add-stage:hover { color: var(--text); }
+
+/* Раскрытое поле названия колонки повторяет геометрию кнопки над ним
+   (.task-col__add-stage): рамку и пунктирную обводку держит сама плитка,
+   поэтому у поля их быть не должно — иначе плитка при клике подменяется
+   другим по виду контролом. */
+.task-col__add-stage-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--space-3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  background: transparent;
+  border: none;
+  border-radius: var(--r);
+  color: var(--text);
+  outline: none;
+}
+.task-col__add-stage-input::placeholder { color: var(--text3); }
+
+/* Диалог настроек стадии (StageSettingsDialog). */
+/* Как будет выглядеть шапка колонки: цвет стадии выбирают на глаз, а на доске
+   он появится только после сохранения. */
+.stage-settings__preview {
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.stage-settings__hint {
+  margin: var(--space-2) 0 0;
+  color: var(--text3);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}

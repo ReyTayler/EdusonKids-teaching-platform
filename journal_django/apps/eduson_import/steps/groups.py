@@ -18,8 +18,9 @@ apps.memberships.repository._assert_individual_capacity при add/update/place)
 Пройденное до учёта (спека §5.4, «продолжение курса» как memberships._seed_continuation):
   Group.lesson_number_offset = N; GroupMembership.lessons_done = N + Σ вес проведённых held
 группы — настоящих и с исправленным годом (вкладка «Июнь 2027», ImportContext.year_fixed),
-то есть всех, кроме фиктивных (вес — apps.lessons.weights.lesson_weight: 45 мин = 0.5).
-N — из ImportContext.
+то есть всех, кроме фиктивных (вес — apps.lessons.weights.lesson_weight: 45 мин = 0.5),
+плюс уроки из таблиц Eduson (--sheets-dir, ImportContext.sheet_weight).
+N — из ImportContext (уже за вычетом уроков из таблиц).
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from apps.eduson_import.context import ImportContext, ImportDataError
+from apps.eduson_import.context import EDUSON_LESSON_MINUTES, ImportContext, ImportDataError
 from apps.eduson_import.identity import REASON_AMBIGUOUS, ResolvedStudent, resolve_students
 from apps.eduson_import.normalize import norm_email, norm_name, norm_phone, norm_tg
 from apps.eduson_import.sqlite_source import EdusonSource
@@ -43,7 +44,7 @@ from apps.students.models import Student, StudentComment
 
 # Урок Eduson — 60 минут (legacy services/schedule.js:6 REGULAR_DURATION). Отработки по
 # 45 минут — свойство урока, не группы: их длительность пишет шаг уроков.
-GROUP_DURATION_MINUTES = 60
+GROUP_DURATION_MINUTES = EDUSON_LESSON_MINUTES
 FORMATS = {'individual': True, 'group': False}     # format → is_individual
 
 # Поле ученика ← колонка participants, и как сравнивать значения при склейке.
@@ -274,7 +275,7 @@ def _import_memberships(src: EdusonSource, groups: dict[int, dict],
         if active and FORMATS[g['format']] and len(student_ids) > 1:
             raise ImportDataError(f'группа {code}: индивидуальная, но в ней {len(student_ids)} ученика — '
                                   'в KOTOKOD у индивидуальной группы не больше одного активного ученика')
-        done = ctx.pre_system.get(gid, Decimal(0)) + held_weight.get(gid, Decimal(0))
+        done = ctx.pre_system.get(gid, Decimal(0)) + held_weight.get(gid, Decimal(0)) + ctx.sheet_weight(gid)
         GroupMembership.objects.bulk_create([
             GroupMembership(group_id=ctx.group_by_eduson[gid], student_id=sid, lessons_done=done,
                             start_date=_date(g['start_date'], code), active=active)

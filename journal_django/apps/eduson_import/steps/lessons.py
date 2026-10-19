@@ -51,6 +51,21 @@ Held «2027-06-DD» — настоящие уроки июня 2026, отмеч�
 дата + номер + токен, у плана — seq), поэтому совпавшая дата не сдвигается, а только
 отмечается в отчёте; health покажет её как duplicate_dates (предупреждение).
 
+УРОКИ ИЗ ТАБЛИЦ EDUSON (--sheets-dir, ImportContext.sheet_backfill; поправки владельца
+2026-10-19). Уроки до запуска старой системы, которых нет в её базе, но которые
+отмечены в таблицах (правило отбора — analysis.sheet_backfill). Заводятся как held с
+исправленным годом: проведённые, «был» всем ученикам группы, без зарплаты и отзыва,
+время — из ячейки таблицы, иначе слот группы; кто провёл — преподаватель группы на
+дату по истории (замен в таблице нет). Длительность — урок Eduson (60 мин). Встают
+перед настоящими уроками (их даты раньше первого проведённого), нумерация — по дате
+от оставшегося N. Метка — SUBMITTED_BY_SHEETS. В ctx.lesson_by_session /
+planned_by_session их нет: сессии Eduson у них нет.
+Исключение — отметка в день НЕЗАПОЛНЕННОЙ (scheduled) сессии группы (SheetBackfill.fills):
+это тот же урок. Отдельной позиции нет — сессия проводится этой отметкой: факт с меткой
+SUBMITTED_BY_SHEETS встаёт на позицию сессии (её seq/номер), позиция — done; время — из
+ячейки, иначе своё у сессии; кто провёл — правило held. Такой урок в картах по сессии есть.
+Отменённая сессия в тот же день остаётся маркером отмены, урок из таблицы — отдельно.
+
 ФИКТИВНЫЕ held (ImportContext.fake_held: дата позже дня импорта, год не исправить) —
 ни уроком, ни позицией: они уже учтены в N группы. Отзывов на них по данным нет;
 если встретится — на ручную проверку.
@@ -71,7 +86,7 @@ from zoneinfo import ZoneInfo
 
 from apps.core.utils.dates import msk_now
 from apps.eduson_import.analysis import parse_moment
-from apps.eduson_import.context import ImportContext, ImportDataError
+from apps.eduson_import.context import EDUSON_LESSON_MINUTES, ImportContext, ImportDataError
 from apps.eduson_import.sqlite_source import EdusonSource
 from apps.eduson_import.steps import require_atomic
 from apps.feedback.models import LessonFeedback
@@ -88,6 +103,8 @@ SUBMITTED_BY = 'eduson-import'
 # Урок из held с ошибочным годом: перенесён из таблицы Eduson (вкладка «Июнь 2027»,
 # год исправлен). Отдельная метка — чтобы такие уроки можно было найти и пересмотреть.
 SUBMITTED_BY_YEAR_FIXED = 'eduson-import:year-fixed'
+# Урок из таблицы Eduson (до запуска старой системы, --sheets-dir): в базе Eduson его нет.
+SUBMITTED_BY_SHEETS = 'eduson-import:sheets'
 
 MSK = ZoneInfo('Europe/Moscow')
 HELD, SCHEDULED, CANCELLED_EDUSON = 'held', 'scheduled', 'cancelled'
@@ -124,6 +141,27 @@ class _Session:
     row: dict
     date: datetime.date
     time: datetime.time | None
+    sheet: bool = False       # урок из таблицы Eduson: сессии нет, row — синтетическая
+    filled: bool = False      # незаполненная сессия, проведённая отметкой таблицы
+
+    @property
+    def key(self):
+        """Ключ факта/позиции внутри шага: sessions.id; у урока из таблицы — (группа, дата)."""
+        return ('sheet', self.row['group_id'], self.date) if self.sheet else self.row['id']
+
+    @property
+    def order(self) -> int:
+        # Тай-брейк при равных дате и времени. С проведённой и незаполненной сессией урок
+        # из таблицы дату не делит (sheet_backfill), с отменённой — может: факт идёт первым.
+        return -1 if self.sheet else self.row['id']
+
+
+def _sheet_session(group_id: int, day: datetime.date, when: datetime.time | None) -> _Session:
+    """Урок из таблицы в форме проведённой сессии — дальше идёт общим путём held."""
+    row = {'id': None, 'group_id': group_id, 'status': HELD, 'type': 'regular',
+           'duration_min': EDUSON_LESSON_MINUTES, 'recording_url': None, 'created_at': None,
+           'teacher_id': None}
+    return _Session(row, day, when, sheet=True)
 
 
 @dataclass
@@ -144,6 +182,7 @@ def import_lessons(src: EdusonSource, ctx: ImportContext) -> None:
     require_atomic('уроки')
     groups = _group_info(src, ctx)
     by_group: dict[int, list[_Session]] = defaultdict(list)
+    fills = ctx.sheet_fills()          # sessions.id → время из ячейки таблицы
     for s in src.rows('sessions'):
         if s['group_id'] not in groups:
             raise ImportDataError(f'урок #{s["id"]}: группа #{s["group_id"]} не найдена')
@@ -158,11 +197,22 @@ def import_lessons(src: EdusonSource, ctx: ImportContext) -> None:
         except ValueError:
             raise ImportDataError(f'урок #{s["id"]}: дата не в формате ГГГГ-ММ-ДД') from None
         day = ctx.year_fixed.get(s['id'], day)
-        by_group[s['group_id']].append(_Session(s, day, _time(s['time'], s['id'])))
+        when = _time(s['time'], s['id'])
+        if s['id'] in fills:
+            # Отметка таблицы проводит эту сессию: дальше она идёт путём held.
+            by_group[s['group_id']].append(_Session({**s, 'status': HELD}, day, fills[s['id']] or when,
+                                                    filled=True))
+        else:
+            by_group[s['group_id']].append(_Session(s, day, when))
+    for gid in groups:
+        backfill = (ctx.sheet_backfill or {}).get(gid)
+        for day, when in ctx.sheet_lessons(gid):
+            if backfill is None or day not in backfill.fills:
+                by_group[gid].append(_sheet_session(gid, day, when))
 
     now = msk_now()
-    lessons: list[tuple[int, int, Lesson]] = []                  # (sessions.id, group_id Eduson, факт)
-    positions: list[tuple[int, PlannedLesson, int | None]] = []  # (sessions.id, позиция, sessions.id факта)
+    lessons: list[tuple[object, int, Lesson]] = []                     # (ключ _Session, group_id Eduson, факт)
+    positions: list[tuple[object, PlannedLesson, object | None]] = []  # (ключ, позиция, ключ факта)
     # Порядок групп и сессий детерминирован — id в KOTOKOD от запуска к запуску одни и те же.
     for gid in sorted(by_group):
         _plan_group(gid, by_group[gid], groups[gid], ctx, now, lessons, positions)
@@ -170,13 +220,14 @@ def import_lessons(src: EdusonSource, ctx: ImportContext) -> None:
     if ctx.year_fixed:
         ctx.report.append(f'проведённых с датой следующего года (таблицы Eduson, вкладка «Июнь 2027») — '
                           f'{len(ctx.year_fixed)}: перенесены уроками с годом −1')
+    _report_sheets(groups, ctx)
     if ctx.fake_held:
         ctx.report.append(f'фиктивных проведённых, чей год не исправить (дата −1 год всё ещё позже дня '
                           f'импорта) — {len(ctx.fake_held)}: учтены в пройденном до учёта')
 
     created = Lesson.objects.bulk_create([lesson for _, _, lesson in lessons], batch_size=1000)
-    for (sid, _, _), lesson in zip(lessons, created):
-        ctx.lesson_by_session[sid] = lesson.id
+    lesson_ids = {key: lesson.id for (key, _, _), lesson in zip(lessons, created)}
+    ctx.lesson_by_session.update({k: v for k, v in lesson_ids.items() if isinstance(k, int)})
 
     LessonAttendance.objects.bulk_create([
         LessonAttendance(lesson_id=lesson.id, student_id=student_id, present=True)
@@ -184,12 +235,13 @@ def import_lessons(src: EdusonSource, ctx: ImportContext) -> None:
         for student_id in groups[gid].students
     ], batch_size=1000)
 
-    for _, position, fact_sid in positions:
-        if fact_sid is not None:
-            position.fact_lesson_id = ctx.lesson_by_session[fact_sid]
+    for _, position, fact_key in positions:
+        if fact_key is not None:
+            position.fact_lesson_id = lesson_ids[fact_key]
     created_positions = PlannedLesson.objects.bulk_create([p for _, p, _ in positions], batch_size=1000)
-    for (sid, _, _), position in zip(positions, created_positions):
-        ctx.planned_by_session[sid] = position.id
+    for (key, _, _), position in zip(positions, created_positions):
+        if isinstance(key, int):
+            ctx.planned_by_session[key] = position.id
 
 
 def _group_info(src: EdusonSource, ctx: ImportContext) -> dict[int, _GroupInfo]:
@@ -227,7 +279,7 @@ def _group_info(src: EdusonSource, ctx: ImportContext) -> dict[int, _GroupInfo]:
 def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: ImportContext, now,
                 lessons: list, positions: list) -> None:
     """Сессии одной группы → факты и позиции в хронологии (дата, время, id)."""
-    sessions.sort(key=lambda s: (s.date, s.time or _MIDNIGHT, s.row['id']))
+    sessions.sort(key=lambda s: (s.date, s.time or _MIDNIGHT, s.order))
     number = ctx.pre_system.get(gid, Decimal(0))
     seq = 0
     counts: Counter[str] = Counter()
@@ -235,7 +287,7 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
     fixed_days: list[datetime.date] = []
 
     for s in sessions:
-        row, sid = s.row, s.row['id']
+        row, sid, key = s.row, s.row['id'], s.key
         if sid in ctx.fake_held:
             counts['fake'] += 1
             continue
@@ -250,7 +302,7 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
         plan_substitute = substitute if substitute is not None and substitute != plan_teacher else None
 
         if row['status'] == CANCELLED_EDUSON:
-            positions.append((sid, PlannedLesson(
+            positions.append((key, PlannedLesson(
                 group_id=info.group_id, seq=None, lesson_number=None,
                 scheduled_date=s.date, scheduled_time=when,
                 teacher_id=plan_teacher, substitute_teacher_id=plan_substitute,
@@ -264,7 +316,7 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
         if row['status'] == SCHEDULED:
             if s.date < ctx.as_of:
                 counts['past_pending'] += 1
-            positions.append((sid, PlannedLesson(
+            positions.append((key, PlannedLesson(
                 group_id=info.group_id, seq=seq, lesson_number=number,
                 scheduled_date=s.date, scheduled_time=when,
                 teacher_id=plan_teacher, substitute_teacher_id=plan_substitute,
@@ -273,8 +325,11 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
             ), None))
             continue
 
-        # held — настоящий проведённый урок.
-        teacher = _held_teacher(s, info, owner, substitute, ctx)
+        # held — настоящий проведённый урок (или урок из таблицы Eduson).
+        if s.sheet:
+            teacher = _sheet_teacher(s, info, owner, ctx)
+        else:
+            teacher = _held_teacher(s, info, owner, substitute, ctx)
         substitution = owner is not None and teacher != owner
         if substitution:
             lesson_type = 'substitution'
@@ -282,7 +337,7 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
             lesson_type = 'reschedule'
         else:
             lesson_type = 'regular'
-        lessons.append((sid, gid, Lesson(
+        lessons.append((key, gid, Lesson(
             group_id=info.group_id, teacher_id=teacher,
             original_teacher_id=owner if substitution else None,
             lesson_date=s.date, lesson_number=number,
@@ -295,15 +350,15 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
             submitted_at=ctx.held_at.get(sid) or max(
                 parse_moment(row['created_at']) or datetime.datetime.min.replace(tzinfo=MSK),
                 datetime.datetime.combine(s.date, when, tzinfo=MSK)),
-            submitted_by_token=SUBMITTED_BY_YEAR_FIXED if sid in ctx.year_fixed else SUBMITTED_BY,
+            submitted_by_token=_token(s, ctx),
         )))
-        positions.append((sid, PlannedLesson(
+        positions.append((key, PlannedLesson(
             group_id=info.group_id, seq=seq, lesson_number=number,
             scheduled_date=s.date, scheduled_time=when,
             teacher_id=owner if owner is not None else teacher,
             substitute_teacher_id=teacher if substitution else None,
             status=DONE, created_at=now, updated_at=now,
-        ), sid))
+        ), key))
         counts['held'] += 1
         held_days[s.date] += 1
         if sid in ctx.year_fixed:
@@ -312,6 +367,22 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
     counts['year_fixed'] = len(fixed_days)
     counts['year_fixed_same_day'] = sum(1 for d in fixed_days if held_days[d] > 1)
     _report_group(info, counts, ctx)
+
+
+def _token(s: _Session, ctx: ImportContext) -> str:
+    if s.sheet or s.filled:
+        return SUBMITTED_BY_SHEETS
+    return SUBMITTED_BY_YEAR_FIXED if s.row['id'] in ctx.year_fixed else SUBMITTED_BY
+
+
+def _sheet_teacher(s: _Session, info: _GroupInfo, owner: int | None, ctx: ImportContext) -> int:
+    """Кто провёл урок из таблицы: замен таблица не знает — преподаватель группы на дату."""
+    if owner is not None:
+        return owner
+    ctx.manual_review.append(
+        f'группа {info.code}, урок из таблицы {s.date.isoformat()}: преподаватель группы на дату '
+        'не известен — поставлен текущий преподаватель группы, проверьте')
+    return info.current_teacher
 
 
 def _held_teacher(s: _Session, info: _GroupInfo, owner: int | None, substitute: int | None,
@@ -372,6 +443,41 @@ def _report_group(info: _GroupInfo, counts: Counter, ctx: ImportContext) -> None
     if counts['held'] and not info.students:
         ctx.report.append(f'группа {code}: без учеников — {counts["held"]} проведённых уроков '
                           'перенесены без посещаемости')
+
+
+def _report_sheets(groups: dict[int, _GroupInfo], ctx: ImportContext) -> None:
+    """Итог дозаполнения из таблиц (--sheets-dir): сколько заведено и где отметок
+    больше или меньше N. Только коды групп и числа."""
+    if ctx.sheet_backfill is None:
+        return
+    items = sorted(ctx.sheet_backfill.items(), key=lambda kv: groups[kv[0]].code)
+    added = [b for _, b in items if b.lessons]
+    ctx.report.append(f'из таблиц (до запуска старой системы): заведено {sum(len(b.lessons) for b in added)} '
+                      f'уроков в {len(added)} группах (групп с N > 0 — {len(items)})')
+    for gid, b in items:
+        code = groups[gid].code
+        if b.candidates > b.n_before:
+            ctx.report.append(f'группа {code}: из таблиц — отметок {b.candidates} больше N {_num(b.n_before)}, '
+                              f'заведены {len(b.lessons)} самых поздних')
+            ctx.manual_review.append(
+                f'группа {code}: в таблицах отметок до первого учтённого урока {b.candidates}, а пройдено до '
+                f'учёта {_num(b.n_before)} — заведены {len(b.lessons)} самых поздних, проверьте ранние отметки')
+        elif b.candidates < b.n_before:
+            ctx.report.append(f'группа {code}: из таблиц — отметок {b.candidates} меньше N {_num(b.n_before)}, '
+                              f'заведено {len(b.lessons)}, пройдено до учёта осталось {_num(b.n_after)}')
+        else:
+            ctx.report.append(f'группа {code}: из таблиц — заведено {len(b.lessons)} = N, пройдено до учёта 0')
+        if b.fills:
+            ctx.report.append(f'группа {code}: из таблиц {len(b.fills)} урок(ов) пришлись на незаполненное '
+                              'занятие базы — оно проведено этой отметкой')
+        if b.on_cancelled_days:
+            ctx.report.append(f'группа {code}: из таблиц {b.on_cancelled_days} урок(ов) в день отменённого '
+                              'занятия базы — урок заведён, отмена оставлена')
+
+
+def _num(value: Decimal) -> str:
+    """12.50 → '12.5', 10 → '10' (как reconcile._num)."""
+    return f'{Decimal(value).normalize():f}'
 
 
 # ── отзывы ──────────────────────────────────────────────────────────────────

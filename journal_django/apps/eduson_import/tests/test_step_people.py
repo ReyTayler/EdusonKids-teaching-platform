@@ -37,8 +37,9 @@ def test_directions_with_eduson_colors(tmp_path):
     got = {d.name: (d.color, d.active, d.total_lessons) for d in Direction.objects.all()}
     # Направления «Группа» нет (решение владельца 2026-10-19): групповые группы курса
     # 'groups' разносятся по трём курсам по первой букве кода.
-    assert got == {'Scratch': ('#c2410c', True, None), 'Python': ('#1a56db', True, None),
-                   'Вайб-кодинг': ('#067a57', True, None)}
+    # Длина курса — стандартный пакет Eduson 48: группы берут её из направления.
+    assert got == {'Scratch': ('#c2410c', True, 48), 'Python': ('#1a56db', True, 48),
+                   'Вайб-кодинг': ('#067a57', True, 48)}
     assert {c: Direction.objects.get(pk=i).name for c, i in ctx.direction_by_course.items()} == {
         'scratch': 'Scratch', 'python': 'Python', 'vibe': 'Вайб-кодинг'}
 

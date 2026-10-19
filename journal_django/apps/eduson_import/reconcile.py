@@ -9,7 +9,8 @@ reconcile(src, ctx) → (lines, errors, warnings):
 (held с ошибочным годом — уроками, фиктивные held не переносятся, администраторы без ссылок — только учётка,
 склейка учеников, отзывы «на проверку»), поэтому любое другое расхождение —
 дефект импорта. По каждой группе «проведено» = N + Σ вес проведённых held (настоящих и с
-исправленным годом — всех, кроме фиктивных)
+исправленным годом — всех, кроме фиктивных) + вес уроков из таблиц Eduson (--sheets-dir;
+N тогда уже за вычетом их числа)
 (apps.lessons.weights.lesson_weight) обязано совпасть и с
 GroupMembership.lessons_done каждого ученика, и с Group.lesson_number_offset +
 Σ вес Lesson группы — на этих двух числах KOTOKOD строит нумерацию следующих
@@ -42,7 +43,7 @@ from apps.eduson_import.context import ImportContext
 from apps.eduson_import.sqlite_source import EdusonSource
 from apps.feedback.models import LessonFeedback
 from apps.groups.models import Group
-from apps.eduson_import.steps.lessons import SUBMITTED_BY_YEAR_FIXED
+from apps.eduson_import.steps.lessons import SUBMITTED_BY_SHEETS, SUBMITTED_BY_YEAR_FIXED
 from apps.lessons.models import Lesson, LessonAttendance
 from apps.lessons.weights import lesson_weight
 from apps.memberships.models import GroupMembership
@@ -97,14 +98,28 @@ def reconcile(src: EdusonSource, ctx: ImportContext) -> tuple[list[str], list[st
     row('ученики', participants, Student.objects.count(), students,
         f'склеено записей {merged}, пропущено пустых {len(ctx.skipped_participants)}, '
         f'на проверку {ctx.review_participants}')
-    row('проведённые уроки', len(held_all), Lesson.objects.count(), len(real_held),
-        f'held = уроки; фиктивных held (год не исправить) {fake} — в «пройдено до учёта»' if fake
-        else 'held = уроки')
+    backfill = ctx.sheet_backfill or {}
+    sheet_lessons = sum(len(b.lessons) for b in backfill.values())
+    # Отметка в день незаполненной сессии проводит её — новой позиции не даёт.
+    sheet_positions = sheet_lessons - sum(len(b.fills) for b in backfill.values())
+    held_note = (f'held = уроки; фиктивных held (год не исправить) {fake} — в «пройдено до учёта»' if fake
+                 else 'held = уроки')
+    row('проведённые уроки', len(held_all), Lesson.objects.count(), len(real_held) + sheet_lessons,
+        held_note + (f'; + {sheet_lessons} из таблиц' if sheet_lessons else ''))
     row('из них год исправлен', len(ctx.year_fixed),
         Lesson.objects.filter(submitted_by_token=SUBMITTED_BY_YEAR_FIXED).count(), len(ctx.year_fixed),
         'таблицы Eduson, вкладка «Июнь 2027» → уроки 2026 года')
-    row('позиции плана', len(sessions), PlannedLesson.objects.count(), len(sessions) - fake,
-        'сессии без фиктивных held' if fake else 'все сессии')
+    if ctx.sheet_backfill is not None:
+        more = sum(1 for b in backfill.values() if b.candidates > b.n_before)
+        less = sum(1 for b in backfill.values() if b.candidates < b.n_before)
+        groups_with = sum(1 for b in backfill.values() if b.lessons)
+        # Колонка Eduson — 0: в базе старой системы этих уроков нет.
+        row('из таблиц (до запуска)', 0, Lesson.objects.filter(submitted_by_token=SUBMITTED_BY_SHEETS).count(),
+            sheet_lessons, f'групп {groups_with} из {len(backfill)} с N > 0; отметок больше N — {more}, '
+                           f'меньше N — {less}')
+    row('позиции плана', len(sessions), PlannedLesson.objects.count(), len(sessions) - fake + sheet_positions,
+        ('сессии без фиктивных held' if fake else 'все сессии')
+        + (f' + {sheet_positions} из таблиц' if sheet_positions else ''))
     row('отзывы (submitted)', submitted, LessonFeedback.objects.count(), submitted - len(ctx.feedback_not_moved),
         f'на проверку {len(ctx.feedback_not_moved)}')
     row('продления (группы)', renewals, ctx.renewals_applied, None,
@@ -149,7 +164,9 @@ def _check_groups(src, ctx, real_held, sessions, row, errors, warnings) -> None:
         eid, code = g['id'], str(g['code'] or '').strip()
         gid = ctx.group_by_eduson[eid]
         n = ctx.pre_system.get(eid, Decimal(0))
-        done = n + held_weight[eid]
+        sheet_count = len(ctx.sheet_lessons(eid))
+        sheet_fills = len(ctx.sheet_backfill[eid].fills) if ctx.sheet_backfill and eid in ctx.sheet_backfill else 0
+        done = n + held_weight[eid] + ctx.sheet_weight(eid)
         offset = Decimal(offsets[gid] or 0)
         if offset != n:
             errors.append(f'группа {code}: пройдено до учёта {_num(offset)}, ожидалось {_num(n)}')
@@ -160,10 +177,12 @@ def _check_groups(src, ctx, real_held, sessions, row, errors, warnings) -> None:
         if wrong:
             errors.append(f'группа {code}: у {len(wrong)} учени(ков) пройдено {_num(wrong[0])}, '
                           f'ожидалось {_num(done)}')
-        if lesson_count[gid] != held_count[eid]:
-            errors.append(f'группа {code}: уроков {lesson_count[gid]}, проведённых held {held_count[eid]}')
-        if positions.get(gid, 0) != positions_expected[eid]:
-            errors.append(f'группа {code}: позиций плана {positions.get(gid, 0)}, ожидалось {positions_expected[eid]}')
+        if lesson_count[gid] != held_count[eid] + sheet_count:
+            errors.append(f'группа {code}: уроков {lesson_count[gid]}, проведённых held {held_count[eid]}'
+                          + (f' + из таблиц {sheet_count}' if sheet_count else ''))
+        if positions.get(gid, 0) != positions_expected[eid] + sheet_count - sheet_fills:
+            errors.append(f'группа {code}: позиций плана {positions.get(gid, 0)}, '
+                          f'ожидалось {positions_expected[eid] + sheet_count - sheet_fills}')
         eduson_done = Decimal(g['lessons_done'] or 0) + held_eduson[eid]
         if eduson_done != done:
             differ_eduson += 1

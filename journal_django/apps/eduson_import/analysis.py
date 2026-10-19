@@ -1,7 +1,8 @@
 """Анализ данных Eduson — чистые функции над EdusonSource, без БД Django.
 
 Единственный источник правды для шагов импорта (группы, уроки) и сверки: N
-«пройдено до учёта», held с ошибочным годом и фиктивные held, преподаватель группы на дату, дата «до»
+«пройдено до учёта» и его дозаполнение из таблиц Eduson (sheet_backfill),
+held с ошибочным годом и фиктивные held, преподаватель группы на дату, дата «до»
 переноса, дата удалённой сессии. Правила — спека §5.4; здесь — как они
 выводятся из того, что лежит в SQLite. Шаги берут результаты из ImportContext
 (считаются один раз), а не зовут функции сами.
@@ -28,6 +29,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from apps.eduson_import.context import ImportDataError
+from apps.eduson_import.sheets import SheetMarks, norm_code
 from apps.eduson_import.sqlite_source import EdusonSource
 
 # Даты уроков Eduson — по Москве (legacy mskDateStr), метки журнала — UTC.
@@ -178,6 +180,99 @@ def pre_system_lessons(src: EdusonSource, as_of: datetime.date) -> dict[int, Dec
         first = min(numbers) if numbers else 1
         later_fake = sum(1 for s in fake if _int(s['lesson_no']) is None or _int(s['lesson_no']) >= first)
         out[g['id']] = Decimal(max(0, first - 1) + later_fake)
+    return out
+
+
+# ── дозаполнение из таблиц Eduson (до запуска старой системы) ────────────────
+
+@dataclass(frozen=True)
+class SheetBackfill:
+    """Итог правила sheet_backfill по группе: что заводится уроками и почему столько."""
+    lessons: tuple[tuple[datetime.date, datetime.time | None], ...]   # по дате
+    n_before: Decimal          # N после правил базы — до дозаполнения
+    candidates: int            # сколько отметок прошло фильтры
+    # дата урока → (sessions.id, длительность) незаполненной (scheduled) сессии группы в
+    # этот день: отметка таблицы и есть этот урок — шаг уроков проводит сессию, а не заводит новую
+    fills: dict[datetime.date, tuple[int, int]] = field(default_factory=dict)
+    # из заведённых — в день, где у группы есть отменённая сессия базы (обе записи остаются)
+    on_cancelled_days: int = 0
+
+    @property
+    def n_after(self) -> Decimal:
+        return self.n_before - len(self.lessons)
+
+
+def sheet_backfill(src: EdusonSource, marks: SheetMarks, as_of: datetime.date,
+                   pre_system: dict[int, Decimal]) -> dict[int, SheetBackfill]:
+    """Уроки «до запуска старой системы» из таблиц Eduson для групп с N > 0
+    (поправки владельца 2026-10-19, решение о таблицах).
+
+    marks — sheets.load_sheets: (курс Eduson, код группы) → {дата по вкладке: время}.
+    Группа ищется по своему курсу Eduson (student_groups.course, без разноса 'groups'
+    по букве: таблица — по курсу старой системы) и коду в форме legacy normCode.
+
+    КАНДИДАТЫ. Отметки TRUE вкладок «Июнь 2026» (дата как есть) и «Июнь 2027» (та же
+    ошибка года, что у held: corrected_year → 2026-06-DD). Дата берётся, только если:
+      — она ≤ as_of (после исправления года);
+      — она строго раньше первого проведённого урока группы в базе (настоящие held и
+        held с исправленным годом): таблица дополняет то, чего база не знает, а не
+        дублирует учтённое. Отсюда же «без дубля даты, занятой уроком группы»: все
+        уроки базы — не раньше первого проведённого.
+    Вкладки дают одну дату дважды — это один урок.
+
+    СЕССИИ БАЗЫ В ТОТ ЖЕ ДЕНЬ (решение координатора 2026-10-20). Незаполненная
+    (scheduled) сессия группы в день отметки — тот же урок: отметка его и проводит
+    (fills: дата → sessions.id; несколько в один день — самая ранняя по времени, id).
+    Отдельной позиции не появляется, номер — по позиции этой сессии. Отменённая сессия
+    в тот же день отметку не отменяет: урок заводится отдельно, маркер отмены остаётся
+    (on_cancelled_days — в отчёт). Ни то, ни другое не влияет на отсечку: она — по
+    проведённым, а scheduled/cancelled в первый проведённый не входят.
+
+    СКОЛЬКО ЗАВОДИТЬ. Кандидатов ≤ N — все, N уменьшается на их число. Больше N —
+    N самых поздних (ближайших к первому учтённому уроку): N из базы точнее отметок,
+    а ранние отметки скорее всего относятся к прежнему курсу/пакету. Это видно в
+    отчёте (n_before < candidates). Группы с N = 0 таблицей не трогаются вовсе.
+
+    Результат — для всех групп с N > 0 (в т.ч. без кандидатов — для отчёта).
+    """
+    p = _parsed(src)
+    first_held: dict[int, datetime.date] = {}
+    scheduled: dict[int, dict[datetime.date, tuple[int, int]]] = defaultdict(dict)  # группа → дата → (id, мин)
+    cancelled: dict[int, set[datetime.date]] = defaultdict(set)
+    for gid, (real, _) in _held_by_group(p, as_of).items():
+        for s in real:   # настоящие и с исправленным годом — даты уроков, которые заведёт импорт
+            day = p.session_dates[s['id']]
+            day = corrected_year(day, as_of) or day
+            first_held[gid] = min(first_held.get(gid, day), day)
+    for s in sorted(p.sessions, key=lambda s: (str(s['time'] or '').strip().zfill(5), s['id'])):
+        day = p.session_dates[s['id']]
+        if s['status'] == 'scheduled' and s['type'] != 'makeup':
+            # Отработка (makeup, 45 мин, один ученик) — не урок группы: отметка таблицы
+            # её не проводит, иначе «был» получила бы вся группа, а N ушёл бы на 0,5.
+            scheduled[s['group_id']].setdefault(day, (s['id'], s['duration_min']))   # самая ранняя в этот день
+        elif s['status'] == 'cancelled':
+            cancelled[s['group_id']].add(day)
+
+    out: dict[int, SheetBackfill] = {}
+    for g in p.groups:
+        n = pre_system.get(g['id'], Decimal(0))
+        if n <= 0:
+            continue
+        found: dict[datetime.date, datetime.time | None] = {}
+        for day, when in sorted((marks.get((g['course'], norm_code(g['code']))) or {}).items()):
+            real = day if day <= as_of else corrected_year(day, as_of)
+            if real is None:
+                continue
+            if g['id'] in first_held and real >= first_held[g['id']]:
+                continue
+            if found.get(real) is None:
+                found[real] = when      # одна дата с двух вкладок: время — где оно есть
+        candidates = sorted(found.items())
+        take = min(int(n), len(candidates))
+        lessons = tuple(candidates[len(candidates) - take:])
+        fills = {day: scheduled[g['id']][day] for day, _ in lessons if day in scheduled[g['id']]}
+        out[g['id']] = SheetBackfill(lessons, n, len(candidates), fills,
+                                     sum(1 for day, _ in lessons if day not in fills and day in cancelled[g['id']]))
     return out
 
 

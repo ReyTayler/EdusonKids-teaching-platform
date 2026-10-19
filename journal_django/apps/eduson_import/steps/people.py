@@ -34,6 +34,11 @@ DIRECTIONS = {
 # буква её кода (ПГ… — Python, СГ… — Scratch, ВГ… — Вайб-кодинг), формат по-прежнему
 # берётся из поля format. Буквы кириллические, как в кодах Eduson.
 GROUPS_COURSE = 'groups'
+# Длина курса направления (уроков). Стандартный полный пакет Eduson — 48 (legacy
+# services/renewals.js: рекомендуемый пакет 48). Группы берут длину из направления
+# (lessons_total не заполняется — решение владельца 2026-10-19), поэтому без неё
+# у всех групп пропали бы план, остаток курса и сигналы реестра.
+COURSE_LESSONS = 48
 GROUP_CODE_LETTER = {'П': 'python', 'С': 'scratch', 'В': 'vibe'}
 
 # Контакты преподавателя, которым в модели KOTOKOD пока нет полей (этап 3).
@@ -117,7 +122,8 @@ def _import_directions(src: EdusonSource, ctx: ImportContext) -> None:
         ctx.course_by_group[g['id']] = course
 
     for course, (name, color) in DIRECTIONS.items():
-        ctx.direction_by_course[course] = Direction.objects.create(name=name, color=color, active=True).id
+        ctx.direction_by_course[course] = Direction.objects.create(
+            name=name, color=color, active=True, total_lessons=COURSE_LESSONS).id
     if by_letter:
         split = ', '.join(f'{DIRECTIONS[c][0]} {n}' for c, n in sorted(by_letter.items(),
                                                                          key=lambda kv: DIRECTIONS[kv[0]][0]))

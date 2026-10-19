@@ -16,8 +16,13 @@
 # импорт или сверка — рабочая остаётся как была, _next — для разбора. Подмена —
 # переименованием: рабочая → <имя>_prev (откат), _next → <имя>.
 #
+# ТАБЛИЦЫ EDUSON. Перед импортом — CSV вкладок «Июнь 2026» и «Июнь 2027» четырёх
+# публичных Google-таблиц (EDUSON_SHEET_*): по ним import_eduson --sheets-dir заводит
+# уроки до запуска старой системы. Не заданы ID или не скачалось — импорт идёт без
+# таблиц, с предупреждением в лог: обновление из-за таблиц не валится.
+#
 # ВЫВОД И ЛОГ — без ПДн и секретов: ни адреса сервера, ни DATABASE_URL, ни почт
-# --superadmin. Отчёт импорта сам по себе без ПДн (только id Eduson, коды групп, числа).
+# --superadmin, ни ID таблиц. Отчёт импорта сам по себе без ПДн (только id Eduson, коды групп, числа).
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # platform/
@@ -95,7 +100,7 @@ if [ -z "$PY" ]; then
   done
 fi
 [ -n "$PY" ] || die "не найден venv платформы ($ROOT/.venv) — задайте PYTHON"
-for tool in ssh scp sha256sum; do command -v "$tool" >/dev/null || die "нет $tool в PATH (нужен Git Bash)"; done
+for tool in ssh scp sha256sum curl; do command -v "$tool" >/dev/null || die "нет $tool в PATH (нужен Git Bash)"; done
 
 native_path() {
   # Python под Windows не понимает /c/...: отдаём ему родной путь.
@@ -154,6 +159,7 @@ LOCKED=0
 REMOTE_TMP=""
 REMOTE_PENDING=0      # на сервере может лежать наш временный файл
 LOCAL_PART=""
+SHEETS_PART=""        # недокачанный каталог таблиц
 IMPORT_OUT=""
 SWAPPING=0            # идёт подмена баз: прерывание обязано вернуть рабочую под своё имя
 
@@ -167,6 +173,7 @@ cleanup() {
       || log "ВНИМАНИЕ: временный файл на сервере не удалён ($REMOTE_TMP в контейнере и на хосте) — удалите вручную"
   fi
   if [ -n "$LOCAL_PART" ]; then rm -f "$LOCAL_PART" "$LOCAL_PART-shm"; fi
+  if [ -n "$SHEETS_PART" ]; then rm -rf "$SHEETS_PART"; fi
   if [ -n "$IMPORT_OUT" ]; then rm -f "$IMPORT_OUT"; fi
   # Ctrl+C / TERM посреди подмены: trap срабатывает после psql, swap_recover из
   # обработчика ошибки подмены уже не позовётся — зовём здесь.
@@ -215,13 +222,13 @@ docker cp $CONTAINER:$REMOTE_TMP $REMOTE_TMP
 chmod 600 $REMOTE_TMP
 sha256sum $REMOTE_TMP"
 
-log "1/5 снимок на проде (readOnly + VACUUM INTO)"
+log "1/6 снимок на проде (readOnly + VACUUM INTO)"
 REMOTE_PENDING=1
 out="$(retry_ssh "$SNAPSHOT_CMD")" || die "снимок на проде не снят"
 REMOTE_SHA="$(printf '%s\n' "$out" | awk 'END { print $1 }')"
 [[ "$REMOTE_SHA" =~ ^[0-9a-f]{64}$ ]] || die "сервер не вернул sha256 снимка"
 
-log "2/5 скачивание"
+log "2/6 скачивание"
 LOCAL_PART="$SNAP_DIR/.okk-$STAMP.db.part"
 retry_scp "$REMOTE_TMP" "$LOCAL_PART" || die "снимок не скачан"
 retry_ssh "rm -f $REMOTE_TMP" || die "не удалось удалить временный снимок на сервере"
@@ -252,22 +259,105 @@ for f in "${old[@]}"; do
 done
 [ "${#old[@]}" -eq 0 ] || log "  удалено старых снимков: ${#old[@]} (храним $KEEP)"
 
+# ── 1б. таблицы Eduson (необязательно) ──────────────────────────────────────
+
+SHEET_COURSES=(scratch python vibe groups)
+# «Имя вкладки|суффикс файла» — файлы {course}-{суффикс}.csv ждёт import_eduson --sheets-dir.
+SHEET_TABS=("Июнь 2026|2026-06" "Июнь 2027|2027-06")
+SHEET_HEADER='"Название группы"'
+SHEETS_DIR=""
+CURL_CT=""
+
+retry_curl() {
+  # Публичная выгрузка Google, без ключа. Повторы — как у scp: скачивание идемпотентно.
+  # -f: HTTP-ошибка = неудача; без -S: текст ошибки curl в лог не идёт (в нём бывает URL с ID).
+  local attempt=1
+  until CURL_CT="$(curl -fsL --proto '=https' --max-time 60 -A 'Mozilla/5.0' -o "$2" -w '%{content_type}' "$1" 2>/dev/null)"; do
+    [ "$attempt" -lt "$RETRIES" ] || return 1
+    log "  таблицы: загрузка не удалась (попытка $attempt/$RETRIES), пауза ${RETRY_PAUSE} с"
+    sleep "$RETRY_PAUSE"; attempt=$((attempt + 1))
+  done
+}
+
+fetch_sheets() {
+  # 0 — все 8 вкладок скачаны и проверены, каталог в SHEETS_DIR; иначе 1 (причина — в логе).
+  # Зовётся из if: errexit внутри не действует, поэтому каждый шаг проверяется явно.
+  local course key id tab suffix base html out first
+  local -A ids=()
+  local -a gids
+  for course in "${SHEET_COURSES[@]}"; do
+    key="EDUSON_SHEET_${course^^}"
+    id="$(conf "$key" '')"
+    if [ -z "$id" ]; then log "  не задан $key"; return 1; fi
+    # ID уходит в URL — только символы ID Google, без «/?&#» и пробелов.
+    if [[ ! "$id" =~ ^[A-Za-z0-9_-]+$ ]]; then log "  $key: недопустимые символы в ID таблицы"; return 1; fi
+    ids[$course]="$id"
+  done
+  SHEETS_PART="$SNAP_DIR/.sheets-$STAMP.part"
+  rm -rf "$SHEETS_PART" && mkdir -p "$SHEETS_PART" || return 1
+  for course in "${SHEET_COURSES[@]}"; do
+    base="https://docs.google.com/spreadsheets/d/${ids[$course]}"
+    html="$SHEETS_PART/$course-htmlview.html"
+    if ! retry_curl "$base/htmlview" "$html"; then log "  $course: список вкладок не скачан"; return 1; fi
+    for tab in "${SHEET_TABS[@]}"; do
+      suffix="${tab#*|}"; tab="${tab%%|*}"
+      # gviz по ИМЕНИ вкладки при опечатке или без такой вкладки молча отдаёт ПЕРВУЮ
+      # вкладку. Поэтому имя ищется в списке вкладок htmlview (items.push({name, pageUrl,
+      # gid})), и CSV берётся по её gid: вкладка гарантированно существует и именно она.
+      mapfile -t gids < <(grep -o "name: \"$tab\", pageUrl: \"[^\"]*\", gid: \"[0-9-]*\"" "$html" \
+        | sed -E 's/.*gid: "([0-9-]+)"$/\1/')
+      if [ "${#gids[@]}" -ne 1 ]; then log "  $course: вкладка «$tab» не найдена в списке вкладок"; return 1; fi
+      out="$SHEETS_PART/$course-$suffix.csv"
+      if ! retry_curl "$base/gviz/tq?tqx=out:csv&gid=${gids[0]}" "$out"; then
+        log "  $course: вкладка «$tab» не скачана"; return 1
+      fi
+      # Нет доступа по ссылке — Google отвечает страницей входа (HTML), а не CSV.
+      case "$CURL_CT" in text/csv*) ;; *) log "  $course: «$tab» — ответ не CSV (${CURL_CT:-без типа})"; return 1 ;; esac
+      if head -c 512 "$out" | grep -qiE '<html|<!doctype'; then log "  $course: «$tab» — ответ HTML"; return 1; fi
+      first="$(head -n1 "$out")"; first="${first#$'\xef\xbb\xbf'}"; first="${first%%,*}"; first="${first%$'\r'}"
+      if [ "$first" != "$SHEET_HEADER" ]; then log "  $course: «$tab» — неожиданная шапка, это не вкладка месяца"; return 1; fi
+    done
+    rm -f "$html"
+    # Вторая защита от «gviz отдал первую вкладку»: две разные вкладки не совпадают байт в байт.
+    if cmp -s "$SHEETS_PART/$course-2026-06.csv" "$SHEETS_PART/$course-2027-06.csv"; then
+      log "  $course: вкладки «Июнь 2026» и «Июнь 2027» совпадают — выгрузка не той вкладки"; return 1
+    fi
+  done
+  SHEETS_DIR="$SNAP_DIR/sheets-$STAMP"
+  rm -rf "$SHEETS_DIR" && mv "$SHEETS_PART" "$SHEETS_DIR" || { SHEETS_DIR=""; return 1; }
+  SHEETS_PART=""
+}
+
+log "3/6 таблицы Eduson (вкладки «Июнь 2026», «Июнь 2027»)"
+if fetch_sheets; then
+  log "  таблицы: $(basename "$SHEETS_DIR") (${#SHEET_COURSES[@]} × ${#SHEET_TABS[@]} вкладок)"
+else
+  if [ -n "$SHEETS_PART" ]; then rm -rf "$SHEETS_PART"; fi
+  SHEETS_PART=""; SHEETS_DIR=""
+  log "  ВНИМАНИЕ: импорт без --sheets-dir — уроки до запуска старой системы останутся в «пройдено до учёта»"
+fi
+# Каталоги таблиц — тоже ПДн: храним столько же, сколько снимков.
+mapfile -t old < <(find "$SNAP_DIR" -maxdepth 1 -type d -name 'sheets-*' -printf '%f\n' | sort -r | tail -n +"$((KEEP + 1))")
+for f in "${old[@]}"; do rm -rf "${SNAP_DIR:?}/$f"; done
+[ "${#old[@]}" -eq 0 ] || log "  удалено старых каталогов таблиц: ${#old[@]} (храним $KEEP)"
+
 # ── 2. сборка новой базы рядом с рабочей ────────────────────────────────────
 
-log "3/5 сборка $NEXT_DB: migrate"
+log "4/6 сборка $NEXT_DB: migrate"
 pg -c "DROP DATABASE IF EXISTS $NEXT_DB WITH (FORCE)" -c "CREATE DATABASE $NEXT_DB"
 cd "$ROOT/journal_django"
 export PYTHONUTF8=1
 DATABASE_URL="$NEXT_URL" "$PY" manage.py migrate --noinput 2>&1 | tee -a "$LOG_FILE" >/dev/null \
   || die "migrate в $NEXT_DB упал — рабочая база не тронута"
 
-log "4/5 импорт снимка (--as-of $TODAY_MSK)"
+log "5/6 импорт снимка (--as-of $TODAY_MSK)"
 import_args=("$(native_path "$SNAPSHOT")" --as-of "$TODAY_MSK")
 IFS=',' read -r -a admins <<<"$SUPERADMINS"
 for a in "${admins[@]}"; do
   a="${a//[[:space:]]/}"
   if [ -n "$a" ]; then import_args+=(--superadmin "$a"); fi
 done
+if [ -n "$SHEETS_DIR" ]; then import_args+=(--sheets-dir "$(native_path "$SHEETS_DIR")"); fi
 IMPORT_OUT="$(mktemp)"
 rc=0
 DATABASE_URL="$NEXT_URL" "$PY" manage.py import_eduson "${import_args[@]}" >"$IMPORT_OUT" 2>&1 || rc=$?
@@ -290,7 +380,7 @@ swap_recover() {
   set -e
 }
 
-log "5/5 подмена: $DB_NAME → $PREV_DB, $NEXT_DB → $DB_NAME"
+log "6/6 подмена: $DB_NAME → $PREV_DB, $NEXT_DB → $DB_NAME"
 if db_exists "$DB_NAME"; then
   SWAPPING=1
   # Сначала закрываем вход, потом рвём соединения (runserver, Celery переподключились бы
@@ -323,9 +413,10 @@ elapsed=$((SECONDS - started))
   echo "  снимок:  $SNAPSHOT ($SIZE_MB МБ)"
   echo "  sha256:  $LOCAL_SHA"
   echo "  откат:   $PREV_DB (см. docs/eduson/refresh-from-prod.md)"
+  if [ -n "$SHEETS_DIR" ]; then echo "  таблицы: $SHEETS_DIR"; else echo "  таблицы: не использованы (см. лог)"; fi
   # Таблица сверки и отчёт импорта — без ПДн (id Eduson, коды групп, числа).
   awk '/^Сверка Eduson/ { on = 1 } on && /^$/ { exit } on' "$IMPORT_OUT"
-  grep -E "курс 'groups'|package_size" "$IMPORT_OUT" || true
+  grep -E "курс 'groups'|package_size|из таблиц" "$IMPORT_OUT" || true
   echo "  ⚠ runserver/Celery перезапустить: старые соединения разорваны."
 } | tee -a "$LOG_FILE"
 rm -f "$IMPORT_OUT"; IMPORT_OUT=""

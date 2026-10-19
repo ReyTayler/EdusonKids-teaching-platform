@@ -7,6 +7,8 @@ import io
 from unittest import mock
 
 import pytest
+from decimal import Decimal
+
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
@@ -225,3 +227,21 @@ def test_without_superadmin_warns(tmp_path):
     out = _call(_db_with_admins(tmp_path).close())
     assert not Account.objects.filter(role='superadmin').exists()
     assert 'нет суперадмина — управлять учётками будет некому' in out
+
+
+def test_plan_fitted_to_course_length(tmp_path):
+    """План старой системы покрывает пакет (здесь 4 сессии), длина курса — 48 из
+    направления: после сверки план дотягивается до 48-го урока (resize_plan)."""
+    from django.db.models import Max
+
+    from apps.scheduling.models import PlannedLesson
+
+    path = _db(tmp_path).close()
+    out = _call(path)
+    group = Group.objects.get()
+    assert group.direction.total_lessons == 48 and group.lessons_total is None
+    last = PlannedLesson.objects.filter(group=group, seq__isnull=False).aggregate(m=Max('lesson_number'))['m']
+    # Отработка 45 мин в фикстуре даёт шаг 0,5: план кончается на 47,5 (следующий
+    # целый урок вышел бы за 48) — это правильно, курс не превышен.
+    assert Decimal('47') < last <= 48
+    assert 'план подогнан под длину курса' in out

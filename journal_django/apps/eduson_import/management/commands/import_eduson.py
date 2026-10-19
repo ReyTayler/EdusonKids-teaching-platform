@@ -5,6 +5,14 @@
     python manage.py import_eduson /путь/okk.db --as-of 2026-10-18
     python manage.py import_eduson /путь/okk.db --dry-run        # всё выполнить и откатить
     python manage.py import_eduson /путь/okk.db --superadmin <почта admin Eduson> [--superadmin …]
+    python manage.py import_eduson /путь/okk.db --sheets-dir /путь/sheets-ГГГГММДД-ЧЧММ
+
+SHEETS-DIR. Необязательно: каталог CSV-выгрузок таблиц Eduson ({course}-2026-06.csv и
+{course}-2027-06.csv для scratch/python/vibe/groups — вкладки «Июнь 2026» и «Июнь 2027»;
+кладёт scripts/refresh_from_prod.sh). С ним группы с «пройдено до учёта» N > 0
+получают уроки до запуска старой системы, отмеченные в таблицах (правило —
+analysis.sheet_backfill). Без него — поведение прежнее. Нет каталога или одного из
+8 файлов, не та шапка — команда останавливается до импорта.
 
 SUPERADMIN. В Eduson этой роли нет, а в KOTOKOD учётками, 2FA, зарплатой, журналом
 ИБ и Синхро управляет только superadmin. --superadmin назначает её перенесённым
@@ -52,6 +60,7 @@ from apps.directions.models import Direction
 from apps.eduson_import.context import ImportContext, ImportDataError
 from apps.eduson_import.normalize import norm_email
 from apps.eduson_import.reconcile import reconcile
+from apps.eduson_import.sheets import load_sheets
 from apps.eduson_import.sqlite_source import EdusonSource
 from apps.eduson_import.steps.groups import import_groups
 from apps.eduson_import.steps.lessons import import_feedback, import_lessons
@@ -80,11 +89,20 @@ class Command(BaseCommand):
                                  'По умолчанию — сегодня (МСК).')
         parser.add_argument('--superadmin', action='append', default=[], metavar='EMAIL',
                             help='Почта учётки-admin Eduson, которая станет superadmin (можно несколько раз).')
+        parser.add_argument('--sheets-dir', metavar='КАТАЛОГ',
+                            help='CSV вкладок «Июнь 2026»/«Июнь 2027» таблиц Eduson ({course}-ГГГГ-ММ.csv): '
+                                 'уроки до запуска старой системы для групп с пройденным до учёта.')
         parser.add_argument('--dry-run', action='store_true',
                             help='Выполнить всё и откатить: показать сверку, ничего не записав.')
 
-    def handle(self, *args, sqlite_path, as_of=None, dry_run=False, superadmin=(), **options):
+    def handle(self, *args, sqlite_path, as_of=None, dry_run=False, superadmin=(), sheets_dir=None, **options):
         day = self._as_of(as_of)
+        sheet_marks = None
+        if sheets_dir:
+            try:
+                sheet_marks = load_sheets(sheets_dir)
+            except ImportDataError as e:
+                raise CommandError(f'Таблицы Eduson: {e}') from None
         superadmins = tuple(dict.fromkeys(norm_email(e) for e in superadmin if norm_email(e)))
         try:
             src = EdusonSource(sqlite_path)
@@ -96,7 +114,7 @@ class Command(BaseCommand):
                     if any(model.objects.exists() for model in DATA_MODELS):
                         raise CommandError('База не пустая — импорт отменён (повторный запуск запрещён). '
                                            'Импорт идёт только в свежую базу из миграций.')
-                    ctx, lines, errors, warnings = self._run(src, day, superadmins)
+                    ctx, lines, errors, warnings = self._run(src, day, superadmins, sheet_marks)
                     self._print(lines, warnings, errors, ctx)
                     if errors:
                         raise _ReconcileFailed
@@ -126,14 +144,14 @@ class Command(BaseCommand):
             raise CommandError(f'--as-of: {day.isoformat()} позже сегодняшнего дня ({today.isoformat()}, МСК)')
         return day
 
-    def _run(self, src: EdusonSource, day: datetime.date, superadmins: tuple[str, ...]):
+    def _run(self, src: EdusonSource, day: datetime.date, superadmins: tuple[str, ...], sheet_marks=None):
         """Шаги и сверка → (ctx, lines, errors, warnings). Ошибки любого этапа —
         CommandError без значений полей: транзакция вокруг откатится."""
         step = 'анализ данных Eduson'
         try:
             with pghistory.context(operation='eduson.import', method='COMMAND',
                                    url='manual/import-eduson', note='Импорт Eduson'):
-                ctx = ImportContext.from_source(src, day)
+                ctx = ImportContext.from_source(src, day, sheet_marks)
                 ctx.superadmin_emails = superadmins
                 steps = (('люди и справочники', import_people), ('группы и ученики', import_groups),
                          ('уроки и план', import_lessons), ('отзывы', import_feedback),
@@ -141,8 +159,16 @@ class Command(BaseCommand):
                 for step, run in steps:
                     run(src, ctx)
                     self.stdout.write(f'· шаг «{step}» выполнен')
-            step = 'сверка'
-            return (ctx, *reconcile(src, ctx))
+                step = 'сверка'
+                lines, errors, warnings = reconcile(src, ctx)
+                if not errors:
+                    # План старой системы покрывает пакет Eduson (12, 24, …), а длина курса
+                    # теперь — из направления (решение владельца 2026-10-19). Подгоняем план
+                    # штатным resize_plan уже ПОСЛЕ сверки (она сравнивает план с сессиями),
+                    # в том же контексте журнала — импорт остаётся одной операцией.
+                    step = 'план под длину курса'
+                    _fit_plans_to_course(ctx)
+            return ctx, lines, errors, warnings
         except ImportDataError as e:
             # Тексты ImportDataError пишутся под консоль: id Eduson, коды групп, без ПДн.
             raise CommandError(f'Данные Eduson не ложатся на модель (шаг «{step}»): {e}. Всё откатано.') from e
@@ -185,3 +211,25 @@ def _invalidate_caches() -> None:
     """После коммита: сводки дашборда пересчитаются с импортированными уроками."""
     invalidate_finance_cache()
     invalidate_registry_cache()
+
+
+def _fit_plans_to_course(ctx: ImportContext) -> None:
+    """Подогнать план каждой группы под длину курса (resize_plan): дописать недостающие
+    позиции после последнего занятия по слотам, убрать непроведённые сверх курса.
+    Проведённые сверх курса не трогаются — группа в отчёт. Отчёт — только числа."""
+    from apps.scheduling.exceptions import PlanHasRecordedLessons
+    from apps.scheduling.models import PlannedLesson
+    from apps.scheduling.repository import resize_plan
+
+    group_ids = sorted(set(ctx.group_by_eduson.values()))
+    before = PlannedLesson.objects.filter(group_id__in=group_ids, seq__isnull=False).count()
+    touched, refused = 0, 0
+    for gid in group_ids:
+        try:
+            touched += bool(resize_plan(gid))
+        except PlanHasRecordedLessons:
+            refused += 1
+    after = PlannedLesson.objects.filter(group_id__in=group_ids, seq__isnull=False).count()
+    ctx.report.append(f'план подогнан под длину курса: групп изменено {touched}, '
+                      f'позиций было {before}, стало {after}'
+                      + (f'; проведённых сверх курса — групп {refused} (не тронуты)' if refused else ''))

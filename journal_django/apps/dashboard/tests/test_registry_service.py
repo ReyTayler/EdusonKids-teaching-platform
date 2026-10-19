@@ -55,3 +55,26 @@ def test_status_rank_matches_priority_order():
     # STATUS_RANK выводится из STATUS_PRIORITY — единый источник (защита от дрейфа).
     assert svc.STATUS_RANK == {s: i for i, s in enumerate(svc.STATUS_PRIORITY)}
     assert svc.STATUS_PRIORITY[0] == 'closed' and svc.STATUS_PRIORITY[-1] == 'ok'
+
+
+def test_classify_without_course_is_neither_closed_nor_ending():
+    """balance=None — у ученика нет активного курса: «Закрыт» про него сказать нельзя."""
+    f = svc.classify(balance=None, last_date=RECENT, next_date=RECENT, today=TODAY)
+    assert f['closed'] is False and f['ending'] is False
+    assert f['status'] == 'ok'
+
+
+def test_classify_half_lesson_left_is_ending():
+    f = svc.classify(balance=0.5, last_date=RECENT, next_date=RECENT, today=TODAY)
+    assert f['ending'] is True and f['status'] == 'ending'
+
+
+def test_classify_cancellations_is_flag_not_status():
+    """Отмены — сигнал сегмента; статус-бейдж остаётся прежним."""
+    f = svc.classify(balance=10, last_date=RECENT, next_date=RECENT, today=TODAY,
+                     cancellations=2)
+    assert f['cancellations'] is True
+    assert f['status'] == 'ok'
+    assert svc.classify(balance=10, last_date=RECENT, next_date=RECENT,
+                        today=TODAY)['cancellations'] is False
+    assert 'cancellations' not in svc.STATUS_PRIORITY

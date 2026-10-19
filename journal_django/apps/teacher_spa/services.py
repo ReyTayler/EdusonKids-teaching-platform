@@ -158,6 +158,8 @@ def submit_lesson(account_id: int, validated: dict) -> dict:
     date = validated['date']
     record_url = validated.get('recordUrl') or None
     students = validated['students']
+    # Обязателен (SubmitLessonSerializer); пишется ядром в транзакции урока.
+    feedback = validated['feedback']
 
     # Дата занятия жёстко зафиксирована на фронте (LessonForm не даёт её менять) —
     # это подстраховка от гонки состояний (устаревший кэш календаря) и прямых
@@ -348,6 +350,7 @@ def submit_lesson(account_id: int, validated: dict) -> dict:
             submit_date=format_msk_date(),
             attendance=attendance,
             planned_lesson_id=position['id'] if position is not None else None,
+            feedback=feedback,
         )
     except UnpaidAttendanceBlocked as e:
         return {'success': False, 'error': str(e)}

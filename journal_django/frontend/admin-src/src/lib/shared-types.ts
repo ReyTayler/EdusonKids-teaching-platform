@@ -338,6 +338,28 @@ export interface Paginated<T> {
   page_size: number;
 }
 
+// ===== Обратная связь по уроку (GET /api/admin/lesson-feedback) =====
+
+export interface LessonFeedbackRow {
+  id: number;
+  /** null — урок удалён, а отзыв остался (связь с уроком обнуляется). */
+  lesson_id: number | null;
+  group_id: number;
+  group_name: string;
+  lesson_date: string;
+  record_url: string | null;
+  teacher_id: number | null;
+  teacher_name: string | null;
+  /** false — отзыв «урок не состоялся» (импорт): урока нет, оценок нет. */
+  took_place: boolean | null;
+  /** null — оценки нет (урок не состоялся). */
+  understanding: number | null;
+  interest: number | null;
+  tech_problems: boolean;
+  comment: string;
+  submitted_at: string;
+}
+
 export interface UnfilledLesson {
   kind: 'planned' | 'extra';
   id: number;
@@ -354,7 +376,7 @@ export interface UnfilledLesson {
 // ===== Реестр куратора (вкладка дашборда) =====
 
 export type RegistryStatus = 'closed' | 'ending' | 'idle' | 'no_plan' | 'ok';
-export type RegistrySegment = 'all' | 'ending' | 'closed' | 'idle' | 'no_plan';
+export type RegistrySegment = 'all' | 'ending' | 'closed' | 'idle' | 'no_plan' | 'cancellations';
 
 export interface RegistryKpis {
   active_students: number;
@@ -362,6 +384,7 @@ export interface RegistryKpis {
   idle: number;
   avg_progress: number;
   lessons_ahead: number;
+  /** Число ОТМЕНЁННЫХ ЗАНЯТИЙ за месяц (не учеников — у сигнала другая единица). */
   cancellations: number;
 }
 
@@ -384,7 +407,8 @@ export interface RegistrySummary {
   generated_at: string;
   kpis: RegistryKpis;
   today_stream: TodayStreamItem[];
-  signals: Record<'ending' | 'closed' | 'idle' | 'no_plan', RegistrySignal>;
+  /** count — число УЧЕНИКОВ, попавших в сигнал. */
+  signals: Record<'ending' | 'closed' | 'idle' | 'no_plan' | 'cancellations', RegistrySignal>;
 }
 
 export interface RegistryStudent {
@@ -392,13 +416,16 @@ export interface RegistryStudent {
   student_name: string;
   codes: string[];
   teacher_names: string[];
-  balance: number;
+  /** Остаток уроков курса (может быть 0.5 и отрицательным); null — нет активного курса. */
+  balance: number | null;
   attended: number;
   planned: number;
   progress_pct: number | null;
   last_lesson_date: string | null;
   next_lesson_date: string | null;
   status: RegistryStatus;
+  /** Отмены в текущем месяце в группах ученика. */
+  cancellations: number;
 }
 
 // ===== Accounts & RBAC =====

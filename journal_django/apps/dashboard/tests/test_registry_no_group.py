@@ -141,27 +141,29 @@ def test_modes_partition_all_students(graph):
     assert with_group | without == set(Student.objects.values_list('pk', flat=True))
 
 
-def test_no_group_row_keeps_balance_and_last_lesson(graph):
+def test_no_group_row_has_no_course_left_but_keeps_last_lesson(graph):
     """
-    Колонки те же, значит и считаться должны так же: у безгруппного ученика
-    остаток и дата последнего занятия берутся из оплат и журнала, а не из членств.
+    Остаток в реестре Eduson — остаток КУРСА активных групп (спека этапа 3, B).
+    У безгруппного ученика курса нет: остаток None, а не 0 (иначе весь режим
+    «Без группы» был бы «Закрыт»). Оплата ученика на остаток не влияет. Дата
+    последнего занятия — из журнала, как и в обычном режиме.
     """
     row = svc.base_students_qs(TODAY, no_group=True).get(pk=graph['never'])
-    assert row.balance == 7                       # 8 куплено − 1 проведён
+    assert row.balance is None
     assert row.last_lesson == datetime.date(2026, 6, 4)
     assert row.next_lesson is None                # плановых занятий без группы нет
     assert row.planned == 0                       # прогресс берётся из членств
     assert row.attended == 0
+    assert row.cancellations == 0
 
 
 def test_no_group_rows_serialize_with_same_shape(graph):
     """
-    serialize_rows не должен спотыкаться на пустых кодах/преподавателях.
+    serialize_rows не должен спотыкаться на пустых кодах/преподавателях и на
+    отсутствующем остатке.
 
-    Берём `dropped` (ни оплат, ни занятий): его статус — «Закрыт» по нулевому
-    остатку, и это не зависит от даты прогона. У `never` статус плавал бы между
-    «Нет плана» и «Простой», потому что serialize_rows считает его от реального
-    сегодня, а не от TODAY фикстуры.
+    Берём `dropped` (ни оплат, ни занятий): без курса и без плана его статус —
+    «Нет плана», и это не зависит от даты прогона (простоя без занятий нет).
     """
     students = list(svc.base_students_qs(TODAY, no_group=True).filter(pk=graph['dropped']))
     (row,) = svc.serialize_rows(students)
@@ -170,8 +172,9 @@ def test_no_group_rows_serialize_with_same_shape(graph):
     assert row['codes'] == []
     assert row['teacher_names'] == []
     assert row['progress_pct'] is None
-    assert row['balance'] == 0
-    assert row['status'] == 'closed'
+    assert row['balance'] is None
+    assert row['cancellations'] == 0
+    assert row['status'] == 'no_plan'
 
 
 def test_students_qs_passes_no_group_through(graph):
@@ -180,7 +183,9 @@ def test_students_qs_passes_no_group_through(graph):
     assert got == {graph['archived'], graph['dropped'], graph['never']}
 
     ordered = list(
-        svc.students_qs(no_group=True, search='__ng_', sort_by='balance', sort_dir='desc')
+        svc.students_qs(no_group=True, search='__ng_', sort_by='name', sort_dir='desc')
         .values_list('pk', flat=True)
     )
-    assert ordered[0] == graph['never'], 'сортировка по остатку не применилась'
+    # '__ng_never__' > '__ng_dropped__' > '__ng_archived__' по алфавиту.
+    assert ordered == [graph['never'], graph['dropped'], graph['archived']], \
+        'сортировка не применилась'

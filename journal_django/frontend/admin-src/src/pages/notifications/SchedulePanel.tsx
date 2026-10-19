@@ -8,6 +8,21 @@ import { NOTIFICATION_STATUS_LABELS } from '../../lib/labels';
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Пояснения к задачам-напоминаниям по ключу. Заголовок и время приходят с
+ * бэкенда; здесь — что именно произойдёт и при каких условиях.
+ */
+const JOB_NOTES: Record<string, string> = {
+  morning_digest: 'Письмо преподавателю с расписанием на сегодня, если у него есть уроки.',
+  lesson_unrecorded:
+    'Письмо преподавателю, если после занятия урок не записан; до 3 повторов — каждые сутки.',
+  parent_day_before: 'Письмо родителям накануне: «урок завтра». Только если включены напоминания родителям.',
+  parent_hour_before: 'Письмо родителям за час до начала урока. Только если включены напоминания родителям.',
+};
+
+/** Задачи, у которых «давно не было запуска» — норма: работы может просто не быть. */
+const EVENT_DRIVEN_JOBS = new Set(['lesson_unrecorded', 'parent_day_before', 'parent_hour_before']);
+
+/**
  * Молчащая задача — единственный отказ, который никак себя не проявляет: beat
  * умер, сообщений просто нет, и никто не замечает. Поэтому подсвечиваем два
  * случая: задача не отрабатывала ни разу и дайджест не отрабатывал сутки.
@@ -17,6 +32,8 @@ const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
  * при пустой очереди отправлять нечего, и молчание там нормально.
  */
 function isStale(job: NotificationScheduleJob): boolean {
+  // Напоминания зависят от уроков и от флага родителей: тишина — не поломка.
+  if (EVENT_DRIVEN_JOBS.has(job.key)) return false;
   if (!job.last_run_at) return true;
   if (!job.kind) return false;
   return Date.now() - new Date(job.last_run_at).getTime() > STALE_AFTER_MS;
@@ -33,6 +50,7 @@ function JobCard({ job }: { job: NotificationScheduleJob }) {
       <div className="schedule-card__last">
         Последний раз: {job.last_run_at ? fmtDateTime(job.last_run_at) : 'никогда'}
       </div>
+      {JOB_NOTES[job.key] && <div className="schedule-card__note">{JOB_NOTES[job.key]}</div>}
       {stale && (
         <div className="schedule-card__warn">
           {job.last_run_at

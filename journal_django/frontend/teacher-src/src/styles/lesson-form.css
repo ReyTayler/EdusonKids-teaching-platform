@@ -112,3 +112,50 @@
 .lf-record-clear:hover { background: var(--bg3); color: var(--text); }
 
 .lf-record-hint { font-size: var(--fs-2xs); color: var(--warn); }
+
+/* ── Обратная связь по уроку ── */
+
+.lf-fb { display: flex; flex-direction: column; gap: var(--space-4); }
+.lf-fb .t-sec-label { margin-bottom: 0; }
+.lf-fb-q { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.lf-fb-label { font-size: var(--fs-sm); font-weight: 500; color: var(--text); }
+
+/* Шкала 1–10: кнопки одной высоты, выбранная — чёрная (как .segmented). */
+.lf-scale {
+  display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: var(--space-1);
+  padding: 3px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--bg2);
+}
+.lf-scale__btn {
+  min-height: 36px; padding: 0; border: 0; border-radius: var(--r-xs);
+  background: transparent; color: var(--text2);
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--fs-sm); font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.lf-scale__btn:hover:not(.is-active) { background: var(--bg3); color: var(--text); }
+.lf-scale__btn:active { transform: var(--press); }
+.lf-scale__btn.is-active { background: var(--accent); color: var(--on-accent); }
+.lf-scale__btn:focus-visible,
+.lf-yesno .segmented__btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* Узкий экран (390px): 10 кнопок в ряд дали бы цель нажатия уже 28px — два ряда по пять. */
+@media (max-width: 480px) {
+  .lf-scale { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+.lf-yesno { align-self: flex-start; }
+
+/* Незаполненное поле после попытки сохранить. */
+.lf-scale.is-invalid, .lf-yesno.is-invalid, .lf-fb-comment.is-invalid {
+  border-color: var(--bad-line); box-shadow: 0 0 0 3px var(--bad-bg);
+}
+
+.lf-fb-comment {
+  width: 100%; min-height: 90px; resize: vertical; box-sizing: border-box;
+  background: var(--bg2); border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  padding: var(--space-2) 11px; font: inherit; font-size: var(--fs-md); color: var(--text);
+  outline: none;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.lf-fb-comment:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+/* «Сохранить урок» при незаполненной обратной связи: выглядит выключенной, но кликабельна. */
+.btn-save.is-incomplete { opacity: 0.45; cursor: not-allowed; }

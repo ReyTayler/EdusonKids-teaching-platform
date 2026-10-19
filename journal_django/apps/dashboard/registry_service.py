@@ -5,13 +5,21 @@ RegistryService — «Реестр куратора»: список активн
 направлениям, см. docs/superpowers/specs/2026-07-08-student-balance-pooling-design.md).
 
 МАСШТАБ (вариант B, 2026-07-11): список пагинируется НА УРОВНЕ БД. `students_qs`
-строит аннотированный queryset (balance/attended/planned/last/next — коррелированные
-Subquery, без fan-out), фильтр сегмента и поиск — WHERE, сортировка — ORDER BY,
-срез — LIMIT/OFFSET штатным DRF-пагинатором. Так реестр держит тысячи учеников,
-не вычитывая весь список в память на каждый запрос.
+строит аннотированный queryset (balance/attended/planned/last/next/cancellations —
+коррелированные Subquery, без fan-out), фильтр сегмента и поиск — WHERE,
+сортировка — ORDER BY, срез — LIMIT/OFFSET штатным DRF-пагинатором. Так реестр
+держит тысячи учеников, не вычитывая весь список в память на каждый запрос.
 
-Реестр использует ПРОСТОЙ пул-баланс purchased − attended (SQL-арифметика), НЕ
-FIFO-движок (он нужен только финансовой вкладке). Половинки: урок 45 мин = 0.5.
+ОСТАТОК В EDUSON — ОСТАТОК КУРСА, А НЕ ДЕНЕГ (спека этапа 3, раздел B). Оплат в
+Eduson нет (решение владельца на этапе 1), и прежний пул «куплено − пройдено»
+метил «Закрыт» всю школу. Поле по-прежнему называется `balance` (имя в API и
+ключ сортировки не менялись), но значит «сколько уроков курса осталось»:
+    balance = Σ по активным членствам длина курса группы − attended,
+где длина — apps.groups.course_length (groups.lessons_total, пусто → программа
+направления), а attended — тот же прогресс, что в колонке «Пройдено»
+(lessons_done + неоплачиваемые пропуски). Остаток и прогресс выводятся из одной
+пары planned/attended, поэтому разъехаться не могут. Нет активного курса →
+остатка нет (NULL), а не 0: иначе «Без группы» целиком стал бы «Закрыт».
 
 Сводка (get_summary) — агрегаты по всей активной популяции (это тотал, считать
 всех неизбежно), поэтому кэшируется (Redis) и прогревается Celery-beat. Список —
@@ -29,14 +37,15 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 
-from apps.core.utils.dates import msk_month_range_triple, msk_now
+from apps.core.utils.dates import msk_now
 from apps.core.utils.decimal import js_number, to_decimal
+from apps.groups.course_length import effective_total_lessons_expr
 from apps.lessons.models import LessonAttendance, LessonSkip
+from apps.lessons.weights import HALF_LESSON_MINUTES
 from apps.memberships.models import GroupMembership
 from apps.scheduling import repository as sched_repo
-from apps.scheduling.occurrences import OVERDUE, PENDING
+from apps.scheduling.occurrences import CANCELLED, OVERDUE, PENDING
 from apps.scheduling.models import PlannedLesson
-from apps.payments.models import Payment
 from apps.students.models import Student
 
 # Порог «простоя» (дней без проведённого урока).
@@ -49,7 +58,7 @@ STATUS_PRIORITY = ('closed', 'ending', 'idle', 'no_plan', 'ok')
 STATUS_RANK = {s: i for i, s in enumerate(STATUS_PRIORITY)}
 
 # Публичные whitelist'ы (валидируются во view).
-SEGMENTS = ('all', 'ending', 'closed', 'idle', 'no_plan')
+SEGMENTS = ('all', 'ending', 'closed', 'idle', 'no_plan', 'cancellations')
 SORTS = ('urgency', 'name', 'balance', 'progress', 'last_lesson')
 SORT_DIRS = ('asc', 'desc')
 
@@ -70,21 +79,40 @@ def _idle_cutoff(today: datetime.date) -> datetime.date:
     return today - datetime.timedelta(days=IDLE_DAYS)
 
 
+def _month_bounds(today: datetime.date) -> tuple[datetime.date, datetime.date]:
+    """Полуинтервал [1-е число, 1-е число следующего) МСК-месяца, в котором today.
+
+    Из today, а не из отдельного «сейчас»: KPI «Отмены», сегмент и строка списка
+    обязаны смотреть в один и тот же месяц (и тесты подменяют только _today).
+    """
+    start = today.replace(day=1)
+    return start, (start + datetime.timedelta(days=32)).replace(day=1)
+
+
 # ---------------------------------------------------------------------------
 # Классификация (чистая) — статус-бейдж + флаги сигналов. Без БД.
 # ---------------------------------------------------------------------------
 
-def classify(balance, last_date, next_date, today: datetime.date) -> dict:
+def classify(balance, last_date, next_date, today: datetime.date,
+             cancellations: int = 0) -> dict:
     """
-    Балансы/даты → флаги сигналов (пересекающиеся) + статус-бейдж (самый срочный).
-    closed > ending > idle > no_plan > ok. Точечно тестируемо на границах.
+    Остаток курса/даты → флаги сигналов (пересекающиеся) + статус-бейдж (самый
+    срочный). closed > ending > idle > no_plan > ok. Точечно тестируемо на границах.
+
+    balance=None — у ученика нет активного курса (режим «Без группы»): ни
+    «Закрыт», ни «Заканчивается» про него сказать нельзя.
+
+    «Отмены» — только флаг сегмента, в статус-бейдж не входит: отменённое
+    занятие — повод присмотреться, а не состояние ученика, и вытеснять им
+    «Закрыт»/«Простой» из бейджа было бы неверно.
     """
     cutoff = _idle_cutoff(today)
     flags = {
-        'closed': balance <= 0,
-        'ending': 0 < balance <= 2,
+        'closed': balance is not None and balance <= 0,
+        'ending': balance is not None and 0 < balance <= 2,
         'idle': last_date is not None and last_date < cutoff,
         'no_plan': next_date is None,
+        'cancellations': cancellations > 0,
     }
     status = next((s for s in STATUS_PRIORITY if flags.get(s)), 'ok')
     return {**flags, 'status': status}
@@ -95,62 +123,73 @@ def classify(balance, last_date, next_date, today: datetime.date) -> dict:
 # коррелированные Subquery по student_id → без fan-out от JOIN'ов.
 # ---------------------------------------------------------------------------
 
-def _attended_units_subquery():
+def _course_total_expr():
+    """Длина курса группы для queryset'а членств (правило — apps.groups.course_length)."""
+    return effective_total_lessons_expr('group__')
+
+
+def _membership_sum_subquery(expr):
     """
-    Σ отработанных уроков (half-lesson: 45→0.5) по посещениям ученика.
+    Σ выражения по активным membership ученика (в активных группах).
 
-    Факт доп.урока (lesson_type='extra') учитывается: в новой модели компенсации
-    исходный пропуск остаётся present=false, а потребление идёт от самого факта
-    доп.урока (его вес = длительность исходного урока), поэтому один пропуск
-    списывается ровно один раз (см. apps/finances/repository.py, тот же инвариант).
-
-    is_free=False — там же и по той же причине: «бесплатное занятие» посещено
-    (present=true), но денег не берёт и баланс не списывает. Без этого фильтра
-    реестр занижал остаток на каждое бесплатное занятие и метил ученика «Закрыт»
-    при живом абонементе (прод, 12.08.2026).
+    Без Coalesce внутри: «нет ни одного членства / ни одной известной длины
+    курса» должно остаться NULL — для остатка курса это «не знаем», а не 0.
+    Где нужен ноль, вызывающий оборачивает в Coalesce сам.
     """
-    return Subquery(
-        LessonAttendance.objects
-        .filter(student_id=OuterRef('pk'), present=True, is_free=False)
-        .values('student_id')
-        .annotate(u=Coalesce(Sum(Case(
-            When(lesson__lesson_duration_minutes=45, then=Value(Decimal('0.5'))),
-            default=Value(Decimal('1')),
-            output_field=_DEC,
-        )), _ZERO_DEC))
-        .values('u')[:1],
-        output_field=_DEC,
-    )
-
-
-def _purchased_subquery():
-    """Σ купленных уроков (net, с учётом возвратов как отрицательных строк)."""
-    return Subquery(
-        Payment.objects
-        .filter(student_id=OuterRef('pk'))
-        .values('student_id')
-        .annotate(s=Coalesce(Sum('lessons_count', output_field=_DEC), _ZERO_DEC))
-        .values('s')[:1],
-        output_field=_DEC,
-    )
-
-
-def _membership_sum_subquery(field: str):
-    """Σ поля по активным membership ученика (в активных группах)."""
     return Subquery(
         GroupMembership.objects
         .filter(student_id=OuterRef('pk'), active=True, group__active=True)
         .values('student_id')
-        .annotate(s=Coalesce(Sum(field, output_field=_DEC), _ZERO_DEC))
+        .annotate(s=Sum(expr, output_field=_DEC))
         .values('s')[:1],
         output_field=_DEC,
     )
 
 
+def _cancelled_lessons(month_start: datetime.date, month_end: datetime.date) -> QuerySet:
+    """
+    Отменённые плановые занятия активных групп за месяц.
+
+    Предикат ровно тот же, что у KPI «Отмены» (sched_repo.cancellations_count):
+    сегмент — это «ученики, которых касается этот KPI». Повторён здесь, а не
+    вызван, потому что KPI отдаёт готовое число, а сегменту нужен queryset для
+    группировки по ученику. При правке определения KPI — править и тут.
+    """
+    return PlannedLesson.objects.filter(
+        group__active=True,
+        status=CANCELLED,
+        scheduled_date__gte=month_start,
+        scheduled_date__lt=month_end,
+    )
+
+
+def _cancellations_subquery(month_start: datetime.date, month_end: datetime.date):
+    """
+    Число отмен месяца в активных группах ученика (активное членство).
+
+    Оба условия на членство — в одном filter(): один JOIN, иначе Django завёл
+    бы два и условие «активно» проверялось бы не у того членства.
+    Индекс planned_lessons_group_date_idx (group_id, scheduled_date).
+    """
+    return Coalesce(Subquery(
+        _cancelled_lessons(month_start, month_end)
+        .filter(group__memberships__active=True,
+                group__memberships__student_id=OuterRef('pk'))
+        .values('group__memberships__student_id')
+        .annotate(c=Count('id'))
+        .values('c')[:1],
+        output_field=IntegerField(),
+    ), Value(0))
+
+
 def _half_weight(duration_field: str) -> Case:
-    """Вес слота курса в уроках: 45 мин = 0.5, иначе 1 (шаг lessons_done)."""
+    """Вес слота курса в уроках: 45 мин = 0.5, иначе 1 (шаг lessons_done).
+
+    Путь до длительности здесь — через группу или урок пропуска, поэтому
+    attended_units_case() из apps.lessons.weights не подходит; порог — общий.
+    """
     return Case(
-        When(**{duration_field: 45}, then=Value(Decimal('0.5'))),
+        When(**{duration_field: HALF_LESSON_MINUTES}, then=Value(Decimal('0.5'))),
         default=Value(Decimal('1')),
         output_field=_DEC,
     )
@@ -280,14 +319,12 @@ def base_students_qs(today: datetime.date, *, no_group: bool = False) -> QuerySe
         student_id=OuterRef('pk'), active=True, group__active=True,
     )
     population = Student.objects.exclude if no_group else Student.objects.filter
+    month_start, month_end = _month_bounds(today)
     qs = (
         population(Exists(active_membership))
         .annotate(
-            balance=ExpressionWrapper(
-                Coalesce(_purchased_subquery(), _ZERO_DEC)
-                - Coalesce(_attended_units_subquery(), _ZERO_DEC),
-                output_field=_DEC,
-            ),
+            # Σ длин курсов активных групп; NULL — активного курса нет.
+            course_total=_membership_sum_subquery(_course_total_expr()),
             # Прогресс курса = пройдено в группах + неоплачиваемые пропуски в них
             # (уроки, пройденные в другом месте; см. _skip_sources).
             attended=ExpressionWrapper(
@@ -295,11 +332,15 @@ def base_students_qs(today: datetime.date, *, no_group: bool = False) -> QuerySe
                 + _skipped_units_subquery(),
                 output_field=_DEC,
             ),
-            planned=Coalesce(
-                _membership_sum_subquery('group__direction__total_lessons'), _ZERO_DEC,
+            planned=Coalesce(F('course_total'), _ZERO_DEC),
+            # Остаток КУРСА (см. докстринг модуля); NULL - x = NULL сохраняет
+            # «нет курса» без отдельного CASE.
+            balance=ExpressionWrapper(
+                F('course_total') - F('attended'), output_field=_DEC,
             ),
             last_lesson=_last_lesson_subquery(),
             next_lesson=_next_lesson_subquery(today),
+            cancellations=_cancellations_subquery(month_start, month_end),
         )
     )
     # Второй проход: поля, зависящие от balance/дат (urgency_rank, progress_ratio).
@@ -329,7 +370,8 @@ def base_students_qs(today: datetime.date, *, no_group: bool = False) -> QuerySe
 
 def _summary_rows(today: datetime.date) -> list[dict]:
     """
-    Поля base_students_qs (balance/attended/planned/last_lesson/next_lesson) по
+    Поля base_students_qs (balance/attended/planned/last_lesson/next_lesson/
+    cancellations) по
     ВСЕЙ активной популяции, но каждый источник читается ровно ОДИН раз.
 
     Почему не переиспользуем base_students_qs: там на каждого ученика свой
@@ -352,42 +394,32 @@ def _summary_rows(today: datetime.date) -> list[dict]:
         .values('student_id')
         .annotate(
             attended=Coalesce(Sum('lessons_done', output_field=_DEC), _ZERO_DEC),
-            planned=Coalesce(
-                Sum('group__direction__total_lessons', output_field=_DEC), _ZERO_DEC,
-            ),
+            # Без Coalesce — как course_total в base_students_qs (NULL = курса нет).
+            course_total=Sum(_course_total_expr(), output_field=_DEC),
         )
     )
 
-    purchased = dict(
-        Payment.objects
-        .values('student_id')
-        .annotate(s=Coalesce(Sum('lessons_count', output_field=_DEC), _ZERO_DEC))
-        .values_list('student_id', 's')
-    )
-
-    # Один проход по посещениям даёт сразу оба поля: Σ отработанных уроков
-    # (45 мин = 0.5) и дату последнего занятия.
-    #
-    # is_free разводит эти два поля: бесплатное занятие баланс не списывает
-    # (вес 0, как в _attended_units_subquery и apps/finances), но ученик на нём
-    # БЫЛ — дату последнего занятия оно двигает. Поэтому фильтр стоит внутри
-    # CASE, а не в .filter(): иначе из-под Max ушли бы те же строки и человек с
-    # одними бесплатными занятиями ложно попал бы в «простой».
-    attendance = {
-        r['student_id']: r
-        for r in LessonAttendance.objects
+    # Дата последнего занятия. Бесплатное занятие её двигает (ученик был), как
+    # и в _last_lesson_subquery списка.
+    last_lesson = dict(
+        LessonAttendance.objects
         .filter(present=True)
         .values('student_id')
-        .annotate(
-            units=Coalesce(Sum(Case(
-                When(is_free=True, then=_ZERO_DEC),
-                When(lesson__lesson_duration_minutes=45, then=Value(Decimal('0.5'))),
-                default=Value(Decimal('1')),
-                output_field=_DEC,
-            )), _ZERO_DEC),
-            last=Max('lesson__lesson_date'),
-        )
-    }
+        .annotate(last=Max('lesson__lesson_date'))
+        .values_list('student_id', 'last')
+    )
+
+    # Отмены месяца: JOIN к членствам — по строке на (занятие, членство), а у
+    # ученика в группе членство одно (UNIQUE group+student), так что Count
+    # по ученику честный.
+    month_start, month_end = _month_bounds(today)
+    cancellations = dict(
+        _cancelled_lessons(month_start, month_end)
+        .filter(group__memberships__active=True)
+        .values('group__memberships__student_id')
+        .annotate(c=Count('id'))
+        .values_list('group__memberships__student_id', 'c')
+    )
 
     # Ближайшее занятие: JOIN к членствам даёт fan-out по группам ученика, но
     # Min от этого не зависит — как и MIN в исходном подзапросе с LIMIT 1.
@@ -420,17 +452,19 @@ def _summary_rows(today: datetime.date) -> list[dict]:
     rows = []
     for m in mem_rows:
         sid = m['student_id']
-        att = attendance.get(sid)
-        units = att['units'] if att else Decimal('0')
+        attended = to_decimal(m['attended']) + skipped.get(sid, Decimal('0'))
+        course_total = m['course_total']
         rows.append({
             # build_summary ключ не читает — он нужен сверке с base_students_qs
             # (тест test_summary_batch_matches_annotated_queryset) и отладке.
             'student_id': sid,
-            'balance': to_decimal(purchased.get(sid, 0)) - to_decimal(units),
-            'attended': to_decimal(m['attended']) + skipped.get(sid, Decimal('0')),
-            'planned': m['planned'],
-            'last_lesson': att['last'] if att else None,
+            'balance': (to_decimal(course_total) - attended
+                        if course_total is not None else None),
+            'attended': attended,
+            'planned': course_total if course_total is not None else Decimal('0'),
+            'last_lesson': last_lesson.get(sid),
             'next_lesson': next_lesson.get(sid),
+            'cancellations': cancellations.get(sid, 0),
         })
     return rows
 
@@ -450,6 +484,8 @@ def _apply_segment(qs: QuerySet, segment: str, today: datetime.date) -> QuerySet
         return qs.filter(last_lesson__lt=cutoff)
     if segment == 'no_plan':
         return qs.filter(next_lesson__isnull=True)
+    if segment == 'cancellations':
+        return qs.filter(cancellations__gt=0)
     return qs  # 'all'
 
 
@@ -524,10 +560,12 @@ def serialize_rows(students: list) -> list[dict]:
 
     out: list[dict] = []
     for s in students:
-        balance = js_number(to_decimal(s.balance or 0))
+        # None (нет активного курса) не превращаем в 0 — это был бы «Закрыт».
+        balance = js_number(to_decimal(s.balance)) if s.balance is not None else None
         attended = to_decimal(s.attended or 0)
         planned = int(s.planned or 0)
         progress_pct = round(float(attended) / planned * 100) if planned > 0 else None
+        cancellations = int(s.cancellations or 0)
         status = classify(balance, s.last_lesson, s.next_lesson, today)['status']
         out.append({
             'student_id': s.pk,
@@ -540,6 +578,7 @@ def serialize_rows(students: list) -> list[dict]:
             'progress_pct': progress_pct,
             'last_lesson_date': s.last_lesson.isoformat() if s.last_lesson else None,
             'next_lesson_date': s.next_lesson.isoformat() if s.next_lesson else None,
+            'cancellations': cancellations,
             'status': status,
         })
     return out
@@ -553,23 +592,25 @@ def build_summary() -> dict:
     """KPI + счётчики сигналов + поток дня. Один лёгкий проход по активным
     ученикам (тотал — считать всех неизбежно); результат кэшируется."""
     today = _today()
-    _, month_start, month_end = msk_month_range_triple()
+    month_start, month_end = _month_bounds(today)
 
     rows = _summary_rows(today)
 
     active = 0
-    signals = {'ending': 0, 'closed': 0, 'idle': 0, 'no_plan': 0}
+    signals = {'ending': 0, 'closed': 0, 'idle': 0, 'no_plan': 0, 'cancellations': 0}
     lessons_ahead = Decimal('0')
     progress_sum = 0
     progress_n = 0
     for r in rows:
         active += 1
-        balance = js_number(to_decimal(r['balance'] or 0))
-        flags = classify(balance, r['last_lesson'], r['next_lesson'], today)
+        balance = r['balance']
+        flags = classify(balance, r['last_lesson'], r['next_lesson'], today,
+                         cancellations=r['cancellations'])
         for k in signals:
             if flags[k]:
                 signals[k] += 1
-        if balance > 0:
+        # lessons_ahead — уроков курса впереди по школе (только положительные остатки).
+        if balance is not None and balance > 0:
             lessons_ahead += to_decimal(balance)
         planned = int(r['planned'] or 0)
         if planned > 0:

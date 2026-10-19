@@ -408,6 +408,10 @@
   color: var(--text3);
 }
 
+.reg-signal__count--cancellations {
+  color: var(--warn);
+}
+
 .reg-signal__label {
   font-size: var(--fs-sm);
   color: var(--text2);
@@ -430,6 +434,8 @@
 .reg-badge--ending { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
 .reg-badge--idle   { color: var(--info); background: var(--info-bg); border-color: var(--info-line); }
 .reg-badge--ok     { color: var(--ok);   background: var(--ok-bg);   border-color: var(--ok-line); }
+.reg-badge--cancel { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); font-family: var(--font-mono); }
+.reg-badge--over   { color: var(--info); background: var(--info-bg); border-color: var(--info-line); }
 .reg-badge--no_plan {
   color: var(--text2);
   background: var(--bg2);
@@ -520,7 +526,7 @@
 }
 
 .reg-balance--zero {
-  color: var(--bad);
+  color: var(--text3);
 }
 
 .reg-progress {

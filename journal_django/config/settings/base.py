@@ -46,6 +46,8 @@ env = environ.Env(
     TELEGRAM_GENERAL_CHAT_ID=(int, 0),
     BOT_SERVICE_TOKEN=(str, ''),
     NOTIFICATIONS_HISTORY_LIMIT=(int, 200),
+    # Публичный адрес журнала (https://<домен>) — для ссылок в письмах.
+    PUBLIC_URL=(str, ''),
 )
 
 # .env — в корне репозитория форка (platform/.env), на уровень выше journal_django/.
@@ -91,6 +93,11 @@ if SMTP_PORT == 465:
 else:
     EMAIL_USE_SSL: bool = False
     EMAIL_USE_TLS: bool = True
+
+# Таймаут сокета SMTP, сек. Django по умолчанию ждёт бесконечно: зависший
+# сервер держал бы диспетчер очереди (и строку под FOR UPDATE) до перезапуска
+# воркера — встали бы и письма, и Telegram. Таймаут = временная ошибка, повтор.
+EMAIL_TIMEOUT: int = 20
 
 # ---------------------------------------------------------------------------
 # Application definition
@@ -271,6 +278,27 @@ if crontab is not None:
             'task': 'apps.notifications.tasks.send_fill_digest',
             'schedule': crontab(hour=21, minute=0),
         },
+        # Email-напоминания Eduson (спека этапа 3, раздел D). Письма ставятся в
+        # ту же очередь; уходят они с минутным тиком notifications-dispatch-outbox.
+        'notifications-email-teacher-schedule': {
+            'task': 'apps.notifications.tasks.send_teacher_schedule_email',
+            'schedule': crontab(hour=8, minute=0),
+        },
+        # Окно письма — 3 часа после конца урока; 15 минут — с большим запасом.
+        'notifications-email-unrecorded': {
+            'task': 'apps.notifications.tasks.send_unrecorded_reminders',
+            'schedule': crontab(minute='*/15'),
+        },
+        'notifications-email-parent-day-before': {
+            'task': 'apps.notifications.tasks.send_parent_day_before',
+            'schedule': crontab(hour=10, minute=0),
+        },
+        # Окно «через час» — 10 минут (55–65), шаг 5 минут: каждый урок попадает
+        # в два тика, второй гасит dedup_key.
+        'notifications-email-parent-hour-before': {
+            'task': 'apps.notifications.tasks.send_parent_hour_before',
+            'schedule': crontab(minute='*/5'),
+        },
         'knowledge-cleanup-orphan-images': {
             'task': 'apps.knowledge.tasks.cleanup_orphan_images',
             'schedule': crontab(hour=4, minute=30),   # CELERY_TIMEZONE='Europe/Moscow'
@@ -296,6 +324,9 @@ TELEGRAM_GENERAL_CHAT_ID: int = env('TELEGRAM_GENERAL_CHAT_ID')
 BOT_SERVICE_TOKEN: str = env('BOT_SERVICE_TOKEN')
 # Сколько ЗАВЕРШЁННЫХ записей очереди храним. Строки в очереди не удаляются никогда.
 NOTIFICATIONS_HISTORY_LIMIT: int = env('NOTIFICATIONS_HISTORY_LIMIT')
+# Публичный адрес журнала без завершающего «/» (https://<домен>): ссылка на
+# кабинет преподавателя в email-напоминаниях. Пусто → письмо без ссылки.
+PUBLIC_URL: str = env('PUBLIC_URL')
 
 # ---------------------------------------------------------------------------
 # База знаний (apps.knowledge) — хранилище картинок

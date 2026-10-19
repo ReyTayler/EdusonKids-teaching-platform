@@ -2,10 +2,13 @@
 Admin API отзывов по урокам.
 
   GET /api/admin/lesson-feedback — лента отзывов, пагинация StandardPagination.
-      Фильтры: group_id, teacher_id, lesson_id (целые > 0; мусор → 400).
+      Фильтры: group_id, teacher_id, lesson_id (целые > 0), date_from/date_to
+      (YYYY-MM-DD, по дате урока, включительно); мусор → 400. Отзывы группы
+      (карточка группы) — та же лента с group_id, отдельный эндпоинт не нужен.
 
-Права: manager/admin/superadmin. Записи через API на этапе 1 нет — отзывы
-приходят импортом, форма заполнения преподавателем появится позже.
+Права: manager/admin/superadmin. Отдельной записи отзыва через admin API нет:
+отзыв пишет преподаватель вместе с уроком (POST /api/submitLesson → блок
+feedback, apps.lessons.services.record_lesson), исторические — импорт.
 """
 from __future__ import annotations
 

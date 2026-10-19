@@ -108,6 +108,13 @@ class PlannedLesson(models.Model):
             # teacher (ForeignKey → db_index=True), а строк на одного преподавателя
             # немного (курсы ~десятки уроков на пару групп) — фильтр по дате в окне
             # поверх FK-индекса тривиален. См. шаг-5 отчёт.
+            # Email-напоминания (apps/notifications/reminders.py) каждые 5–15 мин
+            # выбирают ожидающие занятия по всей школе в окне дат/времени.
+            # Частичный — только pending: прошедшие и отменённые строки копятся,
+            # а в напоминаниях не участвуют.
+            models.Index(fields=['scheduled_date', 'scheduled_time'],
+                         name='planned_lessons_pending_dt_idx',
+                         condition=models.Q(status='pending')),
         ]
         constraints = [
             # Одна строка на позицию курса (seq задан). extra/маркеры (seq NULL)

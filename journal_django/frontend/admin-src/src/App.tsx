@@ -11,6 +11,7 @@ import DirectionsListPage from './pages/directions/DirectionsListPage';
 import LessonsListPage from './pages/lessons/LessonsListPage';
 import ExtraLessonsListPage from './pages/extra-lessons/ExtraLessonsListPage';
 import PayrollPage from './pages/payroll/PayrollPage';
+import LessonFeedbackPage from './pages/feedback/LessonFeedbackPage';
 import SubscriptionsPage from './pages/subscriptions/SubscriptionsPage';
 import ArchivePage from './pages/archive/ArchivePage';
 import StudentDetailPage from './pages/students/StudentDetailPage';
@@ -64,7 +65,8 @@ export function App() {
             <Route path="/admin/lessons/:id" element={<LessonDetailPage />} />
             <Route path="/admin/extra-lessons" element={<RequireRole roles={['manager','admin','superadmin']}><ExtraLessonsListPage /></RequireRole>} />
 
-            <Route path="/admin/payroll" element={<RequireRole roles={['superadmin']}><PayrollPage /></RequireRole>} />
+            <Route path="/admin/feedback" element={<RequireRole roles={['manager','admin','superadmin']}><LessonFeedbackPage /></RequireRole>} />
+            <Route path="/admin/payroll"element={<RequireRole roles={['superadmin']}><PayrollPage /></RequireRole>} />
             <Route path="/admin/calendar" element={<RequireRole roles={['manager','admin','superadmin']}><AdminCalendarPage /></RequireRole>} />
             <Route path="/admin/subscriptions" element={<SubscriptionsPage />} />
             <Route path="/admin/renewals" element={<RequireRole roles={['manager','admin','superadmin']}><RenewalsPage /></RequireRole>} />

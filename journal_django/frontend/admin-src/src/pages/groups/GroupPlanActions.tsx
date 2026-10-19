@@ -17,9 +17,11 @@ import { DateInput } from '../../components/form/DateInput';
 import { TimeInput } from '../../components/form/TimeInput';
 import { Combobox } from '../../components/form/Combobox';
 import { fmtDate, todayMSK } from '../../lib/format';
+import { AFFECTED_OP_LABELS } from '../../lib/labels';
 import type { LessonActionKind } from '../../shared/calendar/LessonPopup';
 import type { Occurrence } from '../../shared/calendar/types';
 import type { Group } from '../../lib/types';
+import FreezeGroupDialog from './FreezeGroupDialog';
 
 /** День недели Monday-first в UI, значения — уже в конвенции проекта (Вс=0..Сб=6),
  * поэтому дополнительная конвертация индекса при отправке не нужна. */
@@ -51,12 +53,6 @@ interface Props {
 }
 
 type DialogKind = 'reschedule' | 'permanent' | 'permanent-confirm' | 'change-teacher' | 'cancel' | 'set-schedule' | null;
-
-const AFFECTED_KIND_LABELS: Record<AffectedOp['kind'], string> = {
-  reschedule: 'перенос',
-  substitution: 'замена преподавателя',
-  cancellation: 'отмена',
-};
 
 /**
  * Toolbar кнопок + модалки операций плана (planned_lessons) для вкладки
@@ -93,6 +89,7 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
 
   const [dialog, setDialog] = useState<DialogKind>(null);
   const closeDialog = () => setDialog(null);
+  const [freezeOpen, setFreezeOpen] = useState(false);
 
   const teacherOptions = useMemo(
     () => teachers.filter((t) => t.active).map((t) => ({ value: String(t.id), label: t.name })),
@@ -405,12 +402,17 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
             <Button onClick={() => openPermanent()} disabled={permanentRows.length === 0}>
               Изменить расписание
             </Button>
+            <Button onClick={() => setFreezeOpen(true)} disabled={!hasSlots}>
+              Заморозка
+            </Button>
             <Button variant="danger" onClick={() => openCancel()} disabled={courseRows.length === 0}>
               Отменить занятие
             </Button>
           </>
         )}
       </div>
+
+      <FreezeGroupDialog groupId={groupId} open={freezeOpen} onClose={() => setFreezeOpen(false)} />
 
       {/* Перенести занятие */}
       <Dialog
@@ -530,7 +532,7 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
         <ul className="affected-ops-list">
           {pAffected.map((op, i) => (
             <li key={i} className="affected-ops-list__item">
-              <span className="status-badge status-badge--negative">{AFFECTED_KIND_LABELS[op.kind]}</span>
+              <span className="status-badge status-badge--negative">{AFFECTED_OP_LABELS[op.kind]}</span>
               {op.seq != null && <span> урок {op.seq}</span>}
               <span> — {fmtDate(op.date)}</span>
               {op.time && <span> {op.time.slice(0, 5)}</span>}

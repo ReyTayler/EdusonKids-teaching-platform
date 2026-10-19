@@ -356,6 +356,14 @@ def build_summary(operation: str, events: list[dict], lk: Lookups) -> str:
     if operation == 'plan.permanent_change' and planned:
         group = lk.group((planned[0].get('pgh_data') or {}).get('group_id'))
         return f'Смена расписания {group}: занятий изменено — {len(planned)}'
+    if operation == 'plan.freeze' and planned:
+        # Считаем позиции, у которых сдвинулась дата: заморозка пишет хвост
+        # дважды (сброс разовых операций, затем перекладка), len(planned)
+        # завысил бы счёт; удалённые маркеры отмен — не «перенесённые занятия».
+        group = lk.group((planned[0].get('pgh_data') or {}).get('group_id'))
+        moved = len({e.get('pgh_obj_id') for e in planned
+                     if 'scheduled_date' in (e.get('pgh_diff') or {})})
+        return f'Заморозка {group}: занятий перенесено — {moved}'
     if operation == 'plan.resync' and planned:
         # Считаем ПОЗИЦИИ, а не события: починка пишет строку дважды (сначала
         # снимает привязку, потом ставит новую — fact_lesson уникален), и len(planned)

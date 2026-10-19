@@ -5,16 +5,17 @@ import { KpiCard } from '../KpiCard';
 import { TodayStreamCard } from './TodayStreamCard';
 import { SignalsCard } from './SignalsCard';
 import { RegistryTable } from './RegistryTable';
-import { REGISTRY_STATUS_LABELS } from '../../../lib/labels';
+import { REGISTRY_SEGMENT_LABELS } from '../../../lib/labels';
 import type { RegistrySegment, RegistrySummary } from '../../../lib/types';
 
-const SEGMENTS: RegistrySegment[] = ['all', 'ending', 'closed', 'idle', 'no_plan'];
+const SEGMENTS: RegistrySegment[] = ['all', 'ending', 'closed', 'idle', 'no_plan', 'cancellations'];
 
 const EMPTY_SIGNALS: RegistrySummary['signals'] = {
   ending: { count: 0 },
   closed: { count: 0 },
   idle: { count: 0 },
   no_plan: { count: 0 },
+  cancellations: { count: 0 },
 };
 
 export default function RegistryTab() {
@@ -69,9 +70,9 @@ export default function RegistryTab() {
           active={segment === 'all'}
         />
         <KpiCard
-          label="На продление / апсейл"
+          label="На продление"
           value={dash(kpis?.renewal_upsell)}
-          hint="≤2 урока + закрытые"
+          hint="осталось ≤2 урока + курс пройден"
           tone="warning"
         />
         <KpiCard
@@ -83,12 +84,12 @@ export default function RegistryTab() {
         />
         <KpiCard label="Средний прогресс" value={dash(kpis?.avg_progress, (n) => `${n}%`)} tone="info" />
         <KpiCard
-          label="Впереди уроков"
+          label="Уроков курса впереди"
           value={dash(kpis?.lessons_ahead, (n) => n.toLocaleString('ru-RU'))}
-          hint="сумма остатков"
+          hint="сумма остатков по курсам"
         />
         <KpiCard
-          label="Отмены"
+          label="Отменено занятий"
           value={dash(kpis?.cancellations)}
           hint="за месяц"
           tone={kpis && kpis.cancellations > 0 ? 'warning' : 'default'}
@@ -122,7 +123,7 @@ export default function RegistryTab() {
             onClick={() => selectSegment('all')}
             title="Снять фильтр"
           >
-            {REGISTRY_STATUS_LABELS[segment]}
+            {REGISTRY_SEGMENT_LABELS[segment]}
             <span className="reg-chip__x" aria-hidden>✕</span>
           </button>
         )}
@@ -132,6 +133,7 @@ export default function RegistryTab() {
         title={noGroup ? 'Ученики без группы' : 'Ученики'}
         rows={students.data?.rows || []}
         isLoading={students.isFetching}
+        isError={students.isError}
         serverPagination={{
           page,
           pageSize,

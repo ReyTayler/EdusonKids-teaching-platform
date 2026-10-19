@@ -110,6 +110,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'lessons', label: 'Уроки', path: '/admin/lessons' },
       { key: 'extra-lessons', label: 'Доп.уроки', path: '/admin/extra-lessons' },
       { key: 'calendar', label: 'Календарь', path: '/admin/calendar' },
+      { key: 'feedback', label: 'Отзывы', path: '/admin/feedback' },
     ],
   },
   {

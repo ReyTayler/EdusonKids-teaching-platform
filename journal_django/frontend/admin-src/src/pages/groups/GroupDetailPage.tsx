@@ -17,6 +17,8 @@ import { LessonEditor } from '../../components/lessons/LessonEditor';
 import { directionColor } from '../../lib/direction-color';
 import { fmtDate } from '../../lib/format';
 import { formatSlot } from '../../lib/slots';
+import { LessonFeedbackTable } from '../../components/feedback/LessonFeedbackTable';
+import { FEEDBACK_LABELS } from '../../lib/labels';
 import { useToast } from '../../components/ui/Toast';
 import { useApiError } from '../../hooks/useApiError';
 import { useGroupPlanCalendar } from '../../hooks/useGroupPlanCalendar';
@@ -42,7 +44,7 @@ import GroupKpiRow from './GroupKpiRow';
  */
 const GROUP_PLAN_VIEWS: CalendarViewMode[] = ['month'];
 
-const GROUP_TABS = ['overview', 'students', 'lessons', 'progress', 'schedule', 'history'] as const;
+const GROUP_TABS = ['overview', 'students', 'lessons', 'progress', 'schedule', 'feedback', 'history'] as const;
 type GroupTab = (typeof GROUP_TABS)[number];
 const DEFAULT_TAB: GroupTab = 'overview';
 
@@ -284,6 +286,12 @@ export default function GroupDetailPage() {
       ),
     },
   ];
+
+  tabs.push({
+    value: 'feedback',
+    label: FEEDBACK_LABELS.tab,
+    content: <LessonFeedbackTable groupId={group.id} />,
+  });
 
   if (canSeeChangelog(me?.role as Role)) {
     tabs.push({

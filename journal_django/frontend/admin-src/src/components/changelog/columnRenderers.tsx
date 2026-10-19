@@ -24,7 +24,7 @@ export const ACTION_ICONS: Record<string, ReactElement> = {
 export function actionIcon(operation: string): ReactElement {
   if (operation === 'changelog.revert') return ACTION_ICONS.revert;
   if (operation === 'plan.reschedule' || operation.includes('schedule_change') ||
-      operation === 'plan.permanent_change') return ACTION_ICONS.move;
+      operation === 'plan.permanent_change' || operation === 'plan.freeze') return ACTION_ICONS.move;
   if (operation === 'plan.cancel') return ACTION_ICONS.cancel;
   if (operation === 'lesson.submit') return ACTION_ICONS.done;
   if (operation.endsWith('.create') || operation === 'plan.extra' ||

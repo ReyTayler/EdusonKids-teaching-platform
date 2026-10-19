@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Field } from '@shared/components/form/Field';
 import { DateInput } from '@shared/components/form/DateInput';
 import { Checkbox } from '@shared/components/form/Checkbox';
 import { TextInput } from '@shared/components/form/TextInput';
+import { Textarea } from '@shared/components/form/Textarea';
 import { ApiError, LESSON_ALREADY_RECORDED, REQUEST_TIMEOUT } from '@shared/lib/api';
 import { useToast } from '@shared/components/ui/Toast';
 import { useSubmitLesson } from '../../hooks/useSubmitLesson';
@@ -11,6 +12,36 @@ import { useGroupDirections } from '../../hooks/useGroupDirections';
 import { isoDate, todayMsk } from '../../lib/dates';
 import { calcPayment, fmtNum, getCourseLimit, isHalfLesson, lessonNumber, rub } from '../../lib/teacher-calc';
 import type { GroupData, SubmitPayload, SubmitResult } from '../../lib/types';
+import { ScaleField, YesNoField, FeedbackQuestion } from './FeedbackFields';
+
+const COMMENT_MAX = 5000;
+
+type FbField = 'understanding' | 'interest' | 'techProblems' | 'comment';
+type FbErrors = Partial<Record<FbField, string>>;
+/** Порядок полей на экране — по нему выбираем «первое незаполненное». */
+const FB_ORDER: FbField[] = ['understanding', 'interest', 'techProblems', 'comment'];
+const FB_REQUIRED_MSG = 'Это поле обязательно';
+
+/**
+ * Разбирает 400 «Validation failed» по блоку feedback. Сервер отдаёт либо
+ * {feedback: {поле: [текст]}}, либо {feedback: [текст]} (блок не прислан вовсе).
+ * Возвращает ошибки по полям и общий текст; null — это не ошибка обратной связи.
+ */
+function parseFeedbackErrors(details: unknown): { fields: FbErrors; general: string | null } | null {
+  if (!details || typeof details !== 'object') return null;
+  const fb = (details as Record<string, unknown>).feedback;
+  if (fb == null) return null;
+  const first = (v: unknown): string | undefined =>
+    Array.isArray(v) && v.length > 0 ? String(v[0]) : typeof v === 'string' ? v : undefined;
+  if (Array.isArray(fb) || typeof fb === 'string') return { fields: {}, general: first(fb) ?? null };
+  if (typeof fb !== 'object') return null;
+  const fields: FbErrors = {};
+  for (const k of FB_ORDER) {
+    const m = first((fb as Record<string, unknown>)[k]);
+    if (m) fields[k] = m;
+  }
+  return { fields, general: null };
+}
 
 /** Похожа ли строка на http(s)-ссылку — только мягкая подсказка, не блокирует сохранение. */
 function looksLikeUrl(value: string): boolean {
@@ -101,6 +132,39 @@ export function LessonForm({
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Обратная связь: без значений по умолчанию — преподаватель отвечает сам, иначе
+  // «5 из 10» и «технических проблем нет» прилетали бы от ленивого клика «Сохранить».
+  const [understanding, setUnderstanding] = useState<number | null>(null);
+  const [interest, setInterest] = useState<number | null>(null);
+  const [techProblems, setTechProblems] = useState<boolean | null>(null);
+  const [comment, setComment] = useState('');
+  // Подсветка пустых полей включается первой попыткой сохранить.
+  const [fbAttempted, setFbAttempted] = useState(false);
+  const [serverFbErrors, setServerFbErrors] = useState<FbErrors>({});
+  const fbRef = useRef<HTMLDivElement>(null);
+  const commentId = useId();
+
+  const fbMissing: Record<FbField, boolean> = {
+    understanding: understanding === null,
+    interest: interest === null,
+    techProblems: techProblems === null,
+    comment: comment.trim() === '',
+  };
+  const fbComplete = !FB_ORDER.some((k) => fbMissing[k]);
+  const fbError = (k: FbField): string | undefined =>
+    serverFbErrors[k] ?? (fbAttempted && fbMissing[k] ? FB_REQUIRED_MSG : undefined);
+  // Сбрасываем серверную ошибку поля, как только его изменили.
+  const clearFbError = (k: FbField) =>
+    setServerFbErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
+
+  /** Фокус на первое проблемное поле блока (радиогруппа — на активную кнопку). */
+  const focusFirstInvalid = (bad: FbField[]) => {
+    const first = FB_ORDER.find((k) => bad.includes(k));
+    if (!first) return;
+    const box = fbRef.current?.querySelector<HTMLElement>(`[data-fb-field="${first}"]`);
+    box?.querySelector<HTMLElement>('[role="radio"][tabindex="0"], textarea')?.focus();
+  };
+
   // Первичный источник half-lesson/лимита курса — карта /api/group-directions
   // (кэш общий с GroupsPage). Regex-эвристика — только фолбэк
   // на случай, если карта ещё не загрузилась или группы в ней нет.
@@ -183,12 +247,26 @@ export function LessonForm({
 
   const handleSubmit = () => {
     if (limitExceeded || noOnePresent || submitLesson.isPending) return;
+    // Блок обратной связи не заполнен: кнопка выглядит неактивной, но клик по ней
+    // показывает, чего именно не хватает, и ведёт к первому пустому полю.
+    if (!fbComplete) {
+      setFbAttempted(true);
+      focusFirstInvalid(FB_ORDER.filter((k) => fbMissing[k]));
+      return;
+    }
     setSubmitError(null);
+    setServerFbErrors({});
 
     const payload: SubmitPayload = {
       group,
       date,
       students: groupData.students.map((s) => ({ id: s.id, name: s.name, present: presentOf(s.id) })),
+      feedback: {
+        understanding: understanding as number,
+        interest: interest as number,
+        techProblems: techProblems as boolean,
+        comment: comment.trim(),
+      },
       ...(recordUrl.trim() ? { recordUrl: recordUrl.trim() } : {}),
       ...(plannedLessonId != null ? { plannedLessonId } : {}),
     };
@@ -233,7 +311,16 @@ export function LessonForm({
         if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
           setSubmitError('Сессия истекла. Обновите страницу и войдите заново.');
         } else if (err instanceof ApiError) {
-          setSubmitError(err.message);
+          // Ошибки блока обратной связи показываем у полей, а не общим
+          // «Validation failed».
+          const fb = err.status === 400 ? parseFeedbackErrors(err.details) : null;
+          if (fb) {
+            setServerFbErrors(fb.fields);
+            setSubmitError(fb.general ?? (Object.keys(fb.fields).length ? null : err.message));
+            focusFirstInvalid(Object.keys(fb.fields) as FbField[]);
+          } else {
+            setSubmitError(err.message);
+          }
         } else {
           // Сетевой сбой без ответа сервера — та же неизвестность, что и таймаут.
           setSubmitError(
@@ -342,10 +429,47 @@ export function LessonForm({
         </div>
       )}
 
+      <div className="lf-fb" ref={fbRef}>
+        <span className="t-sec-label">Обратная связь по уроку</span>
+        <ScaleField
+          field="understanding"
+          label="Насколько ребёнок понимает темы урока?"
+          value={understanding}
+          onChange={(v) => { setUnderstanding(v); clearFbError('understanding'); }}
+          error={fbError('understanding')}
+        />
+        <ScaleField
+          field="interest"
+          label="Насколько ребёнку интересно на уроке?"
+          value={interest}
+          onChange={(v) => { setInterest(v); clearFbError('interest'); }}
+          error={fbError('interest')}
+        />
+        <YesNoField
+          field="techProblems"
+          label="Есть ли технические проблемы?"
+          value={techProblems}
+          onChange={(v) => { setTechProblems(v); clearFbError('techProblems'); }}
+          error={fbError('techProblems')}
+        />
+        <FeedbackQuestion id={`${commentId}-label`} field="comment" label="Как прошёл урок? Комментарий по ребёнку" error={fbError('comment')}>
+          <Textarea
+            id={commentId}
+            className={`lf-fb-comment${fbError('comment') ? ' is-invalid' : ''}`}
+            rows={4}
+            maxLength={COMMENT_MAX}
+            value={comment}
+            aria-labelledby={`${commentId}-label`}
+            aria-invalid={fbError('comment') ? true : undefined}
+            onChange={(e) => { setComment(e.target.value); clearFbError('comment'); }}
+          />
+        </FeedbackQuestion>
+      </div>
+
       <div className="lf-record">
         <div className="lf-record-head">
-          <span className="t-sec-label">Запись урока</span>
-          <span className="lf-record-optional">необязательно</span>
+          <span className="t-sec-label">Ссылка на запись урока</span>
+          <span className="lf-record-optional">(необязательно)</span>
         </div>
         <div className={`lf-record-box${recordUrl.trim() ? (looksLikeUrl(recordUrl.trim()) ? ' is-valid' : ' is-suspect') : ''}`}>
           <svg className="lf-record-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -403,7 +527,10 @@ export function LessonForm({
         </button>
         <button
           type="button"
-          className="btn-save"
+          className={`btn-save${fbComplete ? '' : ' is-incomplete'}`}
+          // Не disabled, а aria-disabled: клик по неготовой форме должен подсветить
+          // пустые поля и увести фокус к первому, а disabled-кнопка клика не получает.
+          aria-disabled={!fbComplete || undefined}
           disabled={limitExceeded || noOnePresent || submitLesson.isPending}
           onClick={handleSubmit}
         >

@@ -1,13 +1,10 @@
+import { REGISTRY_SIGNAL_LABELS } from '../../../lib/labels';
 import type { RegistrySegment, RegistrySummary } from '../../../lib/types';
 
-type SignalKey = 'ending' | 'closed' | 'idle' | 'no_plan';
+type SignalKey = keyof RegistrySummary['signals'];
 
-const ROWS: { key: SignalKey; label: string }[] = [
-  { key: 'ending', label: 'Заканчивается (≤2 урока) — продлевать' },
-  { key: 'closed', label: 'Пакет закрыт — апсейл нового' },
-  { key: 'idle', label: 'Простой (>14 дней без урока)' },
-  { key: 'no_plan', label: 'Нет плана / расписания' },
-];
+const KEYS: SignalKey[] = ['ending', 'closed', 'idle', 'no_plan', 'cancellations'];
+const ROWS = KEYS.map((key) => ({ key, label: REGISTRY_SIGNAL_LABELS[key] }));
 
 interface Props {
   signals: RegistrySummary['signals'];
@@ -15,7 +12,7 @@ interface Props {
   onSelect: (segment: RegistrySegment) => void;
 }
 
-// «Сигналы менеджеру» — 4 группы. Клик по строке фильтрует таблицу (toggle).
+// «Сигналы менеджеру» — 5 групп. Клик по строке фильтрует таблицу (toggle).
 export function SignalsCard({ signals, active, onSelect }: Props) {
   return (
     <section className="dash-card">

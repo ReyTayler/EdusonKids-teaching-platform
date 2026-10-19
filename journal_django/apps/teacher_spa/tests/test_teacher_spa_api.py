@@ -22,6 +22,7 @@ from django.conf import settings
 from django.db import connection
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
+from apps.teacher_spa.tests.payloads import VALID_FEEDBACK, with_feedback
 
 pytestmark = pytest.mark.django_db
 
@@ -64,6 +65,7 @@ def _client(role: str | None, account_id: int | None = None) -> APIClient:
 def _cleanup_lesson(lesson_id: int) -> None:
     """Чистим урок и связанные записи (FK-безопасный порядок)."""
     with connection.cursor() as cur:
+        cur.execute('DELETE FROM lesson_feedback WHERE lesson_id = %s', [lesson_id])
         cur.execute('DELETE FROM payroll WHERE lesson_id = %s', [lesson_id])
         cur.execute('DELETE FROM lesson_attendance WHERE lesson_id = %s', [lesson_id])
         cur.execute('DELETE FROM lessons WHERE id = %s', [lesson_id])
@@ -199,7 +201,7 @@ class TestGetData:
 class TestSubmitLesson:
 
     def _submit(self, account_id: int, payload: dict):
-        return _client('teacher', account_id).post('/api/submitLesson', payload, format='json')
+        return _client('teacher', account_id).post('/api/submitLesson', with_feedback(payload), format='json')
 
     def test_group_not_found(self, teacher_fixture, account_fixture):
         """Несуществующая группа → 200 {success:false, error:'Группа не найдена'}."""
@@ -350,6 +352,7 @@ class TestSubmitLesson:
         token = f'acct:{account_fixture}'
         try:
             resp = _client('teacher', account_fixture).post('/api/submitLesson', {
+                'feedback': VALID_FEEDBACK,
                 'group': group_name, 'date': '2026-06-10',
                 'students': [{'name': '__spa_test_student__', 'present': True}],
             }, format='json')
@@ -929,6 +932,8 @@ class TestSubmitLesson:
 
         with pytest.raises(RuntimeError):
             services.submit_lesson(account_fixture, {
+                'feedback': {'understanding': 7, 'interest': 8,
+                             'tech_problems': False, 'comment': 'x'},
                 'group': '__spa_test_group__ пн 10:00',
                 'date': '2026-06-10',
                 'students': [{'name': '__spa_test_student__', 'present': True}],
@@ -1052,7 +1057,7 @@ class TestLessonNumberFromPlan:
     STUDENT = '__spa_test_student__'
 
     def _submit(self, account_id: int, payload: dict):
-        return _client('teacher', account_id).post('/api/submitLesson', payload, format='json')
+        return _client('teacher', account_id).post('/api/submitLesson', with_feedback(payload), format='json')
 
     def _payload(self, date='2026-06-10', **extra):
         return {
@@ -1388,6 +1393,7 @@ class TestMyLessons:
         token = f'acct:{account_fixture}'
 
         submit = _client('teacher', account_fixture).post('/api/submitLesson', {
+            'feedback': VALID_FEEDBACK,
             'group': group_name, 'date': '2026-06-10',
             'students': [{'name': '__spa_test_student__', 'present': True}],
         }, format='json')

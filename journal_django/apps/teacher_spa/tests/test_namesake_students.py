@@ -15,6 +15,7 @@ import pytest
 from django.db import connection
 
 from apps.teacher_spa.tests.test_teacher_spa_api import _client, _get_lesson_id
+from apps.teacher_spa.tests.payloads import VALID_FEEDBACK, with_feedback
 
 pytestmark = pytest.mark.django_db
 
@@ -49,6 +50,7 @@ def namesakes(group_fixture, direction_fixture):
     # и направление прямым DELETE, а pytest-django перед откатом проверяет
     # отложенные FK (check_constraints) — висящие членства/оплаты уронили бы тест.
     with connection.cursor() as cur:
+        cur.execute('DELETE FROM lesson_feedback WHERE group_id = %s', [group_fixture])
         cur.execute('DELETE FROM payroll WHERE lesson_id IN '
                     '(SELECT id FROM lessons WHERE group_id = %s)', [group_fixture])
         cur.execute('DELETE FROM lesson_attendance WHERE lesson_id IN '
@@ -87,6 +89,7 @@ def test_get_data_exposes_student_ids(account_fixture, group_fixture, namesakes)
 def test_submit_by_id_marks_exact_namesake(teacher_fixture, account_fixture, group_fixture, namesakes):
     first, second = namesakes
     resp = _client('teacher', account_fixture).post('/api/submitLesson', {
+        'feedback': VALID_FEEDBACK,
         'group': GROUP_NAME,
         'date': '2026-06-10',
         'students': [
@@ -105,6 +108,7 @@ def test_submit_ambiguous_name_without_id_refused(
     teacher_fixture, account_fixture, group_fixture, namesakes,
 ):
     resp = _client('teacher', account_fixture).post('/api/submitLesson', {
+        'feedback': VALID_FEEDBACK,
         'group': GROUP_NAME,
         'date': '2026-06-10',
         'students': [{'name': NAME, 'present': True}],
@@ -120,6 +124,7 @@ def test_submit_ambiguous_name_without_id_refused(
 
 def _submit(account_id: int, students: list[dict]):
     return _client('teacher', account_id).post('/api/submitLesson', {
+        'feedback': VALID_FEEDBACK,
         'group': GROUP_NAME, 'date': '2026-06-10', 'students': students,
     }, format='json')
 

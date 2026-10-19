@@ -22,6 +22,7 @@ from apps.lessons.exceptions import (
     LessonHasMakeupResolutions, SystemLessonProtected,
 )
 from apps.core.utils.decimal import to_decimal
+from apps.feedback import services as feedback_services
 from apps.lessons.models import SYSTEM_LESSON_TYPES, Lesson, LessonAttendance
 from apps.lessons.submission_key import build_submission_key
 from apps.memberships.repository import locked_through_map
@@ -65,6 +66,7 @@ def record_lesson(*,
     attendance: list[dict],
     skip_balance_check: bool = False,
     planned_lesson_id: Optional[int] = None,
+    feedback: Optional[dict] = None,
 ) -> dict:
     """
     Единое ядро записи урока. Атомарно создаёт Lesson+LessonAttendance,
@@ -105,6 +107,13 @@ def record_lesson(*,
     ни инкремента lessons_done. В отличие от update_attendance_cell (точечная
     правка одной клетки — там та же блокировка бросает AttendanceLockedByTransfer),
     здесь это массовая запись урока, поэтому — тихое исключение, а не ошибка.
+
+    feedback — отзыв преподавателя по уроку ({'understanding', 'interest',
+    'tech_problems', 'comment'}, уже провалидирован вызывающим —
+    apps.feedback.serializers.LessonFeedbackInputSerializer). Обязателен только
+    на пути преподавателя (teacher_spa.submit_lesson); админская запись и
+    management-команды передают None — отзыв не создаётся. Пишется в ТОЙ ЖЕ
+    транзакции, что и урок: сбой отзыва откатывает урок целиком.
 
     Возвращает {'lesson_id': int, 'payment': int, 'penalty': int}.
     """
@@ -253,6 +262,13 @@ def record_lesson(*,
             'payment': payment,
             'penalty': penalty,
         })
+        if feedback is not None:
+            # Группа/дата/автор — с урока: отзыв описывает именно этот факт, а
+            # автор — тот, кто его провёл (при замене — заменяющий).
+            feedback_services.create_for_recorded_lesson(
+                lesson_id=lesson_id, group_id=group_id, teacher_id=teacher_id,
+                lesson_date=lesson_date, **feedback,
+            )
 
         # Авто-создание «пропусков, требующих решения» — для ВСЕХ занятий курса
         # (regular/substitution/reschedule). Исключены только системные факты
@@ -354,6 +370,13 @@ def create_lesson_full(data: dict) -> dict:
 
 def update_lesson(lesson_id: int, fields: dict) -> Optional[dict]:
     _assert_not_system_lesson(lesson_id)
+    # Одна транзакция на всю правку: урок, привязка к плану, ключ отправки и
+    # дата отзыва меняются вместе или никак (и одним контекстом журнала).
+    with transaction.atomic():
+        return _update_lesson(lesson_id, fields)
+
+
+def _update_lesson(lesson_id: int, fields: dict) -> Optional[dict]:
     updated = repository.update_lesson(lesson_id, fields)
     if updated is None:
         return None
@@ -372,6 +395,8 @@ def update_lesson(lesson_id: int, fields: dict) -> Optional[dict]:
     # свой день, а «перенос навсегда» клал хвост курса поверх него (ПИ337).
     if fields.get('lesson_date') is not None:
         sync_position_date(lesson_id)
+        # Отзыв по уроку описывает этот факт — его дата следует за датой урока.
+        feedback_services.sync_lesson_date(lesson_id, updated['lesson_date'])
     # Ключ отправки выведен из даты и позиции — при их правке он обязан
     # пересчитаться, иначе появляются два скрытых дефекта:
     #   • правка даты: старая дата остаётся заблокированной навсегда, а на новую

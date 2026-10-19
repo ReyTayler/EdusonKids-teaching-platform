@@ -105,7 +105,9 @@ def test_summary_shape(role):
     for k, v in body['kpis'].items():
         assert isinstance(v, (int, float)), f'{k} must be number, got {type(v)}'
 
-    assert set(body['signals'].keys()) == {'ending', 'closed', 'idle', 'no_plan'}
+    assert set(body['signals'].keys()) == {
+        'ending', 'closed', 'idle', 'no_plan', 'cancellations',
+    }
     for seg in body['signals'].values():
         assert set(seg.keys()) == {'count'}
         assert isinstance(seg['count'], int)

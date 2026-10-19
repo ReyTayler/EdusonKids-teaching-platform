@@ -10,16 +10,19 @@
 """
 from __future__ import annotations
 
+import datetime
 import logging
 import time
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
-from apps.notifications import telegram
+from apps.notifications import email_transport, telegram
 from apps.notifications.constants import (
-    MAX_ATTEMPTS, STATUS_FAILED, STATUS_QUEUED, STATUS_SENT, TERMINAL_STATUSES,
+    CHANNEL_EMAIL, EMAIL_DEDUP_HORIZON_HOURS, MAX_ATTEMPTS, STATUS_FAILED,
+    STATUS_QUEUED, STATUS_SENT, TERMINAL_STATUSES,
 )
 from apps.notifications.models import (
     NotificationMessage, NotificationSettings, TelegramRecipient,
@@ -98,7 +101,7 @@ def _claim_and_send(excluded_ids: set[int]) -> tuple[int, str] | None:
         if message is None:
             return None
 
-        result = telegram.send_message(chat_id=message.chat_id, text=message.text)
+        result = _send(message)
 
         if result.ok:
             message.status = STATUS_SENT
@@ -114,9 +117,12 @@ def _claim_and_send(excluded_ids: set[int]) -> tuple[int, str] | None:
         if result.blocked:
             # Адресат недоступен — повторять бессмысленно. Гасим сообщение и
             # деактивируем привязку, чтобы это было видно админу в карточке.
+            # У письма привязки Telegram нет: отвергнутый почтовый адрес не
+            # повод отключать преподавателю Telegram.
             message.status = STATUS_FAILED
             message.save(update_fields=['status', 'attempts', 'last_error'])
-            _deactivate_recipient(message)
+            if message.channel != CHANNEL_EMAIL:
+                _deactivate_recipient(message)
             return message.id, 'failed'
 
         if result.retry_after:
@@ -131,6 +137,14 @@ def _claim_and_send(excluded_ids: set[int]) -> tuple[int, str] | None:
             message.status = STATUS_FAILED
         message.save(update_fields=['status', 'attempts', 'last_error'])
         return message.id, ('failed' if message.status == STATUS_FAILED else 'retry')
+
+
+def _send(message: NotificationMessage) -> telegram.SendResult:
+    """Отправить сообщение транспортом его канала."""
+    if message.channel == CHANNEL_EMAIL:
+        return email_transport.send_email(
+            to=message.recipient_email, subject=message.subject, body=message.text)
+    return telegram.send_message(chat_id=message.chat_id, text=message.text)
 
 
 def _deactivate_recipient(message: NotificationMessage) -> None:
@@ -150,11 +164,20 @@ def trim_history() -> int:
 
     Строки в очереди (status=queued) НЕ удаляются никогда — иначе однажды
     подрезка съест неотправленное сообщение.
+
+    Свежие письма (моложе EMAIL_DEDUP_HORIZON_HOURS) тоже не трогаются:
+    напоминания «урок не записан» и «через час» ставятся задачей, которая
+    каждые несколько минут проходит по окну, и от повтора их бережёт только
+    dedup_key уже существующей строки. Родительские письма идут десятками на
+    урок — лимит в 200 строк вытеснил бы их раньше, чем закроется окно, и
+    человек получил бы то же письмо второй раз.
     """
     limit = getattr(settings, 'NOTIFICATIONS_HISTORY_LIMIT', 200)
+    horizon = timezone.now() - datetime.timedelta(hours=EMAIL_DEDUP_HORIZON_HOURS)
     stale_ids = list(
         NotificationMessage.objects
         .filter(status__in=TERMINAL_STATUSES)
+        .exclude(Q(channel=CHANNEL_EMAIL) & Q(created_at__gte=horizon))
         .order_by('-created_at', '-id')
         .values_list('id', flat=True)[limit:]
     )

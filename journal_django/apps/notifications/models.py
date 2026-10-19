@@ -16,7 +16,8 @@ import pghistory
 from django.db import models
 
 from apps.notifications.constants import (
-    CHANNEL_CHOICES, KIND_CHOICES, STATUS_CHOICES, STATUS_QUEUED,
+    CHANNEL_CHOICES, CHANNEL_EMAIL, KIND_CHOICES, STATUS_CHOICES, STATUS_QUEUED,
+    TELEGRAM_CHANNELS,
 )
 
 
@@ -82,7 +83,8 @@ class TelegramRecipient(models.Model):
 
 class NotificationMessage(models.Model):
     """
-    Одна строка = одно сообщение в один чат.
+    Одна строка = одно сообщение одному адресату: в чат Telegram (chat_id) или
+    на почту (channel='email', recipient_email + subject).
 
     Дубль в общий чат — просто вторая строка с другим chat_id, никакой особой
     логики. Под pghistory СОЗНАТЕЛЬНО не ставится: техническая таблица с высокой
@@ -92,7 +94,11 @@ class NotificationMessage(models.Model):
     id = models.AutoField(primary_key=True)
     kind = models.TextField()
     channel = models.TextField()
-    chat_id = models.BigIntegerField()
+    # Адресат Telegram. У письма его нет — адресат в recipient_email; какое из
+    # двух полей обязательно, решает CHECK по каналу (см. Meta).
+    chat_id = models.BigIntegerField(null=True, blank=True)
+    recipient_email = models.TextField(null=True, blank=True)
+    subject = models.TextField(null=True, blank=True)
     # Для отображения в админке. Null для сообщений в общий чат.
     recipient_teacher = models.ForeignKey(
         'teachers.Teacher', on_delete=models.SET_NULL, null=True, blank=True,
@@ -136,6 +142,17 @@ class NotificationMessage(models.Model):
                 name='notification_messages_status_check',
                 condition=models.Q(status__in=STATUS_CHOICES),
             ),
+            # Адресат соответствует каналу: Telegram без chat_id или письмо без
+            # адреса диспетчер отправить не может — такая строка висела бы в
+            # очереди до MAX_ATTEMPTS. Ловим на вставке, а не на отправке.
+            models.CheckConstraint(
+                name='notification_messages_target_check',
+                condition=(
+                    models.Q(channel__in=TELEGRAM_CHANNELS, chat_id__isnull=False)
+                    | models.Q(channel=CHANNEL_EMAIL, recipient_email__isnull=False,
+                               subject__isnull=False)
+                ),
+            ),
         ]
 
 
@@ -158,6 +175,11 @@ class NotificationSettings(models.Model):
 
     id = models.AutoField(primary_key=True)
     is_enabled = models.BooleanField(default=True)
+    # Email-напоминания родителям («урок завтра», «урок через час»). Отдельный
+    # флаг и выключен по умолчанию: письма уходят клиентам школы, а не
+    # сотрудникам, и включать их — решение админа (спека этапа 3, раздел D).
+    # Работает только вместе с is_enabled: общий выключатель = полная тишина.
+    parent_reminders_enabled = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
     # Подпись «кто переключил» — простым текстом, без связи с учёткой.
     # Настоящий аудит и так ведёт журнал изменений (pghistory); жёсткий ключ

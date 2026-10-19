@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from apps.core.fields import DateStringField
 from apps.directions.models import Direction
+from apps.feedback.serializers import LessonFeedbackInputSerializer
 from apps.payroll.models import Payroll
 
 # Поля, которые клиент больше не выбирает — их выводит сервер из planned_lessons
@@ -41,7 +42,12 @@ class SubmitLessonSerializer(serializers.Serializer):
     """
     Порт submitLessonSchema из shared/schemas.js.
 
-    Обязательные: group, date, students. Необязательные: recordUrl.
+    Обязательные: group, date, students, feedback. Необязательные: recordUrl,
+    plannedLessonId.
+
+    feedback — отзыв по уроку (этап 3 Eduson): урок без отзыва преподаватель
+    сохранить не может, поэтому блок обязателен и проверяется ДО записи —
+    невалидный отзыв даёт 400 с ошибками по полям, урок не пишется.
 
     isSubstitution/originalTeacher/lessonType клиентом больше НЕ принимаются
     (400): тип урока выводит сервер из planned_lessons — замена из назначения
@@ -65,6 +71,10 @@ class SubmitLessonSerializer(serializers.Serializer):
     # id доступа не даёт. Необязателен: вход «Мои уроки» занятия не знает, там
     # позиция резолвится по дате.
     plannedLessonId = serializers.IntegerField(min_value=1, required=False)
+    feedback = LessonFeedbackInputSerializer(
+        error_messages={'required': 'Заполните обратную связь по уроку.',
+                        'null': 'Заполните обратную связь по уроку.'},
+    )
 
     def validate(self, attrs):
         forbidden = set(_SERVER_DERIVED_FIELDS) & set(self.initial_data or {})

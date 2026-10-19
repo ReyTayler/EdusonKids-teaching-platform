@@ -9,9 +9,14 @@ export interface NotificationRow {
   id: number;
   kind: string;
   channel: string;
-  chat_id: number;
-  /** null для сообщений в общий чат — у них нет персонального адресата. */
+  /** null у писем: адресат там — recipient_email. */
+  chat_id: number | null;
+  /** null для сообщений в общий чат и для писем родителям. */
   teacher_name: string | null;
+  /** Адрес получателя — только у канала email. */
+  recipient_email: string | null;
+  /** Тема письма — только у канала email. */
+  subject: string | null;
   text: string;
   status: string;
   attempts: number;
@@ -80,24 +85,44 @@ export function useNotificationSchedule() {
 
 export type NotificationToggle = {
   is_enabled: boolean;
+  /** Отдельный флаг для писем родителям; по умолчанию выключен. */
+  parent_reminders_enabled: boolean;
   updated_at: string;
   updated_by: string | null;
 };
 
+export type NotificationTogglePatch = Partial<Pick<NotificationToggle, 'is_enabled' | 'parent_reminders_enabled'>>;
+
+const TOGGLE_KEY = ['notifications', 'toggle'] as const;
+
 export function useNotificationToggle() {
   return useQuery({
-    queryKey: ['notifications', 'toggle'],
+    queryKey: TOGGLE_KEY,
     queryFn: () => api<NotificationToggle>('GET', '/api/admin/notifications/toggle'),
   });
 }
 
+/**
+ * Частичное обновление выключателей. Оптимистично: переключатель сразу
+ * показывает новое значение, при ошибке откатывается к прежнему; итог
+ * всё равно сверяем с сервером (updated_by/updated_at приходят оттуда).
+ */
 export function useSetNotificationToggle() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (isEnabled: boolean) =>
-      api<NotificationToggle>('POST', '/api/admin/notifications/toggle', { is_enabled: isEnabled }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['notifications', 'toggle'] });
+    mutationFn: (patch: NotificationTogglePatch) =>
+      api<NotificationToggle>('POST', '/api/admin/notifications/toggle', patch),
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: TOGGLE_KEY });
+      const prev = qc.getQueryData<NotificationToggle>(TOGGLE_KEY);
+      if (prev) qc.setQueryData<NotificationToggle>(TOGGLE_KEY, { ...prev, ...patch });
+      return { prev };
+    },
+    onError: (_err, _patch, ctx) => {
+      if (ctx?.prev) qc.setQueryData(TOGGLE_KEY, ctx.prev);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: TOGGLE_KEY });
     },
   });
 }

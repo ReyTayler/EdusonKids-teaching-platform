@@ -12,7 +12,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Exists, F, Min, OuterRef, Q
+from django.db.models import Count, Exists, F, Min, OuterRef, Q
 
 from apps.core.utils.dates import msk_now
 from apps.groups.course_length import effective_total_lessons_expr
@@ -1127,6 +1127,113 @@ def _parse_hhmm(value) -> datetime.time:
     return datetime.time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
 
 
+def _tail_group_params(group_id: int) -> dict | None:
+    """Параметры группы, от которых зависит раскладка хвоста курса."""
+    return Group.objects.filter(id=group_id).values(
+        'lesson_duration_minutes', 'teacher_id',
+        total_lessons=effective_total_lessons_expr()).first()
+
+
+def _tail_rows(
+    g: dict, *, from_seq: int, effective_from: datetime.date,
+    slots: list[Slot], teacher_id: int | None,
+) -> list[PlannedRow]:
+    """Раскладка остатка курса (seq>=from_seq) от effective_from по слотам.
+
+    Одна функция и для реального permanent_change, и для превью заморозки:
+    превью обязано показывать ровно те даты, которые потом запишутся."""
+    step = _step_for(g['lesson_duration_minutes'])
+    return planner.generate(
+        start_date=effective_from, slots=slots,
+        total_lessons=g['total_lessons'], duration_minutes=g['lesson_duration_minutes'],
+        default_teacher_id=teacher_id, start_seq=from_seq,
+        start_number=(Decimal(from_seq) - 1) * step)
+
+
+def current_slots(group_id: int) -> list[dict]:
+    """Действующий набор слотов группы (открытые версии) в формате new_slots
+    permanent_change: [{'day_of_week', 'start_time': 'HH:MM'}], без дублей."""
+    open_slots = [s for s in slots_by_group([group_id]).get(group_id, [])
+                  if s.effective_to is None]
+    uniq = sorted({(s.day_of_week, s.start_time.strftime('%H:%M')) for s in open_slots})
+    return [{'day_of_week': d, 'start_time': t} for d, t in uniq]
+
+
+def freeze_target(
+    group_id: int, freeze_from: datetime.date, *, lock: bool = False,
+) -> dict | None:
+    """
+    Что сдвинет заморозка с даты freeze_from (этап 3 Eduson, раздел C).
+
+    from_seq — первая курсовая pending/overdue позиция с датой ≥ freeze_from;
+    сдвигается весь изменяемый хвост seq>=from_seq (ровно то, что возьмёт
+    permanent_change). Проведённые позиции не двигаются и не могут быть началом
+    хвоста. slots — текущие действующие слоты: заморозка не меняет дни/время.
+
+    lock=True — под select_for_update (в транзакции реальной заморозки), чтобы
+    запись урока не вклинилась между выбором from_seq и сдвигом.
+
+    None → группы нет (404). ValueError → группа в архиве / нечего замораживать /
+    нет расписания (view → 400).
+    """
+    active = Group.objects.filter(id=group_id).values_list('active', flat=True).first()
+    if active is None:
+        return None
+    if not active:
+        raise ValueError('Группа в архиве — заморозка не нужна.')
+    course = PlannedLesson.objects.filter(
+        group_id=group_id, seq__isnull=False, status__in=_MUTABLE_STATUSES)
+    head_qs = course.filter(scheduled_date__gte=freeze_from).order_by('seq')
+    if lock:
+        head_qs = head_qs.select_for_update()
+    first = head_qs.values('seq').first()
+    if first is None:
+        raise ValueError(
+            'Нечего замораживать: с этой даты нет запланированных занятий курса.')
+    slots = current_slots(group_id)
+    if not slots:
+        raise ValueError('У группы нет действующего расписания — заморозить нельзя.')
+    agg = course.filter(seq__gte=first['seq']).aggregate(
+        first_date=Min('scheduled_date'), lessons_count=Count('id'))
+    return {'from_seq': first['seq'], 'slots': slots, **agg}
+
+
+def preview_freeze(
+    group_id: int, *, freeze_from: datetime.date, resume_date: datetime.date,
+) -> dict | None:
+    """Read-only превью заморозки: какой хвост сдвинется, куда он ляжет и какие
+    разовые операции сбросятся (тот же preview_affected, что у «Изменить
+    расписание» с effective_from=resume_date). Ничего не пишет.
+
+    {'from_seq', 'lessons_count', 'first_date', 'resume_first_date', 'last_date',
+     'affected': [...]}. None → группы нет; ValueError → как у freeze_target."""
+    target = freeze_target(group_id, freeze_from)
+    if target is None:
+        return None
+    from_seq = target['from_seq']
+    g = _tail_group_params(group_id)
+    # Слоты — как их увидит генератор ПОСЛЕ версионирования в permanent_change:
+    # тот же набор, открытый ровно с resume_date.
+    slots = [Slot(day_of_week=s['day_of_week'], start_time=_parse_hhmm(s['start_time']),
+                  effective_from=resume_date)
+             for s in target['slots']]
+    rows = _tail_rows(g, from_seq=from_seq, effective_from=resume_date,
+                      slots=slots, teacher_id=g['teacher_id'])
+    mutable_seqs = set(
+        PlannedLesson.objects.filter(
+            group_id=group_id, seq__gte=from_seq, status__in=_MUTABLE_STATUSES)
+        .values_list('seq', flat=True))
+    dates = [r.scheduled_date for r in rows if r.seq in mutable_seqs]
+    return {
+        'from_seq': from_seq,
+        'lessons_count': target['lessons_count'],
+        'first_date': target['first_date'],
+        'resume_first_date': min(dates) if dates else None,
+        'last_date': max(dates) if dates else None,
+        'affected': preview_affected(group_id, date_from=resume_date, from_seq=from_seq),
+    }
+
+
 def permanent_change(
     group_id: int,
     *,
@@ -1170,12 +1277,7 @@ def permanent_change(
 
     now = msk_now()
     with transaction.atomic():
-        g = Group.objects.filter(id=group_id).values(
-            'lesson_duration_minutes', 'teacher_id',
-            total_lessons=effective_total_lessons_expr()).first()
-        step = _step_for(g['lesson_duration_minutes'])
-        start_seq = from_seq
-        start_number = (Decimal(from_seq) - 1) * step
+        g = _tail_group_params(group_id)
 
         tail = list(
             PlannedLesson.objects
@@ -1204,10 +1306,8 @@ def permanent_change(
         open_slots = [s for s in slots_by_group([group_id]).get(group_id, [])
                       if s.effective_to is None]
         teacher_for_tail = new_teacher_id if new_teacher_id is not None else g['teacher_id']
-        rows = planner.generate(
-            start_date=effective_from, slots=open_slots,
-            total_lessons=g['total_lessons'], duration_minutes=g['lesson_duration_minutes'],
-            default_teacher_id=teacher_for_tail, start_seq=start_seq, start_number=start_number)
+        rows = _tail_rows(g, from_seq=from_seq, effective_from=effective_from,
+                          slots=open_slots, teacher_id=teacher_for_tail)
 
         # (4) мапим сгенерированные строки на реальный хвост по seq (та же
         # seq-последовательность — generate(start_seq=...) детерминирован).

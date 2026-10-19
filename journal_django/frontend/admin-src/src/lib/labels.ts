@@ -1,4 +1,4 @@
-import type { LessonType, RegistryStatus, Role, StudentLessonKind } from './types';
+import type { LessonType, RegistrySegment, RegistryStatus, Role, StudentLessonKind } from './types';
 
 // Статуса ученика больше нет (спека 2026-07-25): его «статус» — стадия последней
 // сделки продления, подписи стадий приходят с бэка (useRenewalStages).
@@ -19,11 +19,29 @@ export const ROLE_LABELS: Record<Role, string> = {
 // Подписи бейджа и строк сигналов. Коды приходят с бэка (registry_service.classify).
 
 export const REGISTRY_STATUS_LABELS: Record<RegistryStatus, string> = {
-  closed:  'Пакет закрыт',
+  closed:  'Курс пройден',
   ending:  'Заканчивается',
   idle:    'Простой',
   no_plan: 'Нет плана',
   ok:      'Активен',
+};
+
+// Подписи сегментов и строк «Сигналов менеджеру». Единица — ученики.
+export const REGISTRY_SEGMENT_LABELS: Record<RegistrySegment, string> = {
+  all:           'Все',
+  ending:        'Заканчивается',
+  closed:        'Курс пройден',
+  idle:          'Простой',
+  no_plan:       'Нет плана',
+  cancellations: 'Есть отмены',
+};
+
+export const REGISTRY_SIGNAL_LABELS: Record<Exclude<RegistrySegment, 'all'>, string> = {
+  ending:        'Заканчивается (осталось ≤2 урока) — предложить продление',
+  closed:        'Курс пройден — предложить новый',
+  idle:          'Простой (больше 14 дней без урока)',
+  no_plan:       'Нет плана (нет будущих занятий)',
+  cancellations: 'Есть отмены занятий в этом месяце',
 };
 
 // ===== Lesson type =====
@@ -55,13 +73,21 @@ export const STUDENT_LESSON_KIND_LABELS: Record<StudentLessonKind, string> = {
 // Ключи — из apps/changelog/labels.py (бэкенд выводит их из method+url).
 
 // Короткие названия действий — колонка «Действие» и dropdown «Все действия».
-export const CHANGELOG_OPERATION_LABELS: Record<string, string> = {
+/** Разовые операции плана, которые сбрасываются при смене расписания/заморозке. */
+export const AFFECTED_OP_LABELS: Record<'reschedule' | 'substitution' | 'cancellation', string> = {
+  reschedule: 'перенос',
+  substitution: 'замена преподавателя',
+  cancellation: 'отмена',
+};
+
+export const CHANGELOG_OPERATION_LABELS:Record<string, string> = {
   'group.create':                  'Новая группа',
   'group.update':                  'Правка группы',
   'group.delete':                  'Группа в архив',
   'group.schedule_change':         'Смена расписания',
   'plan.generate':                 'Генерация плана',
   'plan.permanent_change':         'Смена расписания (план)',
+  'plan.freeze':                   'Заморозка',
   'plan.change_teacher_permanent': 'Смена преподавателя',
   'plan.change_teacher':           'Замена преподавателя',
   'plan.extra':                    'Доп. занятие',
@@ -149,7 +175,7 @@ export const CHANGELOG_ENTITY_OPTIONS: { value: string; label: string }[] =
 // Ключи — из apps/notifications/constants.py (KIND_/CHANNEL_/STATUS_CHOICES).
 
 export const NOTIFICATION_KIND_LABELS: Record<string, string> = {
-  morning_digest:      'Утренний дайджест',
+  morning_digest:      'Расписание на день',
   fill_digest:         'Не заполнены отчёты',
   makeup_assigned:     'Назначен доп.урок',
   makeup_changed:      'Изменён доп.урок',
@@ -158,6 +184,9 @@ export const NOTIFICATION_KIND_LABELS: Record<string, string> = {
   lesson_cancelled:    'Отмена занятия',
   substitute_assigned: 'Назначена замена',
   substitute_removed:  'Снята замена',
+  lesson_unrecorded:   'Урок не записан',
+  parent_day_before:   'Родителям: урок завтра',
+  parent_hour_before:  'Родителям: урок через час',
 };
 
 export const NOTIFICATION_KIND_OPTIONS: { value: string; label: string }[] =
@@ -166,6 +195,7 @@ export const NOTIFICATION_KIND_OPTIONS: { value: string; label: string }[] =
 export const NOTIFICATION_CHANNEL_LABELS: Record<string, string> = {
   dm:         'Личка',
   group_chat: 'Общий чат',
+  email:      'Почта',
 };
 
 export const NOTIFICATION_CHANNEL_OPTIONS: { value: string; label: string }[] =
@@ -297,3 +327,33 @@ export const TASK_CONFLICT_LABELS: Record<string, string> = {
   incomplete_stage_set:         'Передан неполный набор стадий воронки',
   unknown_stage:                'Такой стадии больше не существует — обновите страницу',
 };
+
+// ===== Отзывы о занятиях (раздел «Отзывы», вкладка группы) =====
+
+export const FEEDBACK_LABELS = {
+  title: 'Отзывы',
+  subtitle: 'Обратная связь преподавателей после каждого занятия',
+  tab: 'Отзывы',
+  colDate: 'Дата урока',
+  colGroup: 'Группа',
+  colTeacher: 'Преподаватель',
+  colUnderstanding: 'Понимание',
+  colInterest: 'Интерес',
+  colTech: 'Тех. проблемы',
+  colComment: 'Комментарий',
+  colRecord: 'Запись',
+  colSubmitted: 'Отправлен',
+  techYes: 'Были',
+  techNo: 'Нет',
+  lessonDeleted: 'урок удалён',
+  notHeld: 'не состоялся',
+  openRecord: 'Открыть запись',
+  expand: 'Показать полностью',
+  collapse: 'Свернуть',
+  dateFrom: 'Дата: с',
+  dateTo: 'Дата: по',
+  rangeInverted: '«Дата: с» позже «Дата: по» — период не применён.',
+  errorTitle: 'Не удалось загрузить отзывы',
+  errorHint: 'Это сбой загрузки, а не отсутствие отзывов. Попробуйте ещё раз.',
+  retry: 'Повторить',
+} as const;

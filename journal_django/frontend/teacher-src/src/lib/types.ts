@@ -99,6 +99,15 @@ export interface SubmitPayload {
    *  отправка создаёт второй платный урок. Отсутствует только там, где позиции
    *  нет вовсе (группа без плана занятий). */
   plannedLessonId?: number;
+  /** Обратная связь по уроку — обязательна (сервер вернёт 400 без неё). */
+  feedback: LessonFeedbackPayload;
+}
+
+export interface LessonFeedbackPayload {
+  understanding: number; // 1–10
+  interest: number;      // 1–10
+  techProblems: boolean; // без значения по умолчанию: преподаватель отвечает явно
+  comment: string;       // непустой, ≤5000
 }
 
 export type SubmitResult =

@@ -81,7 +81,15 @@ function NotificationsLog() {
       width: '13rem',
       sortable: false,
       // Сообщение в общий чат персонального адресата не имеет — показываем chat_id.
-      cell: (r) => r.teacher_name ?? <span className="mono">{r.chat_id}</span>,
+      // У письма адресат — почта и тема (родители не имеют teacher_name).
+      cell: (r) => r.channel === 'email'
+        ? (
+          <span className="notifications-recipient">
+            <span className="mono">{r.recipient_email ?? '—'}</span>
+            {r.subject && <span className="notifications-recipient__sub">{r.subject}</span>}
+          </span>
+        )
+        : (r.teacher_name ?? <span className="mono">{r.chat_id}</span>),
     },
     {
       key: 'text',
@@ -113,7 +121,7 @@ function NotificationsLog() {
   // «под фильтр ничего не попало».
   if (rows.length === 0 && !hasFilters) {
     return (
-      <EmptyState hint="Сообщения появятся здесь, как только бот начнёт их отправлять.">
+      <EmptyState hint="Сообщения появятся здесь, как только система начнёт их отправлять.">
         Сообщений пока нет
       </EmptyState>
     );
@@ -161,7 +169,7 @@ export default function NotificationsPage() {
     <>
       <PageHeader
         title="Уведомления и напоминания"
-        sub="Что бот отправил преподавателям и когда в последний раз отрабатывали регулярные задачи."
+        sub="Что система отправила преподавателям и родителям и когда в последний раз отрабатывали регулярные задачи."
       />
       <NotificationToggleBar />
       <Tabs

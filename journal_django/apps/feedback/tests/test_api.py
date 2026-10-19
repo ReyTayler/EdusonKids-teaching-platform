@@ -50,7 +50,9 @@ def test_fields_for_held_lesson(admin_client, school, held):
         'id': fb.id,
         'lesson_id': school['lesson_id'],
         'group_id': school['group_id'],
+        'group_name': 'Тест Группа 1',
         'lesson_date': '2026-01-12',
+        'record_url': None,
         'teacher_id': school['teacher_id'],
         'teacher_name': 'Тест Преподаватель 1',
         'took_place': True,
@@ -71,7 +73,19 @@ def test_fields_for_lesson_not_held(admin_client, school, not_held):
     assert row['lesson_date'] == '2026-01-19'
     assert row['took_place'] is False
     assert row['understanding'] is None and row['interest'] is None
+    assert row['record_url'] is None
+    assert row['group_name'] == 'Тест Группа 1'
     assert 'planned_lesson_id' not in row
+
+
+def test_record_url_comes_from_lesson(admin_client, school, held):
+    from apps.lessons.models import Lesson
+
+    Lesson.objects.filter(pk=school['lesson_id']).update(
+        record_url='https://video.example.test/rec/42')
+    held(school['lesson_id'])
+    row = admin_client.get(URL).json()['rows'][0]
+    assert row['record_url'] == 'https://video.example.test/rec/42'
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +126,45 @@ def test_lesson_filter(admin_client, school, other_group, held):
 
     body = admin_client.get(URL, {'lesson_id': other_group['lesson_id']}).json()
     assert [r['id'] for r in body['rows']] == [target.id]
+
+
+def test_period_filter_by_lesson_date_inclusive(admin_client, school, other_group, held,
+                                                not_held):
+    # Уроки 12.01 и 13.01, отзыв «не состоялся» на 19.01.
+    jan12 = held(school['lesson_id'])
+    jan13 = held(other_group['lesson_id'])
+    jan19 = not_held(school['group_id'], school['teacher_id'], NOT_HELD_DAY)
+
+    def ids(**params):
+        return {r['id'] for r in admin_client.get(URL, params).json()['rows']}
+
+    assert ids(date_from='2026-01-13') == {jan13.id, jan19.id}
+    assert ids(date_to='2026-01-13') == {jan12.id, jan13.id}
+    assert ids(date_from='2026-01-13', date_to='2026-01-13') == {jan13.id}
+    assert ids(date_from='2026-01-12', date_to='2026-01-19') == {jan12.id, jan13.id, jan19.id}
+
+
+def test_period_combines_with_group_filter(admin_client, school, other_group, held, not_held):
+    held(school['lesson_id'])
+    held(other_group['lesson_id'])
+    target = not_held(school['group_id'], school['teacher_id'], NOT_HELD_DAY)
+    body = admin_client.get(URL, {'group_id': school['group_id'],
+                                  'date_from': '2026-01-13'}).json()
+    assert [r['id'] for r in body['rows']] == [target.id]
+
+
+@pytest.mark.parametrize('param', ['date_from', 'date_to'])
+@pytest.mark.parametrize('value', ['abc', '2026-13-01', '12.01.2026'])
+def test_garbage_date_rejected(admin_client, param, value):
+    resp = admin_client.get(URL, {param: value})
+    assert resp.status_code == 400
+    assert param in str(resp.json())
+
+
+def test_inverted_period_rejected(admin_client):
+    resp = admin_client.get(URL, {'date_from': '2026-02-01', 'date_to': '2026-01-01'})
+    assert resp.status_code == 400
+    assert 'date_from' in str(resp.json())
 
 
 @pytest.mark.parametrize('param', ['group_id', 'teacher_id', 'lesson_id'])

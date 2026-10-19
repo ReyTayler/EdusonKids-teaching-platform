@@ -1,19 +1,17 @@
 """
-Регрессия: «бесплатное занятие» не списывает остаток в «Реестре куратора».
+Остаток реестра Eduson — остаток КУРСА: журнал посещений и оплаты его не двигают.
 
-Исход «Бесплатное занятие» (lesson_attendance.is_free) — присутствие без денег:
-present=true, но баланс ученика не трогается и партии оплат не гасятся
-(apps/finances/repository.py::balances_for_students фильтрует is_free=False).
-Реестр считает остаток СВОЕЙ формулой — коррелированным подзапросом в списке
-(_attended_units_subquery) и пакетно в сводке (_summary_rows), — и оба места
-фильтр по is_free потеряли: бесплатное занятие списывалось как обычное.
+Раньше реестр считал остаток денег («куплено − пройдено» по lesson_attendance),
+и здесь стояла регрессия прода KOTOKOD 12.08.2026: бесплатное занятие
+списывало остаток. В Eduson оплат нет (спека этапа 3, раздел B), и остаток =
+длина курса группы − пройдено (lessons_done + неоплачиваемые пропуски).
+lessons_done ведёт apps.lessons.services.record_lesson; строки посещаемости
+сами по себе — бесплатные, доп.уроки, 45-минутные — остаток не меняют, иначе
+одно занятие учлось бы дважды. Денежный инвариант бесплатного занятия живёт
+в apps.finances и проверяется там.
 
-Прод 12.08.2026: у ученика с двумя бесплатными занятиями карточка показывала
-остаток 2, реестр — 0, и куратору падала ложная задача «абонемент закончился».
-
-Главный тест здесь — сверка с apps.finances (test_registry_balance_matches_finances):
-остаток в реестре обязан совпадать с каноническим до последнего знака, какими бы
-исходами ни был набран журнал занятий.
+Дата последнего занятия, наоборот, читается из посещаемости: бесплатное
+занятие — реальное присутствие, оно обязано снимать «простой».
 """
 from __future__ import annotations
 
@@ -23,7 +21,6 @@ import pytest
 from django.db import connection
 
 from apps.dashboard import registry_service as svc
-from apps.finances.repository import balances_for_students
 
 pytestmark = pytest.mark.django_db
 
@@ -137,63 +134,34 @@ def _summary_row(graph):
     return rows[graph['student_id']]
 
 
-def test_free_lesson_does_not_consume_balance_in_list(graph):
-    """Список реестра: бесплатное занятие проведено, остаток не изменился."""
-    _add_payment(graph, 4, 8000)
-    _add_lesson(graph, lesson_date='2026-06-05', lesson_number=1)          # платное
-    assert _list_balance(graph) == 3
-
-    _add_lesson(graph, lesson_date='2026-06-10', lesson_number=2, is_free=True)
-    assert _list_balance(graph) == 3, 'бесплатное занятие списало остаток'
-
-
-def test_free_lesson_does_not_consume_balance_in_summary(graph):
-    """Пакетный путь сводки — тот же инвариант (KPI «Уроков впереди», сигналы)."""
+def test_attendance_rows_and_payments_do_not_move_course_left(graph):
+    """Остаток = 16 (программа направления) − lessons_done (0): что бы ни лежало в журнале."""
+    assert _list_balance(graph) == 16
     _add_payment(graph, 4, 8000)
     _add_lesson(graph, lesson_date='2026-06-05', lesson_number=1)
     _add_lesson(graph, lesson_date='2026-06-10', lesson_number=2, is_free=True)
+    _add_lesson(graph, lesson_date='2026-06-11', lesson_number=3, is_free=True, duration=45)
 
-    assert _summary_row(graph)['balance'] == 3
+    assert _list_balance(graph) == 16
+    assert _summary_row(graph)['balance'] == 16
+
+
+def test_course_left_follows_lessons_done(graph):
+    """Прогресс курса двигает именно счётчик членства (его ведёт record_lesson)."""
+    with connection.cursor() as cur:
+        cur.execute('UPDATE group_memberships SET lessons_done = 3.5 WHERE student_id = %s',
+                    [graph['student_id']])
+    assert _list_balance(graph) == 12.5
+    assert _summary_row(graph)['balance'] == 12.5
 
 
 def test_free_lesson_still_counts_as_activity(graph):
     """
-    Из БАЛАНСА бесплатное занятие исключено, но ученик на нём был: дата
-    последнего занятия обязана двигаться, иначе он ложно попадёт в «простой».
-    Тот же водораздел, что у доп.урока (_last_lesson_subquery).
+    Бесплатное занятие — реальное присутствие: дата последнего занятия обязана
+    двигаться, иначе ученик ложно попадёт в «простой». Тот же водораздел, что
+    у доп.урока (_last_lesson_subquery).
     """
-    _add_payment(graph, 4, 8000)
     _add_lesson(graph, lesson_date='2026-06-10', lesson_number=1, is_free=True)
 
-    assert svc.base_students_qs(TODAY).get(pk=graph['student_id']).last_lesson == \
-        datetime.date(2026, 6, 10)
+    assert svc.base_students_qs(TODAY).get(pk=graph['student_id']).last_lesson ==         datetime.date(2026, 6, 10)
     assert _summary_row(graph)['last_lesson'] == datetime.date(2026, 6, 10)
-
-
-def test_half_free_lesson_does_not_consume_balance(graph):
-    """45-минутное бесплатное занятие не списывает и половины урока."""
-    _add_payment(graph, 4, 8000)
-    _add_lesson(graph, lesson_date='2026-06-10', lesson_number=1, is_free=True, duration=45)
-
-    assert _list_balance(graph) == 4
-    assert _summary_row(graph)['balance'] == 4
-
-
-def test_registry_balance_matches_finances(graph):
-    """
-    Остаток реестра == канонический остаток (apps.finances) на журнале из всех
-    исходов сразу. Тест, ради которого написан файл: формулы живут в трёх местах
-    и разъезжаться не должны.
-    """
-    _add_payment(graph, 10, 20000)
-    _add_lesson(graph, lesson_date='2026-06-01', lesson_number=1)                     # −1
-    _add_lesson(graph, lesson_date='2026-06-02', lesson_number=2, duration=45)        # −0.5
-    _add_lesson(graph, lesson_date='2026-06-03', lesson_number=3, present=False)      # 0
-    _add_lesson(graph, lesson_date='2026-06-04', lesson_number=4, is_free=True)       # 0
-    _add_lesson(graph, lesson_date='2026-06-05', lesson_number=5, is_free=True,
-                duration=45)                                                          # 0
-
-    canonical = balances_for_students([graph['student_id']])[graph['student_id']]
-    assert canonical == 85 / 10                       # 10 − 1 − 0.5
-    assert _list_balance(graph) == canonical
-    assert _summary_row(graph)['balance'] == canonical

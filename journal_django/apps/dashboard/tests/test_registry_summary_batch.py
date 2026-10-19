@@ -1,7 +1,7 @@
 """
 Сводка реестра считает те же поля, что и список, но пакетно — сверка путей.
 
-`base_students_qs` (список) считает balance/attended/planned/last/next
+`base_students_qs` (список) считает balance/attended/planned/last/next/cancellations
 коррелированными подзапросами: по одному на ученика. Для страницы из 50 строк
 это дёшево, а сводке нужна вся активная популяция, и подзапрос «дата последнего
 занятия» вырождался в перебор журнала занятий с конца отдельно на каждого
@@ -56,12 +56,14 @@ def graph():
         ids['teachers'].append(cur.fetchone()[0])
         teacher_id = ids['teachers'][0]
 
-        for i, direction_id in enumerate(ids['dirs']):
+        # Первая группа — с ручной длиной курса 12 (перекрывает 16 направления),
+        # вторая — без неё (8 от направления): оба пути длины курса в одной сверке.
+        for i, (direction_id, lessons_total) in enumerate(zip(ids['dirs'], (12, None))):
             cur.execute(
                 'INSERT INTO groups (name, direction_id, teacher_id, is_individual, '
-                'lesson_duration_minutes, active, lesson_number_offset) '
-                'VALUES (%s, %s, %s, false, 60, true, 0) RETURNING id',
-                [f'__sb_group{i}__', direction_id, teacher_id],
+                'lesson_duration_minutes, active, lesson_number_offset, lessons_total) '
+                'VALUES (%s, %s, %s, false, 60, true, 0, %s) RETURNING id',
+                [f'__sb_group{i}__', direction_id, teacher_id, lessons_total],
             )
             ids['groups'].append(cur.fetchone()[0])
 
@@ -133,7 +135,8 @@ def _old_rows(today):
     return {
         r['id']: r
         for r in svc.base_students_qs(today).values(
-            'id', 'balance', 'attended', 'planned', 'last_lesson', 'next_lesson')
+            'id', 'balance', 'attended', 'planned', 'last_lesson', 'next_lesson',
+            'cancellations')
     }
 
 
@@ -146,16 +149,18 @@ def test_batch_matches_annotated_queryset(graph):
 
     assert set(new) == set(old), 'разошёлся состав активной популяции'
     for sid in old:
-        for field in ('balance', 'attended', 'planned', 'last_lesson', 'next_lesson'):
+        for field in ('balance', 'attended', 'planned', 'last_lesson', 'next_lesson',
+                      'cancellations'):
             assert new[sid][field] == old[sid][field], f'ученик {sid}, поле {field}'
 
 
 def test_batch_values_are_correct(graph):
     """Сходимость путей мало стоит, если оба считают неверно — закрепляем числа."""
     a = _new_rows(TODAY)[graph['a']]
-    assert a['balance'] == 8 - 15 / 10          # куплено 8, отработано 1 + 0.5
+    # Остаток КУРСА: оплата (8 уроков) и журнал посещений на него не влияют.
+    assert a['balance'] == 20 - 5               # курс 12 + 8, пройдено 3 + 2
     assert a['attended'] == 5                   # 3 + 2 по двум членствам
-    assert a['planned'] == 24                   # 16 + 8 по направлениям групп
+    assert a['planned'] == 20                   # 12 (ручная длина) + 8 (направление)
     assert a['last_lesson'] == datetime.date(2026, 6, 10)
     assert a['next_lesson'] == datetime.date(2026, 6, 20)   # MIN по двум группам
 
@@ -163,8 +168,9 @@ def test_batch_values_are_correct(graph):
 def test_student_without_data_stays_in_population(graph):
     """Ученик без оплат, посещений и плана не выпадает и получает нули/None."""
     b = _new_rows(TODAY)[graph['b']]
-    assert b['balance'] == 0
+    assert b['balance'] == 12                   # весь курс группы впереди
     assert b['attended'] == 0
-    assert b['planned'] == 16
+    assert b['planned'] == 12
+    assert b['cancellations'] == 0
     assert b['last_lesson'] is None
     assert b['next_lesson'] == datetime.date(2026, 6, 25)

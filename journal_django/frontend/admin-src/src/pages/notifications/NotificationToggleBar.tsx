@@ -1,5 +1,6 @@
 // journal_django/frontend/admin-src/src/pages/notifications/NotificationToggleBar.tsx
 import { useState } from 'react';
+import { Checkbox } from '../../components/form/Checkbox';
 import { Dialog } from '../../components/ui/Dialog';
 import { useApiError } from '../../hooks/useApiError';
 import { fmtDateTime } from '../../lib/format';
@@ -56,7 +57,7 @@ export function NotificationToggleBar() {
   if (!data) return null;
 
   const apply = (value: boolean) => {
-    setToggle.mutate(value, { onError: (err) => showError(err) });
+    setToggle.mutate({ is_enabled: value }, { onError: (err) => showError(err) });
   };
 
   return (
@@ -89,11 +90,28 @@ export function NotificationToggleBar() {
         )}
       </div>
 
+      <div className="notif-toggle__parents">
+        <Checkbox
+          checked={data.parent_reminders_enabled}
+          disabled={setToggle.isPending}
+          onChange={(e) =>
+            setToggle.mutate(
+              { parent_reminders_enabled: e.target.checked },
+              { onError: (err) => showError(err) },
+            )}
+          label="Напоминания родителям (урок завтра в 10:00 и за час до начала)"
+        />
+        <p className="notif-toggle__hint">
+          По умолчанию выключено. Письма преподавателям подчиняются общему выключателю выше;
+          родителям письма уходят, только когда включены оба.
+        </p>
+      </div>
+
       {!data.is_enabled && (
         <div className="notif-toggle__banner" role="alert">
-          Рассылка выключена: уведомления преподавателям не создаются и не отправляются —
-          ни точечные, ни дайджесты расписания и незаполненных отчётов. О событиях за время
-          паузы преподаватели не узнают: при включении обратно накопившееся задним числом
+          Рассылка выключена: уведомления не создаются и не отправляются —
+          ни преподавателям, ни родителям (письма, напоминания, дайджесты). О событиях за время
+          паузы адресаты не узнают: при включении обратно накопившееся задним числом
           разослано не будет.
         </div>
       )}

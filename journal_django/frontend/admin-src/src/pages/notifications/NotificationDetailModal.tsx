@@ -57,9 +57,18 @@ export function NotificationDetailModal({ row, onClose }: {
       <div className="notification-detail">
         <div className="notification-detail__meta">
           <Row label="Получатель">
-            {row.teacher_name ?? '—'}
-            <span className="mono notification-detail__chat">{row.chat_id}</span>
+            {row.channel === 'email' ? (
+              <span className="mono">{row.recipient_email ?? '—'}</span>
+            ) : (
+              <>
+                {row.teacher_name ?? '—'}
+                {row.chat_id != null && (
+                  <span className="mono notification-detail__chat">{row.chat_id}</span>
+                )}
+              </>
+            )}
           </Row>
+          {row.subject && <Row label="Тема">{row.subject}</Row>}
           <Row label="Канал">{NOTIFICATION_CHANNEL_LABELS[row.channel] ?? row.channel}</Row>
           <Row label="Статус">
             <NotificationStatusBadge status={row.status} />

@@ -14,7 +14,7 @@ from apps.groups.views import (
 )
 from apps.scheduling.views import (
     GroupPlanCancelView, GroupPlanChangeTeacherPermanentView,
-    GroupPlanChangeTeacherView, GroupPlanGenerateView, GroupPlanHealthView,
+    GroupPlanChangeTeacherView, GroupPlanFreezeView, GroupPlanGenerateView, GroupPlanHealthView,
     GroupPlanPermanentChangeView, GroupPlanRescheduleView, GroupPlanResyncView,
     GroupPlanView,
 )
@@ -37,7 +37,9 @@ urlpatterns = [
     path('/<int:pk>/plan', GroupPlanView.as_view(), name='groups-plan'),
     path('/<int:pk>/plan/generate', GroupPlanGenerateView.as_view(), name='groups-plan-generate'),
     path('/<int:pk>/plan/permanent-change', GroupPlanPermanentChangeView.as_view(), name='groups-plan-permanent-change'),
-    path('/<int:pk>/plan/change-teacher-permanent', GroupPlanChangeTeacherPermanentView.as_view(), name='groups-plan-change-teacher-permanent'),
+    # Заморозка — «Изменить расписание» с теми же слотами от даты возобновления.
+    path('/<int:pk>/plan/freeze', GroupPlanFreezeView.as_view(), name='groups-plan-freeze'),
+    path('/<int:pk>/plan/change-teacher-permanent',GroupPlanChangeTeacherPermanentView.as_view(), name='groups-plan-change-teacher-permanent'),
     # Здоровье плана и его починка (RBAC IsSuperAdmin, в отличие от остальных
     # /plan/* с IsManagerOrAdmin). Строковые health/resync не конфликтуют с
     # /plan/<int:lid>/... — int-конвертер их не матчит.

@@ -98,7 +98,8 @@ ALLOWED_HOSTS=                # домен; в проде пусто = не пу
 CSRF_TRUSTED_ORIGINS_LIST=    # https://<домен> — SPA и API на одном origin
 CORS_ORIGINS=                 # пусто = кросс-ориджин запрещён (так и нужно)
 REDIS_URL=                    # без него — синхронно, LocMemCache, без Celery-задач
-SMTP_HOST/PORT/USER/PASS/FROM # SMTP для email-OTP (у Eduson свой, пока не настроен)
+SMTP_HOST/PORT/USER/PASS/FROM # SMTP для email-OTP и email-напоминаний (у Eduson свой, пока не настроен)
+PUBLIC_URL=                   # https://<домен> — ссылка на кабинет в письмах; пусто → без ссылки
 # Telegram-уведомления:
 TELEGRAM_BOT_TOKEN=           # токен Telegram-бота школы (у Eduson пока не настроен)
 TELEGRAM_GENERAL_CHAT_ID=     # общий чат сотрудников (-100...); пусто → дубли в чат не идут
@@ -112,6 +113,8 @@ JOURNAL_SPREADSHEET_ID=       # нужен для backfill-payments
 ```
 
 **Telegram-уведомления** — `apps/notifications/`, единственное место в журнале, знающее про Telegram. Очередь исходящих (`notification_messages`) лежит в PostgreSQL: доменные сервисы (`scheduling`, `extra_lessons`) вызывают `notifications.services.notify_teacher()` **внутри своей транзакции** (transactional outbox — либо операция и сообщение, либо ничего), а Celery-beat раз в минуту разгребает очередь и шлёт через Telegram Bot API. Бот в доставке не участвует. Идемпотентность — уникальный `dedup_key` на уровне БД. Дайджесты: расписание 8:00, незаполненные отчёты 21:00 (оба только в личку); точечные уведомления об изменениях — личка + дубль в общий чат. Импорт `apps.notifications` из доменных приложений — **только локальный, внутри функции**.
+
+**Email-напоминания Eduson** (спека этапа 3, раздел D) — та же очередь, `channel='email'` (`recipient_email` + `subject` вместо `chat_id`; CHECK по каналу), транспорт `email_transport.py` (`send_mail`). Задачи — `apps/notifications/reminders.py`: расписание преподавателю 08:00, «урок не записан» (окно 3 ч после конца, повторы раз в сутки, не больше 3), родителям «урок завтра» 10:00 и «через час» (55–65 мин). Родительские — под флагом `parent_reminders_enabled` (по умолчанию выключен) поверх общего `is_enabled`. Адрес преподавателя — email учётки, запас — карточки. Без Redis — `manage.py send_reminders <schedule|unrecorded|parent-day|parent-hour> [--dispatch]`. SMS — бэклог (нет провайдера).
 
 ## Тесты
 

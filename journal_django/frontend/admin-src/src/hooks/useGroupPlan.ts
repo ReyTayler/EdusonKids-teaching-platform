@@ -8,7 +8,7 @@
  * (тот же ключ, что useGroupPlanCalendar → useGroupPlan использует для чтения)
  * и ['groups'] (слоты видны и в списке групп).
  */
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { groupPlanKey } from './useGroupPlanCalendar';
 import { groupPlanHealthKey } from './useGroupPlanHealth';
@@ -93,6 +93,46 @@ export function usePermanentChangePreview(groupId: number) {
         `/api/admin/groups/${groupId}/plan/permanent-change`,
         { ...body, preview: true },
       ),
+  });
+}
+
+export interface FreezePayload {
+  freeze_from: string;  // 'YYYY-MM-DD'
+  resume_date: string;  // 'YYYY-MM-DD'
+}
+
+export interface FreezePreview {
+  from_seq: number;
+  lessons_count: number;
+  first_date: string;
+  resume_first_date: string;
+  last_date: string;
+  affected: AffectedOp[];
+}
+
+/** POST /plan/freeze с preview:true — read-only расчёт заморозки. Это useQuery, а не
+ * мутация: ответ привязан к паре дат, а устаревшие ответы при быстрой смене дат
+ * отбрасываются ключом запроса сами. */
+export function useFreezePreview(groupId: number, payload: FreezePayload | null) {
+  return useQuery({
+    queryKey: ['group-freeze-preview', groupId, payload?.freeze_from, payload?.resume_date],
+    queryFn: () => api<FreezePreview>(
+      'POST', `/api/admin/groups/${groupId}/plan/freeze`, { ...payload, preview: true },
+    ),
+    enabled: payload != null,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+/** POST /plan/freeze — применить заморозку; возвращает новый план группы. */
+export function useFreezeGroup(groupId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: FreezePayload) =>
+      api<PlanRow[]>('POST', `/api/admin/groups/${groupId}/plan/freeze`, { ...body, preview: false }),
+    onSuccess: () => invalidatePlan(qc, groupId),
   });
 }
 

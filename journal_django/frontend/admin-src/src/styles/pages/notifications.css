@@ -5,6 +5,35 @@
    Тексты многострочные; без ограничения ширины одна строка дайджеста растянет
    таблицу горизонтально. max-width в ch, а не в px: держится за кегль, а не за
    случайное число. */
+.notifications-recipient {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.notifications-recipient__sub {
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+.notif-toggle__parents {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.notif-toggle__hint {
+  margin: 0;
+  padding-left: var(--space-6);
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  line-height: 1.5;
+}
+
+.schedule-card__note {
+  font-size: var(--fs-xs);
+  color: var(--text3);
+  line-height: 1.5;
+}
+
 .notifications-text {
   display: block;
   max-width: 46ch;

@@ -17,7 +17,9 @@ from django.conf import settings
 from django.db import transaction
 
 from apps.notifications import messages
-from apps.notifications.constants import CHANNEL_DM, CHANNEL_GROUP, STATUS_FAILED
+from apps.notifications.constants import (
+    CHANNEL_DM, CHANNEL_EMAIL, CHANNEL_GROUP, STATUS_FAILED,
+)
 from apps.notifications.models import (
     NotificationMessage, NotificationSettings, TelegramRecipient,
 )
@@ -72,8 +74,32 @@ def enqueue(*, kind: str, channel: str, chat_id: int, text: str, dedup_key: str,
     return created
 
 
-def record_failure(*, kind: str, channel: str, chat_id: int, dedup_key: str,
-                   recipient_teacher_id: int | None, error: str) -> bool:
+def enqueue_email(*, kind: str, to: str, subject: str, text: str, dedup_key: str,
+                  recipient_teacher_id: int | None = None,
+                  source_kind: str | None = None, source_id: int | None = None) -> bool:
+    """
+    Поставить письмо в очередь. Возвращает True, если строка создана.
+
+    Та же очередь и та же идемпотентность, что у Telegram (см. enqueue): письмо
+    — это строка с channel='email', адресом и темой вместо chat_id.
+    """
+    _, created = NotificationMessage.objects.get_or_create(
+        dedup_key=dedup_key,
+        defaults=dict(
+            kind=kind, channel=CHANNEL_EMAIL, chat_id=None,
+            recipient_email=to, subject=subject, text=text,
+            recipient_teacher_id=recipient_teacher_id,
+            source_kind=source_kind, source_id=source_id,
+        ),
+    )
+    return created
+
+
+def record_failure(*, kind: str, channel: str, dedup_key: str,
+                   recipient_teacher_id: int | None, error: str,
+                   chat_id: int | None = None,
+                   recipient_email: str | None = None,
+                   subject: str | None = None) -> bool:
     """
     Записать в журнал письмо, которое не удалось СОБРАТЬ. Возвращает True,
     если строка создана.
@@ -90,6 +116,7 @@ def record_failure(*, kind: str, channel: str, chat_id: int, dedup_key: str,
         dedup_key=dedup_key,
         defaults=dict(
             kind=kind, channel=channel, chat_id=chat_id,
+            recipient_email=recipient_email, subject=subject,
             text=FAILED_TEXT, status=STATUS_FAILED,
             last_error=error[:2000],
             recipient_teacher_id=recipient_teacher_id,

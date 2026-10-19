@@ -23,7 +23,7 @@ from apps.scheduling import services
 from apps.scheduling.exceptions import PlanResyncBlocked
 from apps.scheduling.serializers import (
     PlanChangeTeacherPermanentSerializer, PlanChangeTeacherSerializer,
-    PlanPermanentChangeSerializer, PlanRescheduleSerializer, PlanResyncSerializer,
+    PlanFreezeSerializer, PlanPermanentChangeSerializer, PlanRescheduleSerializer, PlanResyncSerializer,
 )
 
 # Максимальная ширина окна (дней) — календарь просит неделю/месяц; ограничиваем,
@@ -217,6 +217,37 @@ class GroupPlanPermanentChangeView(APIView):
         if plan is None:
             raise NotFound({'error': 'Not found'})
         return Response(plan)
+
+
+class GroupPlanFreezeView(APIView):
+    """POST /api/admin/groups/<pk>/plan/freeze — заморозка (пауза + возобновление).
+
+    Тело: {'freeze_from': 'YYYY-MM-DD', 'resume_date': 'YYYY-MM-DD', 'preview'?: bool}.
+    preview=true → {from_seq, lessons_count, first_date, resume_first_date,
+    last_date, affected}; иначе → новый план (как у permanent-change).
+    400: resume_date < freeze_from, нечего замораживать, нет расписания."""
+
+    permission_classes = [IsManagerOrAdmin]
+
+    def post(self, request: Request, pk: int) -> Response:
+        serializer = PlanFreezeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            if data.get('preview'):
+                result = services.preview_freeze(pk, data)
+            else:
+                result = services.freeze(pk, data, request)
+        except ValueError as exc:
+            # except СНАРУЖИ transaction.atomic (она в services) — откат уже случился.
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError as exc:
+            if _is_unique_violation(exc):
+                return Response({'error': 'Slot already exists'}, status=status.HTTP_409_CONFLICT)
+            raise
+        if result is None:
+            raise NotFound({'error': 'Not found'})
+        return Response(result)
 
 
 class GroupPlanCancelView(APIView):

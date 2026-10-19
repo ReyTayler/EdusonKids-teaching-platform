@@ -76,3 +76,58 @@ def test_revert_lesson_record_keeps_feedback_from_other_operation(school, held):
     stored = LessonFeedback.objects.get(pk=fb.pk)
     assert stored.lesson_id is None
     assert (stored.group_id, stored.lesson_date) == (school['group_id'], day)
+
+
+@pytest.mark.django_db
+def test_revert_teacher_record_removes_lesson_and_its_feedback(school):
+    """Преподаватель записал урок с отзывом — одна операция «lesson.submit».
+    Её откат убирает и урок, и отзыв: отзыв без урока, ради которого его
+    написали, — висящая запись «состоялся» без факта."""
+    from apps.feedback.models import LessonFeedback
+    from apps.lessons.models import Lesson
+    from apps.lessons.services import record_lesson
+
+    with pghistory.context(url='/api/submitLesson', method='POST'):
+        result = record_lesson(
+            lesson_date='2026-01-20', teacher_id=school['teacher_id'],
+            group_id=school['group_id'], original_teacher_id=None, lesson_number=2,
+            lesson_duration_minutes=90, lesson_type='regular', record_url=None,
+            submitted_by_token='__feedback_revert_submit__', submit_date='2026-01-20',
+            attendance=[],
+            feedback={'understanding': 5, 'interest': 6, 'tech_problems': False,
+                      'comment': 'Тест'},
+        )
+    lesson_id = result['lesson_id']
+    assert LessonFeedback.objects.filter(lesson_id=lesson_id).exists()
+
+    revert.revert_context(_last_lesson_ctx(lesson_id))
+
+    assert not Lesson.objects.filter(pk=lesson_id).exists()
+    assert not LessonFeedback.objects.filter(group_id=school['group_id'],
+                                             lesson_date='2026-01-20').exists()
+
+
+@pytest.mark.django_db
+def test_lesson_date_change_moves_feedback_and_revert_restores_both(school, held, other_group):
+    """Правка даты урока переносит дату его отзыва в той же операции; откат
+    операции из журнала возвращает обе даты. Чужой отзыв (другой урок) не трогается."""
+    import datetime
+
+    from apps.feedback.models import LessonFeedback
+    from apps.lessons import services as lessons_services
+    from apps.lessons.models import Lesson
+
+    fb = held(school['lesson_id'])
+    foreign = held(other_group['lesson_id'])
+    new_day = datetime.date(2026, 1, 15)
+    with pghistory.context(url=f"/api/admin/lessons/{school['lesson_id']}", method='PATCH'):
+        lessons_services.update_lesson(school['lesson_id'], {'lesson_date': new_day})
+
+    assert LessonFeedback.objects.get(pk=fb.pk).lesson_date == new_day
+    assert LessonFeedback.objects.get(pk=foreign.pk).lesson_date == datetime.date(2026, 1, 13)
+
+    revert.revert_context(_last_lesson_ctx(school['lesson_id']))
+
+    old_day = datetime.date(2026, 1, 12)
+    assert Lesson.objects.get(pk=school['lesson_id']).lesson_date == old_day
+    assert LessonFeedback.objects.get(pk=fb.pk).lesson_date == old_day

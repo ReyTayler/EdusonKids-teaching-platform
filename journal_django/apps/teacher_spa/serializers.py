@@ -121,6 +121,12 @@ class MyLessonSerializer(serializers.Serializer):
     lessonNumber = serializers.DecimalField(
         source='lesson_number', max_digits=5, decimal_places=1
     )
+    # «Пройдено до учёта» группы (read-only; group уже в select_related → без N+1).
+    # Фронт показывает пометку в раскрытии урока. Отдаётся строкой ("7.0"),
+    # как lessonNumber: DateSafeJSONRenderer сериализует Decimal строкой.
+    lessonNumberOffset = serializers.DecimalField(
+        source='group.lesson_number_offset', max_digits=6, decimal_places=1,
+    )
     lessonType = serializers.CharField(source='lesson_type')
     isSubstitution = serializers.SerializerMethodField()
     originalTeacher = serializers.SerializerMethodField()

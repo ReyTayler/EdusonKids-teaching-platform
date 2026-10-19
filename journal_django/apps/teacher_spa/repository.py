@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
+from django.conf import settings
 from django.db.models import F, Min, Q
 
 from apps.finances.repository import balances_for_students
@@ -185,6 +186,12 @@ def _build_from_rows(rows: list[dict]) -> dict:
     `lockedThrough` у ученика и `skips` {номер урока: [имена]} у группы.
     """
     balances = balances_for_students({r['student_id'] for r in rows})
+    # Гард оплат (settings.PAYMENT_BALANCE_GUARD) решает, блокирует ли форма записи
+    # ученика с remaining <= 0 и показывает ли «Долг». Флаг глобальный, но едет в
+    # каждой группе: все потребители (форма записи, карточка и страница группы)
+    # получают именно GroupData, а сервер — источник правды (record_lesson
+    # проверяет тот же флаг в assert_students_paid).
+    payment_guard = bool(settings.PAYMENT_BALANCE_GUARD)
 
     data: dict = {}
     index: dict = {}
@@ -208,6 +215,7 @@ def _build_from_rows(rows: list[dict]) -> dict:
                 'startDate': fmt_date_ru(r['group_start_date']),
                 'isGroup': not r['is_individual'],
                 'durationMinutes': r['duration_minutes'],
+                'paymentGuard': payment_guard,
                 '_group_id': r['group_id'],
             }
 

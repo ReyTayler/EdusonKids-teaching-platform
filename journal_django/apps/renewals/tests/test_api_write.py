@@ -87,6 +87,7 @@ def test_move_to_won_before_cycle_completed_409(admin_client, make_student, make
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_move_to_won_blocked_when_balance_not_positive(manager_client, make_student, make_direction):
     """Цикл отработан, но баланс <= 0 (долг или ровно 0) — менеджеру «Продлён»
     запрещён: без положительного баланса продление не подкреплено оплатой на
@@ -320,3 +321,40 @@ def test_assignees_list(manager_client):
 @pytest.mark.django_db
 def test_assignees_forbidden_for_teacher(teacher_client):
     assert teacher_client.get(f'{BASE}/assignees').status_code == 403
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures('payment_balance_guard_off')
+@pytest.mark.parametrize('balance', [0, -3])
+def test_move_to_won_allowed_for_manager_when_guard_off(
+        manager_client, balance, make_student, make_direction):
+    """Гард оплат выключен (Eduson: оплаты в платформе не ведутся) — балансовый
+    гейт «Продлён» снят для всех ролей, включая менеджера. Гейт завершённого
+    цикла остаётся (следующий тест)."""
+    from unittest.mock import patch
+    sid, did = make_student(), make_direction()
+    deal = engine.ensure_deal(sid, cycle_no=1)
+    deal.stage = RenewalStage.objects.get(key='thinking', pipeline=deal.pipeline)
+    deal.save(update_fields=['stage'])
+    with patch('apps.renewals.engine.cycle_completed', return_value=True), \
+         patch('apps.finances.repository.balance_for_student', return_value=balance):
+        resp = manager_client.post(f'{BASE}/{deal.id}/move',
+                                   {'to_stage_id': _stage_id('renewed')}, format='json')
+    assert resp.status_code == 200, resp.content
+    deal.refresh_from_db()
+    assert deal.stage.key == 'renewed'
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures('payment_balance_guard_off')
+def test_move_to_won_cycle_gate_kept_when_guard_off(manager_client, make_student,
+                                                    make_direction):
+    """Выключенный гард снимает только балансовый гейт: незавершённый цикл
+    по-прежнему не даёт закрыть сделку «Продлён»."""
+    sid, did = make_student(), make_direction()
+    deal = engine.ensure_deal(sid, cycle_no=1)
+    deal.stage = RenewalStage.objects.get(key='thinking', pipeline=deal.pipeline)
+    deal.save(update_fields=['stage'])
+    resp = manager_client.post(f'{BASE}/{deal.id}/move',
+                               {'to_stage_id': _stage_id('renewed')}, format='json')
+    assert resp.status_code == 409

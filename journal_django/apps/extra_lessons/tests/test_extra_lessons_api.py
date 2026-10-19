@@ -207,6 +207,7 @@ def test_create_blocked_when_student_was_not_absent(
             cur.execute('DELETE FROM students WHERE id = %s', [present_student_id])
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_create_blocked_when_student_has_no_paid_balance(
     admin_client, teacher_fixture, missed_lesson_unpaid_fixture, unpaid_student_fixture,
 ):
@@ -578,6 +579,7 @@ def test_record_conflict_when_already_done(
             cur.execute('DELETE FROM lessons WHERE id = %s', [fact_lesson_id])
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_record_blocked_when_student_balance_dropped(
     admin_client, teacher_client_for, teacher_fixture, missed_lesson_fixture, student_fixture,
     cleanup_resolutions,

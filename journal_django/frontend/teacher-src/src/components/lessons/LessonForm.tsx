@@ -72,10 +72,12 @@ function blockedReason(
   s: { id: number; remaining: number; lockedThrough: number | null },
   lessonNum: number,
   skipIds: ReadonlySet<number>,
+  paymentGuard: boolean,
 ): BlockReason | null {
   if (skipIds.has(s.id)) return 'skip';
   if (s.lockedThrough !== null && lessonNum <= s.lockedThrough) return 'locked';
-  if (s.remaining <= 0) return 'unpaid';
+  // Без гарда оплат (школа не ведёт оплаты в платформе) остаток не блокирует.
+  if (paymentGuard && s.remaining <= 0) return 'unpaid';
   return null;
 }
 
@@ -192,9 +194,11 @@ export function LessonForm({
   }, [groupData.skipIds, groupData.skips, groupData.students, next]);
   const reasonOf = useMemo(() => {
     const m = new Map<number, BlockReason | null>();
-    for (const s of groupData.students) m.set(s.id, blockedReason(s, next, skipIds));
+    for (const s of groupData.students) {
+      m.set(s.id, blockedReason(s, next, skipIds, groupData.paymentGuard));
+    }
     return m;
-  }, [groupData.students, next, skipIds]);
+  }, [groupData.students, groupData.paymentGuard, next, skipIds]);
   const isBlocked = (s: { id: number }) => reasonOf.get(s.id) != null;
   // Отметка «пришёл» у заблокированного ученика силы не имеет — гасим её при чтении,
   // а не правкой состояния: блокировка может появиться уже после первого рендера.

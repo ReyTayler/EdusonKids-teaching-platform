@@ -15,6 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from django.conf import settings
+
 from apps.renewals.cycle import LESSONS_PER_CYCLE
 
 
@@ -70,7 +72,9 @@ def plan_for_student(visits: list[tuple[date, float]], *, is_active: bool,
             boundary += LESSONS_PER_CYCLE
     completed_full = cycle_i - 1
     rem = total - completed_full * LESSONS_PER_CYCLE
-    debt = balance <= 0
+    # Долг маршрутизирует в «Ждём оплату» только при гарде оплат — то же правило,
+    # что engine._target_auto_stage (флаг читается в момент вызова).
+    debt = settings.PAYMENT_BALANCE_GUARD and balance <= 0
 
     if is_active:
         if rem == 0 and completed_full >= 1:

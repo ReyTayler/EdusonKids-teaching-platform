@@ -524,7 +524,7 @@ def get_group_progress(group_id: int) -> Optional[dict]:
     grp = (
         Group.objects
         .filter(id=group_id)
-        .values('id', 'lesson_duration_minutes',
+        .values('id', 'lesson_duration_minutes', 'lesson_number_offset',
                 total_lessons=effective_total_lessons_expr())
         .first()
     )
@@ -533,6 +533,11 @@ def get_group_progress(group_id: int) -> Optional[dict]:
 
     # Half-lesson: 45 минут → шаг 0.5 (см. CLAUDE.md); слот = lesson_number / step.
     step = 0.5 if grp['lesson_duration_minutes'] == 45 else 1.0
+    # «Пройдено до учёта» (импорт Eduson / группа-продолжение): слоты 1..N в этой
+    # группе физически не существуют — даты старой системой не сохранены. Фронт
+    # рисует их нейтрально (не «Не проведён») и подписывает плашкой.
+    lesson_number_offset = grp['lesson_number_offset'] or Decimal('0')
+    pre_platform_slots = round(float(lesson_number_offset) / step)
 
     # Ученики группы — строки матрицы, стабильный порядок по имени.
     # Только активные (active=True): membership удаляется мягко (active=false),
@@ -729,6 +734,8 @@ def get_group_progress(group_id: int) -> Optional[dict]:
 
     return {
         'group_id': group_id,
+        'lesson_number_offset': float(lesson_number_offset),
+        'pre_platform_slots': pre_platform_slots,
         'total_slots': slot_count,
         'held_slots': held_slots,
         'slots': slots,

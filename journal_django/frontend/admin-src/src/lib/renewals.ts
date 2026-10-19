@@ -83,6 +83,12 @@ export interface RenewalCard {
   balance: number;
   /** Баланс < 0. Дублирует знак `balance`; оставлен для читаемости условий. */
   debt: boolean;
+  /**
+   * Гард оплат школы (settings.PAYMENT_BALANCE_GUARD). false — оплаты в платформе
+   * не ведутся (Eduson): баланс у всех <= 0 и долгом не является, бейджи
+   * «Долг N ур.» / «Уроки кончились» не показываются.
+   */
+  payment_guard: boolean;
   /** Отработаны ли все 4 урока текущего цикла — пока false, «Продлён» недоступен. */
   cycle_completed: boolean;
   /** «До какого месяца заморозка» ('YYYY-MM-01'); непусто только на стадии frozen. */

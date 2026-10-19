@@ -1,6 +1,8 @@
 """Юнит на чистую раскладку plan_for_student — без БД."""
 from datetime import date
 
+import pytest
+
 from apps.renewals.rebuild import plan_for_student, target_open_stage_key
 
 PROGRESS = ['no_lesson_yet', 'lesson_1', 'lesson_2', 'lesson_3']
@@ -74,6 +76,7 @@ def test_active_over_boundary_wons_prior_and_opens_new():
     assert plan.open.stage_key == 'lesson_2'
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_active_debt_mid_cycle_opens_awaiting_payment():
     plan = plan_for_student(_visits([(0, 4), (1, 1)]), is_active=True,
                             balance=-2, progress_keys=PROGRESS)
@@ -163,3 +166,30 @@ def test_rebuild_is_idempotent(monkeypatch, make_student):
     assert first == second
     # ровно на рубеже: цикл 4 открыт на awaiting_renewal
     assert second[-1] == (4, 'awaiting_renewal')
+
+
+# --- гард оплат выключен (Eduson): долг не маршрутизирует воронку -----------
+
+@pytest.mark.usefixtures('payment_balance_guard_off')
+@pytest.mark.parametrize('balance', [0, -2])
+@pytest.mark.parametrize('units, cycle_no, stage', [
+    ([], 1, 'no_lesson_yet'),                 # уроков ещё не было
+    ([(0, 1)], 1, 'lesson_1'),
+    ([(0, 3)], 1, 'lesson_3'),
+    ([(0, 4), (1, 1)], 2, 'lesson_1'),        # цикл 1 закрыт «Продлён», цикл 2 — Урок 1
+    ([(0, 3), (1, 0.5)], 1, 'lesson_3'),      # 3.5 урока (полурок) — ещё «Урок 3»
+])
+def test_guard_off_debt_follows_progress(units, cycle_no, stage, balance):
+    plan = plan_for_student(_visits(units), is_active=True, balance=balance,
+                            progress_keys=PROGRESS)
+    assert (plan.open.cycle_no, plan.open.stage_key) == (cycle_no, stage)
+
+
+@pytest.mark.usefixtures('payment_balance_guard_off')
+def test_guard_off_boundary_still_awaiting_renewal():
+    """Ровно на рубеже цикла — «Ждём продление», как и с гардом (рубеж от
+    баланса никогда не зависел)."""
+    plan = plan_for_student(_visits([(0, 4), (1, 4)]), is_active=True, balance=-8,
+                            progress_keys=PROGRESS)
+    assert (plan.open.cycle_no, plan.open.stage_key) == (2, 'awaiting_renewal')
+    assert [c.kind for c in plan.closed] == ['renewed']

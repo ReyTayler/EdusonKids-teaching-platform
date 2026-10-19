@@ -158,6 +158,7 @@ def test_due_at_uses_moscow_calendar_date_not_utc(make_student, make_direction,
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_balance_zero_mid_cycle_moves_to_awaiting_payment(make_student, make_direction,
                                                           make_teacher, make_attendance):
     """Цикл не отработан (2 из 4), оплат нет (баланс ≤ 0) → «Ждём оплату»."""
@@ -170,6 +171,42 @@ def test_balance_zero_mid_cycle_moves_to_awaiting_payment(make_student, make_dir
         deal.refresh_from_db()
         assert deal.stage.key == 'awaiting_payment'
         assert deal.due_at is None
+    finally:
+        _cleanup_group(gid, sid)
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures('payment_balance_guard_off')
+def test_guard_off_debt_mid_cycle_stays_on_progress(make_student, make_direction,
+                                                    make_teacher, make_attendance):
+    """Гард оплат выключен (Eduson): 2 из 4 без оплат → «Урок 2», не «Ждём оплату»."""
+    sid, did, tid = make_student(), make_direction(), make_teacher()
+    gid = _make_group_with_membership(did, tid, sid)
+    try:
+        make_attendance(sid, gid, tid, count=2)
+        deal = engine.ensure_deal(sid, cycle_no=1)
+        engine.sync_lesson_stage(sid)
+        deal.refresh_from_db()
+        assert deal.stage.key == 'lesson_2'
+        assert deal.due_at is None
+    finally:
+        _cleanup_group(gid, sid)
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures('payment_balance_guard_off')
+def test_guard_off_cycle_done_awaiting_renewal(make_student, make_direction,
+                                               make_teacher, make_attendance):
+    """Без гарда рубеж цикла прежний: 4 из 4 → «Ждём продление» (+due_at)."""
+    sid, did, tid = make_student(), make_direction(), make_teacher()
+    gid = _make_group_with_membership(did, tid, sid)
+    try:
+        make_attendance(sid, gid, tid, count=4)
+        deal = engine.ensure_deal(sid, cycle_no=1)
+        engine.sync_lesson_stage(sid)
+        deal.refresh_from_db()
+        assert deal.stage.key == 'awaiting_renewal'
+        assert deal.due_at is not None
     finally:
         _cleanup_group(gid, sid)
 

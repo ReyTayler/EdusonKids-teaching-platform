@@ -3,6 +3,20 @@ import type { LessonType, RegistrySegment, RegistryStatus, Role, StudentLessonKi
 // Статуса ученика больше нет (спека 2026-07-25): его «статус» — стадия последней
 // сделки продления, подписи стадий приходят с бэка (useRenewalStages).
 
+// ===== «Пройдено до перехода на платформу» =====
+// Group.lesson_number_offset = N: первые N уроков группа прошла в старой системе,
+// их даты не сохранились, известно только количество. Одна формулировка на все
+// экраны (admin и teacher).
+const fmtOffset = (n: number): string =>
+  Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
+
+export function preplatformNoteText(offset: number): string {
+  const tail = 'до перехода на платформу — даты в старой системе не сохранились';
+  if (offset === 1) return `Урок 1 пройден ${tail}`;
+  if (offset < 1) return `Пройдено ${fmtOffset(offset)} урока ${tail}`;
+  return `Уроки 1–${fmtOffset(offset)} пройдены ${tail}`;
+}
+
 // ===== Роли учётки =====
 // AccountsPage.tsx держит собственную локальную копию (не тронута — вне
 // зоны этой правки), это единственный переиспользуемый экземпляр для

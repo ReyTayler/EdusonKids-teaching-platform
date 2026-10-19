@@ -219,6 +219,7 @@ def test_post_invalid_body_400(group_fixture, teacher_id_fixture):
     assert resp.status_code == 400
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_post_blocked_when_student_has_no_paid_balance(
     group_fixture, teacher_id_fixture, student_fixture,
 ):
@@ -314,6 +315,7 @@ def test_attendance_toggle_404_missing_lesson(student_fixture):
     assert resp.status_code == 404
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_attendance_toggle_blocked_when_no_paid_balance(
     group_fixture, teacher_id_fixture, student_fixture,
 ):

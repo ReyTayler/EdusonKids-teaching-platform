@@ -11,6 +11,7 @@ from apps.renewals.models import RenewalActivity, RenewalDeal
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_payment_orm_create_syncs_stage_without_closing(
         django_capture_on_commit_callbacks, make_student, make_direction,
         make_teacher, make_attendance):

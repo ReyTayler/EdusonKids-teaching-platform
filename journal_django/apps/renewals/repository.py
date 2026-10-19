@@ -258,7 +258,11 @@ def move_deal(deal_id: int, to_stage_id: int, reason_code: str | None,
 
     allow_nonpositive_balance снимает гейт «Продлён только при балансе > 0»
     (право admin/superadmin решает вьюха по роли; гейт цикла остаётся).
+    При выключенном settings.PAYMENT_BALANCE_GUARD гейт снят для всех ролей:
+    без учёта оплат в платформе (Eduson) баланс у всех <= 0, и менеджер не закрыл
+    бы ни одну сделку. Баланс тогда не считаем вовсе — он не влияет на решение.
     """
+    from django.conf import settings
     from django.db import transaction
     from django.utils import timezone
     from apps.finances.repository import balance_for_student
@@ -274,12 +278,14 @@ def move_deal(deal_id: int, to_stage_id: int, reason_code: str | None,
         if to_stage is None:
             raise InvalidTransition('Стадия не принадлежит воронке сделки')
         from_stage = deal.stage
+        guard_on = settings.PAYMENT_BALANCE_GUARD
         assert_allowed(from_kind=from_stage.kind, to_kind=to_stage.kind,
                        from_is_auto=from_stage.is_auto, to_is_auto=to_stage.is_auto,
                        from_key=from_stage.key, to_allow_mid_cycle=to_stage.allow_mid_cycle,
                        cycle_completed=engine.cycle_completed(deal),
-                       balance=float(balance_for_student(deal.student_id)),
-                       allow_nonpositive_balance=allow_nonpositive_balance)
+                       balance=(float(balance_for_student(deal.student_id))
+                                if guard_on else 1),
+                       allow_nonpositive_balance=allow_nonpositive_balance or not guard_on)
 
         to_frozen = to_stage.key == FROZEN_KEY
         deal.frozen_until_month = frozen_until_month if to_frozen else None
@@ -501,16 +507,24 @@ def _annotate_debt(cards: list[dict]) -> list[dict]:
     величину показывает drawer сделки («Баланс — −2 ур.»). Карточка канбана
     строит из неё бейдж «Долг N ур.», поэтому число нужно ей целиком, а не
     только знак.
+
+    payment_guard — settings.PAYMENT_BALANCE_GUARD: без гарда оплат (Eduson) баланс
+    у всех <= 0 и долгом не является, карточка бейдж не показывает. Флаг школы, но
+    едет в каждой карточке: карточка рендерится только из своего объекта, а
+    собирают карточки и доска, и догрузка колонки — через эту функцию.
     """
+    from django.conf import settings
     from apps.finances.repository import balances_for_students
     ids = list({c['student_id'] for c in cards})
     if not ids:
         return cards
+    payment_guard = bool(settings.PAYMENT_BALANCE_GUARD)
     balances = balances_for_students(ids)
     for c in cards:
         balance = float(balances.get(c['student_id'], 0))
         c['balance'] = balance
         c['debt'] = balance < 0
+        c['payment_guard'] = payment_guard
     return cards
 
 

@@ -1,3 +1,4 @@
+import { PrePlatformNote } from '../../shared/progress/PrePlatformNote';
 import { useRef, useState } from 'react';
 import { useParams, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useGroup, useGroupMutations } from '../../hooks/useGroups';
@@ -314,6 +315,9 @@ export default function GroupDetailPage() {
         hideCard
       >
         <GroupKpiRow groupId={group.id} isIndividual={group.is_individual} color={color} />
+        {/* Один раз над вкладками: касается и плана, и сетки уроков, и прогресса.
+            «Проведено X из M» выше считает только уроки на платформе. */}
+        <PrePlatformNote offset={group.lesson_number_offset} />
         <Tabs items={tabs} value={activeTab} onChange={setActiveTab} />
       </DetailShell>
       {editing && (

@@ -9,6 +9,7 @@ import { SelectInput } from '../../components/form/SelectInput';
 import { scheduledMakeupsBlockMessage } from '../../lib/api';
 import { directionColor } from '../../lib/direction-color';
 import { fmtDate, fmtLessons } from '../../lib/format';
+import { preplatformNoteText } from '../../lib/labels';
 import { formatSlot } from '../../lib/slots';
 import type { Direction, Group, GroupMembership } from '../../lib/types';
 import { BlockLoading } from '../../components/ui/Skeleton';
@@ -35,6 +36,8 @@ interface GroupRow {
   pct: number | null;
   /** Есть активное членство → строку можно убрать прямо отсюда. */
   membership: GroupMembership | null;
+  /** Group.lesson_number_offset: пройдено до перехода на платформу (в уроках). */
+  offset: number;
 }
 
 interface DirBlock {
@@ -108,6 +111,7 @@ export default function StudentLearningBlock({ studentId, groups, directions }: 
           recorded: g.lessons_recorded,
           pct: g.attendance_pct,
           membership: memberships.find((m) => m.group_id === g.group_id) || null,
+          offset: Number(groups.find((x) => x.id === g.group_id)?.lesson_number_offset || 0),
         });
       }
     }
@@ -130,6 +134,7 @@ export default function StudentLearningBlock({ studentId, groups, directions }: 
         recorded: 0,
         pct: null,
         membership: m,
+        offset: Number(g.lesson_number_offset || 0),
       });
     }
 
@@ -274,6 +279,9 @@ export default function StudentLearningBlock({ studentId, groups, directions }: 
                       onClick={() => { void handleRemove(Number(r.membership!.id)); }}
                     >×</button>
                   ) : <span className="learn-group__remove-spacer" />}
+                  {r.offset > 0 && (
+                    <div className="learn-group__note">{preplatformNoteText(r.offset)}</div>
+                  )}
                   {r.membership?.transferred_from_group_name && (
                     <div className="learn-group__note">
                       Переведён из «{r.membership.transferred_from_group_name}» — там отработано{' '}

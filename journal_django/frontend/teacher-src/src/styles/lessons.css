@@ -65,3 +65,11 @@
   .mlh-chevron { grid-column: 2; grid-row: 1; }
   .mlh-students { padding-left: var(--space-4); }
 }
+
+/* Пометка «пройдено до перехода» в раскрытии урока — в колонке учеников, без нижнего отступа. */
+.mlh-preplatform {
+  margin: 0 var(--space-4) var(--space-2) calc(60px + var(--space-4) * 2);
+}
+@media (max-width: 720px) {
+  .mlh-preplatform { margin-left: var(--space-4); }
+}

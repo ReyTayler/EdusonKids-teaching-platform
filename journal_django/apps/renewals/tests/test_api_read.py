@@ -242,3 +242,25 @@ def test_board_card_has_balance_in_lessons(manager_client, make_student, make_di
             cur.execute('DELETE FROM renewal_deal WHERE student_id = %s', [sid])
             cur.execute('DELETE FROM group_memberships WHERE group_id = %s', [gid])
             cur.execute('DELETE FROM groups WHERE id = %s', [gid])
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('guard', [True, False])
+def test_board_and_column_cards_carry_payment_guard(settings, guard, manager_client,
+                                                    make_student, make_direction):
+    """Карточка канбана прячет бейдж «Долг N ур.» / «Уроки кончились» по флагу с
+    сервера (settings.PAYMENT_BALANCE_GUARD): без учёта оплат (Eduson) баланс у всех
+    <= 0 и долгом не является. Флаг едет в каждой карточке — и на доске, и в
+    догрузке колонки («Показать ещё»): обе выдачи собирают карточки одной функцией."""
+    settings.PAYMENT_BALANCE_GUARD = guard
+    sid = make_student()
+    make_direction()
+    deal = engine.ensure_deal(sid, cycle_no=1)
+
+    board = manager_client.get(f'{BASE}?view=board').json()
+    [card] = [c for col in board['columns'] for c in col['cards'] if c['student_id'] == sid]
+    assert card['payment_guard'] is guard
+
+    column = manager_client.get(f'{BASE}/columns/{deal.stage_id}?offset=0').json()
+    [card] = [c for c in column['cards'] if c['student_id'] == sid]
+    assert card['payment_guard'] is guard

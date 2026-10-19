@@ -127,6 +127,7 @@ def test_create_lesson_with_payroll(
         _delete_lesson(lesson_id)
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_create_lesson_blocked_without_paid_balance(
     group_fixture, teacher_id_fixture, student_fixture,
 ):
@@ -419,6 +420,7 @@ def test_attendance_toggle_recomputes_payroll(
         _delete_lesson(lesson_id)
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_attendance_toggle_blocked_when_no_paid_balance(
     group_fixture, teacher_id_fixture, student_fixture,
 ):
@@ -607,6 +609,7 @@ def test_attendance_cell_set_free_postfactum_frees_student_not_payroll(
             cur.execute('DELETE FROM students WHERE id = %s', [s2])
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_attendance_cell_free_needs_no_balance_but_unfree_does(
     group_fixture, teacher_id_fixture, direction_fixture,
 ):

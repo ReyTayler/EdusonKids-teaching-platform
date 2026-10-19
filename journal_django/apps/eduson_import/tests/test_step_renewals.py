@@ -2,7 +2,11 @@
 через сервисы renewals (спека §5.4 «Продления»).
 
 Оплат импорт не создаёт (решение владельца) — баланс у всех учеников ≤ 0, поэтому
-сценарии проверяют и то, что ворота воронки KOTOKOD соблюдены, а не обойдены."""
+сценарии проверяют и то, что ворота воронки KOTOKOD соблюдены, а не обойдены.
+
+Режим Eduson — гард оплат выключен (settings.PAYMENT_BALANCE_GUARD=False, фикстура
+закрепляет его независимо от окружения): долг не уводит сделку в «Ждём оплату»,
+открытая сделка стоит на прогресс-стадии по числу уроков цикла."""
 from __future__ import annotations
 
 import datetime as dt
@@ -20,7 +24,7 @@ from apps.eduson_import.tests.factory import EdusonDB
 from apps.renewals import engine
 from apps.renewals.models import RenewalActivity, RenewalDeal
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures('payment_balance_guard_off')]
 
 AS_OF = dt.date(2026, 10, 18)
 PAST = ['2026-07-06', '2026-07-13', '2026-07-20', '2026-07-27', '2026-08-03']
@@ -80,7 +84,8 @@ def test_all_statuses_mapped_to_kotokod_stages(tmp_path):
     assert [(d.stage.key, d.outcome_at) for d in contacted] == [('thinking', None)]
     assert [(d.stage.key, d.outcome_at, d.frozen_until_month) for d in paused] == [('frozen', None, None)]
     # renewed: закрыта «Продлён» + сервис открыл следующий цикл (как ручной перевод в UI).
-    assert [(d.cycle_no, d.stage.key) for d in renewed] == [(1, 'renewed'), (2, 'awaiting_payment')]
+    # Новый цикл: в нём ещё 0 уроков → «Не было урока» (без гарда долг не маршрутизирует).
+    assert [(d.cycle_no, d.stage.key) for d in renewed] == [(1, 'renewed'), (2, 'no_lesson_yet')]
     assert renewed[0].outcome_at is not None and renewed[1].outcome_at is None
     assert [(d.stage.key, d.outcome_at is not None) for d in declined] == [('churned', True)]
     # Переход записан сервисом — активность смены стадии без автора («Система»).
@@ -138,9 +143,9 @@ def test_mid_cycle_status_blocked_by_kotokod_rules_goes_to_review(tmp_path):
     _group(db, 3, held=3, status='paused')          # пауза разрешена посреди цикла
     _group(db, 4, held=3, status='declined')        # «Ушёл» — всегда
     ctx = _run(db)
-    assert [d.stage.key for d in _deals(_student(ctx, 1))] == ['awaiting_payment']
+    assert [d.stage.key for d in _deals(_student(ctx, 1))] == ['lesson_3']
     assert RenewalActivity.objects.get(kind='comment', deal__student_id=_student(ctx, 1)).body == 'Заметка Eduson: думают'
-    assert [d.stage.key for d in _deals(_student(ctx, 2))] == ['awaiting_payment']
+    assert [d.stage.key for d in _deals(_student(ctx, 2))] == ['lesson_3']
     assert [d.stage.key for d in _deals(_student(ctx, 3))] == ['frozen']
     assert [d.stage.key for d in _deals(_student(ctx, 4))] == ['churned']
     review = '\n'.join(ctx.manual_review)
@@ -175,9 +180,11 @@ def test_students_without_eduson_renewal_get_deals_from_rebuild(tmp_path):
     _group(db, 2, held=5)                           # перешагнул рубеж: цикл 1 продлён по факту
     _group(db, 3, held=0)                           # активный без уроков
     ctx = _run(db)
-    assert [(d.cycle_no, d.stage.key) for d in _deals(_student(ctx, 1))] == [(1, 'awaiting_payment')]
-    assert [(d.cycle_no, d.stage.key) for d in _deals(_student(ctx, 2))] == [(1, 'renewed'), (2, 'awaiting_payment')]
-    assert [(d.cycle_no, d.stage.key) for d in _deals(_student(ctx, 3))] == [(1, 'awaiting_payment')]
+    assert [(d.cycle_no, d.stage.key) for d in _deals(_student(ctx, 1))] == [(1, 'lesson_2')]
+    assert [(d.cycle_no, d.stage.key) for d in _deals(_student(ctx, 2))] == [(1, 'renewed'), (2, 'lesson_1')]
+    assert [(d.cycle_no, d.stage.key) for d in _deals(_student(ctx, 3))] == [(1, 'no_lesson_yet')]
+    # Без гарда оплат ни одна сделка импорта не уходит в «Ждём оплату».
+    assert not RenewalDeal.objects.filter(stage__key='awaiting_payment').exists()
     assert any('пересборка' in line for line in ctx.report)
 
 

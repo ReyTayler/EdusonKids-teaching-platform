@@ -28,8 +28,13 @@ DIRECTIONS = {
     'scratch': ('Scratch', '#c2410c'),
     'python': ('Python', '#1a56db'),
     'vibe': ('Вайб-кодинг', '#067a57'),
-    'groups': ('Группа', '#a21570'),
 }
+# Курс 'groups' в Eduson — это формат («групповая группа»), а не предмет. Решение
+# владельца 2026-10-19: направления «Группа» нет, предмет групповой группы — первая
+# буква её кода (ПГ… — Python, СГ… — Scratch, ВГ… — Вайб-кодинг), формат по-прежнему
+# берётся из поля format. Буквы кириллические, как в кодах Eduson.
+GROUPS_COURSE = 'groups'
+GROUP_CODE_LETTER = {'П': 'python', 'С': 'scratch', 'В': 'vibe'}
 
 # Контакты преподавателя, которым в модели KOTOKOD пока нет полей (этап 3).
 _TEACHER_EXTRA = ('tg', 'telemost', 'vk', 'subjects')
@@ -91,11 +96,33 @@ def import_people(src: EdusonSource, ctx: ImportContext) -> None:
 
 
 def _import_directions(src: EdusonSource, ctx: ImportContext) -> None:
-    unknown = sorted({g['code'] for g in src.rows('student_groups') if g['course'] not in DIRECTIONS})
+    groups = src.rows('student_groups')
+    unknown = sorted({g['code'] for g in groups if g['course'] not in DIRECTIONS and g['course'] != GROUPS_COURSE})
     if unknown:
         raise ImportDataError('неизвестный курс у групп: ' + ', '.join(unknown))
+    # Курс каждой группы решается до первой записи: ошибка в коде группы не должна
+    # оставлять за собой созданные направления (хоть транзакция их и откатит).
+    by_letter: dict[str, int] = {}
+    for g in groups:
+        course = g['course']
+        if course == GROUPS_COURSE:
+            letter = str(g['code'] or '').strip()[:1].upper()
+            course = GROUP_CODE_LETTER.get(letter)
+            if course is None:
+                # Код группы — не ПДн, но по правилу сообщения адресуем id Eduson.
+                raise ImportDataError(
+                    f'группа #{g["id"]}: курс {GROUPS_COURSE!r}, первая буква кода {letter or "—"!r} '
+                    f'не задаёт направление (ожидается одна из {", ".join(GROUP_CODE_LETTER)})')
+            by_letter[course] = by_letter.get(course, 0) + 1
+        ctx.course_by_group[g['id']] = course
+
     for course, (name, color) in DIRECTIONS.items():
         ctx.direction_by_course[course] = Direction.objects.create(name=name, color=color, active=True).id
+    if by_letter:
+        split = ', '.join(f'{DIRECTIONS[c][0]} {n}' for c, n in sorted(by_letter.items(),
+                                                                         key=lambda kv: DIRECTIONS[kv[0]][0]))
+        ctx.report.append(f'курс {GROUPS_COURSE!r} разнесён по направлениям по первой букве кода, '
+                          f'групп {sum(by_letter.values())}: {split}')
 
 
 def _check_unique_names(teachers: dict[int, dict], needed: set[int]) -> None:

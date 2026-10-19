@@ -162,3 +162,27 @@ def superadmin_client(db):
     client = _jwt_client_for_id(acc_id)
     yield client
     _delete_account(acc_id)
+
+
+# ---------------------------------------------------------------------------
+# Гард оплат (settings.PAYMENT_BALANCE_GUARD)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def payment_balance_guard_on(settings):
+    """Включить гард «нельзя отметить ученика без оплаченных уроков».
+
+    По умолчанию гард выключен: у Eduson оплаты в платформе не ведутся. Тесты,
+    которые проверяют поведение KOTOKOD (блок по балансу, «записать в долг»,
+    «Продлён» только при балансе > 0), подключают эту фикстуру — модулем через
+    `pytest.mark.usefixtures('payment_balance_guard_on')`. Фикстура `settings`
+    pytest-django откатывает значение после теста.
+    """
+    settings.PAYMENT_BALANCE_GUARD = True
+
+
+@pytest.fixture
+def payment_balance_guard_off(settings):
+    """Явно выключить гард оплат (режим Eduson) — для тестов выключенного режима,
+    чтобы они не зависели от значения в окружении разработчика."""
+    settings.PAYMENT_BALANCE_GUARD = False

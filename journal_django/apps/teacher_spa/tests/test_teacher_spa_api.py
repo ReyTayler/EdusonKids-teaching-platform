@@ -158,6 +158,24 @@ class TestGetData:
         assert isinstance(body['data'], dict)
         assert teacher_name in body['data']
 
+    @pytest.mark.parametrize('guard', [True, False])
+    def test_groups_carry_payment_guard_flag(
+        self, settings, guard, teacher_fixture, account_fixture,
+        group_fixture, student_fixture, membership_fixture,
+    ):
+        """Форма записи решает, блокировать ли ученика с remaining <= 0, по флагу
+        с сервера (settings.PAYMENT_BALANCE_GUARD), а не по хардкоду на фронте.
+        Флаг едет в каждой группе и в getData, и в getAllData."""
+        settings.PAYMENT_BALANCE_GUARD = guard
+        _, teacher_name = teacher_fixture
+        group_name = '__spa_test_group__ пн 10:00'
+        client = _client('teacher', account_fixture)
+
+        own = client.post('/api/getData', {}, format='json').json()
+        assert own['data'][group_name]['paymentGuard'] is guard
+        every = client.post('/api/getAllData', {}, format='json').json()
+        assert every['data'][teacher_name][group_name]['paymentGuard'] is guard
+
     def test_get_all_data_gives_substitute_skips_for_planned_number(
         self, teacher_fixture, account_fixture,
         sub_teacher_fixture, sub_account_fixture,
@@ -393,6 +411,7 @@ class TestSubmitLesson:
 
         assert _get_lesson_id(group_fixture, token) is None
 
+    @pytest.mark.usefixtures('payment_balance_guard_on')
     def test_present_blocked_when_no_paid_balance(
         self,
         teacher_fixture, account_fixture,
@@ -424,6 +443,41 @@ class TestSubmitLesson:
             token = f'acct:{account_fixture}'
             assert _get_lesson_id(group_fixture, token) is None
         finally:
+            with connection.cursor() as cur:
+                cur.execute('DELETE FROM group_memberships WHERE id = %s', [membership_id])
+
+    @pytest.mark.usefixtures('payment_balance_guard_off')
+    def test_present_recorded_without_paid_balance_when_guard_off(
+        self,
+        teacher_fixture, account_fixture,
+        group_fixture, student_fixture,
+    ):
+        """
+        Гард оплат выключен (Eduson): ученик без оплаченных уроков + present:true →
+        урок записан обычным присутствием.
+        """
+        with connection.cursor() as cur:
+            cur.execute(
+                'INSERT INTO group_memberships (group_id, student_id, lessons_done, active) '
+                'VALUES (%s, %s, 0, true) RETURNING id',
+                [group_fixture, student_fixture],
+            )
+            membership_id = cur.fetchone()[0]
+
+        token = f'acct:{account_fixture}'
+        try:
+            resp = self._submit(account_fixture, {
+                'group': '__spa_test_group__ пн 10:00',
+                'date': '2026-06-10',
+                'students': [{'name': '__spa_test_student__', 'present': True}],
+            })
+            assert resp.status_code == 200
+            assert resp.json()['success'] is True, resp.json()
+            assert _get_lesson_id(group_fixture, token) is not None
+        finally:
+            lesson_id = _get_lesson_id(group_fixture, token)
+            if lesson_id is not None:
+                _cleanup_lesson(lesson_id)
             with connection.cursor() as cur:
                 cur.execute('DELETE FROM group_memberships WHERE id = %s', [membership_id])
 

@@ -61,14 +61,17 @@ def test_group_fields(tmp_path):
     g5 = _group(ctx, 5)
     assert (g5.name, g5.direction.name, g5.teacher.name, g5.is_individual) == ('ПИ1001', 'Python', 'Анна Тестова',
                                                                                True)
+    # Длина курса не берётся из package_size (решение владельца 2026-10-19):
+    # NULL = «как в направлении».
     assert (g5.lesson_duration_minutes, g5.lessons_total, g5.group_start_date, g5.active) == (
-        60, 48, dt.date(2026, 6, 3), True)
+        60, None, dt.date(2026, 6, 3), True)
     assert g5.created_at == dt.datetime(2026, 6, 1, 7, 30, tzinfo=dt.timezone.utc)
     g6 = _group(ctx, 6)
     assert (g6.direction.name, g6.is_individual, g6.lessons_total, g6.group_start_date, g6.active) == (
-        'Группа', False, None, None, False)
-    assert _group(ctx, 7).lessons_total is None              # пакет 0 — «как в направлении»
-    assert any('СИ1003' in line and 'пакет' in line for line in ctx.report)
+        'Scratch', False, None, None, False)                # курс 'groups', код на «С» → Scratch
+    assert not Group.objects.filter(lessons_total__isnull=False).exists()
+    # Пакет задан у двух групп (48 и 0) — отчёт говорит, что он не перенесён.
+    assert any('package_size' in line and line.endswith(': 2') for line in ctx.report)
 
 
 def test_slots_from_json_and_from_default_rule(tmp_path):

@@ -24,6 +24,8 @@
    - «Пройдено до учёта» — честный пересчёт: `Group.lesson_number_offset = N`, `GroupMembership.lessons_done = N + вес настоящих held` (held с датой позже дня импорта — фиктивные, артефакт сида). Правила — спека §5.4.
    - Пароли Eduson (bcrypt) — обёрнутый хешер `apps/accounts/hashers.py` (`pbkdf2_wrapped_bcrypt`).
    - Суперадмин создаётся владельцем вручную (`bootstrap_admin --email <почта>`); почты учёток в репозиторий не записываются.
+   - Решения владельца 2026-10-19, закреплённые в импорте: `Group.lessons_total` не заполняется из `package_size` (длина курса — из направления); направления «Группа» нет — курс Eduson `groups` разносится по первой букве кода группы (П → Python, С → Scratch, В → Вайб-кодинг), неизвестная буква → `ImportDataError`.
+   - **Обновление из прода** (на время переработки платформы прод старой системы — источник правды): `scripts/refresh_from_prod.sh` снимает копию SQLite только чтением (`node:sqlite` readOnly + `VACUUM INTO`), собирает `<рабочая>_next` (`migrate` + `import_eduson`) и подменяет ею рабочую, прежняя → `_prev`. **Всё введённое локально при этом затирается.** Расписание — `scripts/register_refresh_task.ps1` (ежедневно 06:30, `-Unregister` — выключить). После подмены перезапустить runserver/Celery. Конфиг — `EDUSON_PROD_*`/`EDUSON_SNAPSHOT_*` в `.env`; подробно — `docs/eduson/refresh-from-prod.md`.
 2. **Этап 2 — фронт в визуальном языке Eduson** (спека `../docs/specs/2026-10-19-eduson-frontend-redesign.md`, ✅): дизайн **кардинально отличается от KOTOKOD** — монохром Vercel Geist, шрифты Geist/Geist Mono (self-hosted), акцент чёрный (в тёмной теме белый), линии вместо теней, цвета только у статусов и курсов (`--t-*`). Admin — левая колонка навигации со SVG-значком у каждой группы, рельса, мобильное меню на `ui/Dialog`; teacher — верхняя шапка. Ключ темы — `eduson-theme`. При любой правке фронта сохранять вид Eduson, а не возвращать KOTOKOD.
 3. **Этап 3 — функции Eduson** (впереди): форма отзыва после урока в teacher SPA, сигналы куратору, напоминания, синхронизация с Sheets, заморозка. Бэклог — `docs/eduson/backlog.md`.
 4. **Этап 4 — выкладка** (впереди, только с согласия владельца): `docs/eduson/stage4-deploy-backlog.md`.
@@ -64,6 +66,8 @@
 
 **Half-lesson**: `duration=45min → 0.5 урока`, иначе 1. Канон веса — `apps/lessons/weights.py`.
 
+**Гард оплат** — `settings.PAYMENT_BALANCE_GUARD` (по умолчанию `False`: Eduson оплаты в платформе не ведёт). Единственная точка проверки при записи — `apps/lessons/repository.assert_students_paid` (урок, ячейка, доп.урок); у продлений — `apps/renewals/repository.move_deal` (балансовый гейт «Продлён») и маршрутизация в авто-стадию «Ждём оплату» (`engine._target_auto_stage`, `rebuild.plan_for_student`: без гарда сделка идёт по «Урок N», рубеж цикла не меняется). Teacher SPA получает флаг в `GroupData.paymentGuard`, карточка канбана продлений — в `payment_guard`. Тесты поведения KOTOKOD подключают фикстуру `payment_balance_guard_on` (корневой `conftest.py`).
+
 **Балансы выводятся, не хранятся**: `get_student_balance()` (`apps/finances/balance.py` — единственный дом расчёта; одноимённые функции в `students`/`payments` лишь делегируют сюда) = куплено − пройдено **общим пулом по всем направлениям** (с 2026-07-08; `payments.direction_id` — информационная метка, разбивки по направлениям только справочные).
 
 **FIFO-финансы**: `compute_fifo` (`apps/finances/fifo.py`, точный `Decimal`, округление до копеек один раз на выходе). Партии строит **только** `build_lots` (`apps/finances/lots.py`): цена урока = `total_amount / lessons_count` оплаты; с доплатами (`kind='surcharge'`) оплата дробится на блоки по 4 урока; возвраты — синтетические списания, не партии. Guard: оплаты с `lessons_count=NULL/0` пропускаются (деление на ноль ломает суммы). Подробнее: `docs/finances.md`.
@@ -100,6 +104,7 @@ CORS_ORIGINS=                 # пусто = кросс-ориджин запр�
 REDIS_URL=                    # без него — синхронно, LocMemCache, без Celery-задач
 SMTP_HOST/PORT/USER/PASS/FROM # SMTP для email-OTP и email-напоминаний (у Eduson свой, пока не настроен)
 PUBLIC_URL=                   # https://<домен> — ссылка на кабинет в письмах; пусто → без ссылки
+PAYMENT_BALANCE_GUARD=false   # гард оплат KOTOKOD (нельзя отметить ученика с балансом <= 0); у Eduson выключен — оплат в платформе нет
 # Telegram-уведомления:
 TELEGRAM_BOT_TOKEN=           # токен Telegram-бота школы (у Eduson пока не настроен)
 TELEGRAM_GENERAL_CHAT_ID=     # общий чат сотрудников (-100...); пусто → дубли в чат не идут

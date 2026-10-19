@@ -1,5 +1,6 @@
 import { useMemo, useState, type MouseEvent } from 'react';
 import { Avatar } from '../../components/Avatar';
+import { PrePlatformNote } from './PrePlatformNote';
 import type { GroupProgress, ProgressSlot } from './types';
 
 const WD = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
@@ -13,7 +14,8 @@ function fmtLessonDate(iso: string): string {
 }
 
 type CellStatus =
-  | 'present' | 'absent' | 'planned' | 'transferred' | 'compensated' | 'free' | 'skip';
+  | 'present' | 'absent' | 'planned' | 'transferred' | 'compensated' | 'free' | 'skip'
+  | 'preplatform';
 
 const STATUS_LABEL: Record<CellStatus, string> = {
   present: 'Был',
@@ -23,6 +25,7 @@ const STATUS_LABEL: Record<CellStatus, string> = {
   compensated: 'Был через доп.урок / сгорание',
   free: 'Бесплатное занятие',
   skip: 'Неоплачиваемый пропуск',
+  preplatform: 'Пройден до перехода на платформу',
 };
 
 /**
@@ -35,10 +38,13 @@ const STATUS_LABEL: Record<CellStatus, string> = {
  */
 function computeCellStatuses(
   cells: (boolean | null)[], transferredLessons: number,
-  compensated: boolean[], free: boolean[], skip: boolean[],
+  compensated: boolean[], free: boolean[], skip: boolean[], preSlots = 0,
 ): CellStatus[] {
   let transferredLeft = transferredLessons;
   return cells.map((cell, i) => {
+    // Слоты 1..N «пройдено до учёта»: даты не сохранились, это не «Не проведён» и
+    // не перевод — нейтральная плитка, «бюджет» перевода на них не тратится.
+    if (i < preSlots && cell === null) return 'preplatform';
     if (cell === null && transferredLeft > 0) { transferredLeft--; return 'transferred'; }
     if (cell === true) return free[i] ? 'free' : 'present';
     if (cell === false) {
@@ -76,7 +82,11 @@ interface TipState {
  * ошибки/пустое состояние обрабатывает вызывающая сторона. Стили —
  * shared/progress/progress.css.
  */
-export function GroupProgressView({ data }: { data: GroupProgress }) {
+export function GroupProgressView({ data, hideOffsetNote = false }: {
+  data: GroupProgress;
+  /** Страница уже показывает плашку выше (карточка группы в admin) — не дублировать. */
+  hideOffsetNote?: boolean;
+}) {
   const [tip, setTip] = useState<TipState | null>(null);
 
   const avgPct = useMemo(() => {
@@ -106,6 +116,7 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
 
   return (
     <div className="progress-view">
+      {!hideOffsetNote && <PrePlatformNote offset={data.lesson_number_offset} />}
       <div className="progress-view__head">
         <div className="progress-legend" role="group" aria-label="Обозначения">
           <span className="progress-legend__item"><span className="progress-chip is-present" />Был</span>
@@ -115,6 +126,9 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
           <span className="progress-legend__item"><span className="progress-chip is-compensated" />Доп.урок / сгорание</span>
           <span className="progress-legend__item"><span className="progress-chip is-planned" />Не проведён</span>
           <span className="progress-legend__item"><span className="progress-chip is-transferred" />Перевод</span>
+          {(data.pre_platform_slots ?? 0) > 0 && (
+            <span className="progress-legend__item"><span className="progress-chip is-preplatform" />До перехода на платформу</span>
+          )}
         </div>
         <div className="progress-view__summary">
           {avgPct !== null && (
@@ -137,7 +151,7 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
             </div>
 
             <div className="progress-ribbon">
-              {computeCellStatuses(s.cells, s.transferred_lessons, s.compensated ?? [], s.free ?? [], s.unpaid_skip ?? []).map((st, i) => {
+              {computeCellStatuses(s.cells, s.transferred_lessons, s.compensated ?? [], s.free ?? [], s.unpaid_skip ?? [], data.pre_platform_slots ?? 0).map((st, i) => {
                 const slot = slots[i];
                 const label = st === 'transferred'
                   ? `Урок №${slot.slot}: Перевод из «${s.transferred_from_group_name}» — догоняем к уроку №${Math.floor(Number(s.locked_through)) + 1}`
@@ -179,7 +193,9 @@ export function GroupProgressView({ data }: { data: GroupProgress }) {
           <span className="progress-tip__date">
             {tip.status === 'transferred'
               ? `из «${tip.transferredFromGroupName}»`
-              : (tip.date ? fmtLessonDate(tip.date) : 'ещё не проведён')}
+              : (tip.date
+                ? fmtLessonDate(tip.date)
+                : (tip.status === 'preplatform' ? 'дата не сохранилась' : 'ещё не проведён'))}
           </span>
           {tip.status === 'transferred' && tip.catchUpTo !== null && (
             <span className="progress-tip__date">догоняем к уроку №{tip.catchUpTo}</span>

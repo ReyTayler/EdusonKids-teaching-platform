@@ -35,10 +35,12 @@ def test_directions_with_eduson_colors(tmp_path):
     db = EdusonDB(tmp_path / 'e.db')
     ctx = _run(db)
     got = {d.name: (d.color, d.active, d.total_lessons) for d in Direction.objects.all()}
+    # Направления «Группа» нет (решение владельца 2026-10-19): групповые группы курса
+    # 'groups' разносятся по трём курсам по первой букве кода.
     assert got == {'Scratch': ('#c2410c', True, None), 'Python': ('#1a56db', True, None),
-                   'Вайб-кодинг': ('#067a57', True, None), 'Группа': ('#a21570', True, None)}
+                   'Вайб-кодинг': ('#067a57', True, None)}
     assert {c: Direction.objects.get(pk=i).name for c, i in ctx.direction_by_course.items()} == {
-        'scratch': 'Scratch', 'python': 'Python', 'vibe': 'Вайб-кодинг', 'groups': 'Группа'}
+        'scratch': 'Scratch', 'python': 'Python', 'vibe': 'Вайб-кодинг'}
 
 
 def test_unknown_course_stops_import(tmp_path):
@@ -47,6 +49,31 @@ def test_unknown_course_stops_import(tmp_path):
     db.group(5, 'ХХ1001', 'robotics', 1)
     with pytest.raises(ImportDataError, match='ХХ1001'):
         _run(db)
+
+
+@pytest.mark.parametrize('code, course', [('ПГ1001', 'python'), ('СГ1002', 'scratch'), ('ВГ1003', 'vibe'),
+                                          (' пг1004', 'python')])
+def test_groups_course_resolved_by_first_letter_of_code(tmp_path, code, course):
+    db = EdusonDB(tmp_path / 'e.db')
+    db.teacher(1, 'Анна Тестова')
+    db.group(5, code, 'groups', 1, fmt='group')
+    db.group(6, 'СИ1005', 'scratch', 1)
+    ctx = _run(db)
+    assert ctx.course_by_group == {5: course, 6: 'scratch'}
+    assert not Direction.objects.filter(name='Группа').exists()
+    name = Direction.objects.get(pk=ctx.direction_by_course[course]).name
+    assert any("'groups'" in line and f'{name} 1' in line for line in ctx.report)
+
+
+def test_groups_course_with_unknown_letter_stops_import(tmp_path):
+    db = EdusonDB(tmp_path / 'e.db')
+    db.teacher(1, 'Анна Тестова')
+    db.group(5, 'ПГ1001', 'groups', 1, fmt='group')
+    db.group(7, 'ХГ1002', 'groups', 1, fmt='group')
+    with pytest.raises(ImportDataError, match='#7') as exc:
+        _run(db)
+    assert '#5' not in str(exc.value)
+    assert not Direction.objects.exists()                  # остановка до первой записи
 
 
 # ── преподаватели ───────────────────────────────────────────────────────────

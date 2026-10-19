@@ -17,6 +17,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Optional
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F, Value, DecimalField
 from django.db.models.functions import Greatest, Now
@@ -85,9 +86,16 @@ def assert_students_paid(present_student_ids: list[int]) -> None:
     остаток оплаченных уроков <= 0. Баланс считается СЕРВЕРОМ (батч, тот же
     расчёт, что в срезе данных teacher_spa) — не принимает клиентский вход.
     No-op для пустого списка. Общая проверка для create/attendance-toggle путей
-    (apps.lessons.services.record_lesson, apps.lessons.repository.update_attendance_cell).
+    (apps.lessons.services.record_lesson, apps.lessons.repository.update_attendance_cell)
+    и доп.уроков (apps.extra_lessons.services).
+
+    No-op и при выключенном settings.PAYMENT_BALANCE_GUARD (режим Eduson: оплаты в
+    платформе не ведутся, баланс у всех <= 0). Флаг проверяется ЗДЕСЬ, в единственной
+    точке гарда, а не у вызывающих: иначе каждый новый путь записи пришлось бы
+    помнить подчинить флагу. Занятие при этом остаётся обычным платным присутствием —
+    это не allow_debt-путь и не is_free: никаких пометок в данных не появляется.
     """
-    if not present_student_ids:
+    if not present_student_ids or not settings.PAYMENT_BALANCE_GUARD:
         return
     balances = balances_for_students(present_student_ids)
     blocked_ids = [sid for sid in present_student_ids if balances.get(sid, 0) <= 0]

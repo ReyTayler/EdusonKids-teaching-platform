@@ -6,6 +6,7 @@ import { BlockLoading } from '../../components/ui/Skeleton';
  * Вкладка «Прогресс»: обзорная матрица посещаемости группы. Данные — GET
  * /api/admin/groups/:id/progress (вся матрица разом, без N+1); рендер —
  * общий GroupProgressView (shared/progress, используется и teacher SPA).
+ * Плашку «пройдено до перехода» показывает карточка группы — здесь без дубля.
  */
 export default function GroupProgressBlock({ groupId }: { groupId: number }) {
   const { data, isLoading, isError } = useGroupProgress(groupId);
@@ -18,5 +19,5 @@ export default function GroupProgressBlock({ groupId }: { groupId: number }) {
     return <div className="memberships__empty">В группе пока нет учеников.</div>;
   }
 
-  return <GroupProgressView data={data} />;
+  return <GroupProgressView data={data} hideOffsetNote />;
 }

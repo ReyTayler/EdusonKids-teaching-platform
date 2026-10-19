@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -135,11 +136,16 @@ def _target_auto_stage(deal: RenewalDeal, attended: float, balance: float,
     иначе после 4-го урока сделка «заворачивалась» обратно в «Урок 1».
     Приоритет при конфликте (цикл отработан И баланс ≤ 0): «Ждём продление» >
     «Ждём оплату» — более поздняя точка воронки; долг показывается бейджем.
+
+    «Ждём оплату» — только при включённом гарде оплат (settings.PAYMENT_BALANCE_GUARD).
+    Без него (Eduson: оплат в платформе нет, баланс у всех <= 0) долг не сигнал, и
+    сделка идёт по прогресс-стадиям как при положительном балансе; рубеж цикла
+    («Ждём продление») от баланса не зависит в обоих режимах.
     """
     into = attended - (deal.cycle_no - 1) * cycle.LESSONS_PER_CYCLE
     if into >= cycle.LESSONS_PER_CYCLE and 'awaiting_renewal' in auto:
         return auto['awaiting_renewal'], True
-    if balance <= 0 and 'awaiting_payment' in auto:
+    if settings.PAYMENT_BALANCE_GUARD and balance <= 0 and 'awaiting_payment' in auto:
         return auto['awaiting_payment'], False
     if not progress_stages:
         return None, False

@@ -203,6 +203,7 @@ def test_create_assignment_raises_if_student_not_absent(
             cur.execute('DELETE FROM students WHERE id = %s', [present_student_id])
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_create_assignment_raises_if_student_unpaid(
     teacher_fixture, missed_lesson_unpaid_fixture, unpaid_student_fixture,
 ):
@@ -228,6 +229,40 @@ def test_create_assignment_raises_if_student_unpaid(
     ).exists()
 
 
+@pytest.mark.usefixtures('payment_balance_guard_off')
+def test_unpaid_student_makeup_assigned_and_recorded_when_guard_off(
+    teacher_fixture, missed_lesson_unpaid_fixture, unpaid_student_fixture,
+):
+    """Гард оплат выключен (Eduson): ученику без оплаченных уроков доп.урок и
+    назначают, и проводят — тот же путь, что у оплатившего, без пометок."""
+    created = services.create_assignment(
+        {
+            'missed_lesson_id': missed_lesson_unpaid_fixture,
+            'teacher_id': teacher_fixture,
+            'student_ids': [unpaid_student_fixture],
+            'scheduled_date': '2026-04-05',
+            'scheduled_time': '15:00',
+            'duration_minutes': 45,
+        },
+        _FakeRequest(),
+    )
+    rid = created['resolution_ids'][0]
+    result = services.record(
+        rid, teacher_id=teacher_fixture, present=True,
+        record_url=None, submitted_by_token='acct:1', submit_date='2026-04-05',
+        request=_FakeRequest(),
+    )
+    try:
+        assert repository.get_resolution_full(rid)['status'] == MAKEUP_DONE
+        fact_att = LessonAttendance.objects.get(
+            lesson_id=result['lesson_id'], student_id=unpaid_student_fixture)
+        assert (fact_att.present, fact_att.is_free) == (True, False)
+    finally:
+        _delete_resolutions(missed_lesson_unpaid_fixture)
+        _cleanup_fact(result['lesson_id'])
+
+
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_record_raises_if_student_balance_dropped_since_assignment(
     teacher_fixture, missed_lesson_fixture, student_fixture, resolution_cleanup,
 ):

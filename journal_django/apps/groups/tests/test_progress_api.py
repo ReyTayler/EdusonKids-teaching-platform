@@ -125,6 +125,26 @@ class TestContract:
         # DATE-инвариант: дата строкой без сдвига.
         assert body['slots'][0]['date'] == '2026-03-02'
 
+    def test_pre_platform_fields_default_zero(self, manager_client, progress_group):
+        body = manager_client.get(_url(progress_group['group_id'])).json()
+        assert body['lesson_number_offset'] == 0
+        assert body['pre_platform_slots'] == 0
+
+    @pytest.mark.parametrize('duration, offset, expected_slots', [(60, 7, 7), (45, 7.5, 15)])
+    def test_pre_platform_fields_follow_offset(
+        self, manager_client, progress_group, duration, offset, expected_slots,
+    ):
+        """«Пройдено до учёта»: офсет в уроках + число ведущих слотов (шаг 0.5 у 45-мин)."""
+        gid = progress_group['group_id']
+        with connection.cursor() as cur:
+            cur.execute(
+                'UPDATE groups SET lesson_number_offset=%s, lesson_duration_minutes=%s WHERE id=%s',
+                [offset, duration, gid],
+            )
+        body = manager_client.get(_url(gid)).json()
+        assert body['lesson_number_offset'] == offset
+        assert body['pre_platform_slots'] == expected_slots
+
     def test_student_rows_and_cells(self, manager_client, progress_group):
         body = manager_client.get(_url(progress_group['group_id'])).json()
         rows = {r['student_id']: r for r in body['students']}

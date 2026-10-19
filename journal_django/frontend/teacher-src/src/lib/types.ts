@@ -54,6 +54,12 @@ export interface GroupData {
   vkChat: string;
   startDate: string;
   isGroup: boolean;
+  // Гард оплат школы (settings.PAYMENT_BALANCE_GUARD на сервере). true — ученика с
+  // remaining <= 0 отметить нельзя («Нет оплаты»), у группы виден «Долг». false —
+  // оплаты в платформе не ведутся (Eduson): remaining смысла не несёт, не блокирует
+  // и не показывается. Флаг школы, а не группы; едет в каждой группе, потому что все
+  // потребители получают именно GroupData. Сервер проверяет тот же флаг сам.
+  paymentGuard: boolean;
   // «Неоплачиваемый пропуск» (пометки LessonSkip менеджера: перевод / начал не с 1-го
   // урока) по номерам уроков: { '3': ['Петя Иванов'], '3.5': [...] }. Ключ — номер
   // урока как его даёт String(number); half-lesson даёт дробный. Отмечать таких
@@ -136,6 +142,8 @@ export interface MyLesson {
   date: string; // 'YYYY-MM-DD'
   group: string;
   lessonNumber: string;
+  /** Group.lesson_number_offset: уроки 1..N пройдены до перехода на платформу. */
+  lessonNumberOffset?: string; // Decimal строкой, как lessonNumber
   lessonType: 'regular' | 'substitution' | 'reschedule' | 'extra' | 'burned';
   isSubstitution: boolean;
   originalTeacher: string | null;

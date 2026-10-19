@@ -64,6 +64,7 @@ def _present(lesson_id, student_id) -> bool:
         return cur.fetchone()[0]
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_api_path_still_blocked_by_debt(lesson_with_debt):
     """Защита на месте: обычная правка ячейки при долге по-прежнему запрещена."""
     with pytest.raises(UnpaidAttendanceBlocked):
@@ -121,6 +122,7 @@ def test_refuses_when_absence_already_resolved(lesson_with_debt):
     assert _present(lesson_with_debt['lesson'], lesson_with_debt['student']) is False
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_repository_flag_is_opt_in(lesson_with_debt):
     """Без флага репозиторий блокирует — послабление именно явное."""
     with pytest.raises(UnpaidAttendanceBlocked):

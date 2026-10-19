@@ -168,3 +168,12 @@ def test_query_count_does_not_grow_with_lessons(graph, account_fixture):
         client.get('/api/lessons', MONTH)
 
     assert len(many.captured_queries) == len(one.captured_queries)
+
+
+def test_group_lesson_number_offset_in_row(graph, account_fixture):
+    """Офсет группы («пройдено до учёта») отдаётся строкой-десятичным, как lessonNumber; 0 — у обычной группы."""
+    lid = _lesson(graph, number=8)
+    assert float(_row(_get(account_fixture, {}), lid)['lessonNumberOffset']) == 0
+    with connection.cursor() as cur:
+        cur.execute('UPDATE groups SET lesson_number_offset=7 WHERE id=%s', [graph['group_id']])
+    assert float(_row(_get(account_fixture, {}), lid)['lessonNumberOffset']) == 7

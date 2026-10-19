@@ -143,22 +143,30 @@ def _import_group_rows(groups: dict[int, dict], ctx: ImportContext, now) -> None
             ctx.report.append(f'группа {code}: нет расписания (слотов) — план строится по урокам Eduson')
         if len(slots) > 7:
             raise ImportDataError(f'группа {code}: {len(slots)} занятий в неделю, в KOTOKOD не больше 7')
-        package = g['package_size']
-        lessons_total = package if isinstance(package, int) and package > 0 else None
-        if package is not None and lessons_total is None:
-            ctx.report.append(f'группа {code}: пакет {package!r} — длина курса не задана («как в направлении»)')
-
         n = ctx.pre_system.get(gid, Decimal(0))
         group = Group.objects.create(
-            name=code, direction_id=ctx.direction_by_course[g['course']],
+            name=code, direction_id=ctx.direction_by_course[ctx.course_by_group[gid]],
             teacher_id=ctx.teacher_by_eduson[g['teacher_id']], is_individual=FORMATS[g['format']],
             lesson_duration_minutes=GROUP_DURATION_MINUTES, lessons_per_week=max(1, len(slots)),
-            group_start_date=_date(g['start_date'], code), lessons_total=lessons_total,
+            # lessons_total не заполняется: длина курса — из направления (см. _report_packages).
+            group_start_date=_date(g['start_date'], code), lessons_total=None,
             lesson_number_offset=n, active=bool(g['active']), created_at=_created_at(g['created_at'], now),
         )
         ctx.group_by_eduson[gid] = group.id
         GroupScheduleSlot.objects.bulk_create(
             [GroupScheduleSlot(group=group, day_of_week=d, start_time=t) for d, t in slots])
+    _report_packages(groups, ctx)
+
+
+def _report_packages(groups: dict[int, dict], ctx: ImportContext) -> None:
+    """Решение владельца 2026-10-19: package_size Eduson — размер купленного пакета,
+    а не длина курса. Group.lessons_total остаётся NULL («как в направлении»), иначе
+    повторный импорт затирал бы длину курса, заданную направлением, и прогресс курса
+    считался бы от пакета. В отчёт — только сколько пакетов не перенесено."""
+    with_package = sum(1 for g in groups.values() if g['package_size'] is not None)
+    if with_package:
+        ctx.report.append(f'package_size Eduson не переносится в длину курса (lessons_total пуст, длина '
+                          f'из направления), групп с пакетом: {with_package}')
 
 
 # ── ученики ─────────────────────────────────────────────────────────────────

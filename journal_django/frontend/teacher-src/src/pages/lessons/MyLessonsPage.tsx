@@ -4,6 +4,7 @@ import { MonthNav } from '../../components/ui/MonthNav';
 import { addDays, addMonths, dayMonthOfIso, firstOfMonthMsk, isoDate, weekdayShortOfIso } from '../../lib/dates';
 import { LESSON_KIND_LABEL, STUDENT_STATUS_LABEL } from '../../lib/lessonKinds';
 import { resolveDirectionColor } from '../../lib/subjects';
+import { PrePlatformNote } from '@shared/shared/progress/PrePlatformNote';
 import type { MyLesson } from '../../lib/types';
 
 /** Уроков за месяц у преподавателя ~20–40; 500 — потолок пагинатора с запасом. */
@@ -55,6 +56,8 @@ function LessonRow({ lesson }: { lesson: MyLesson }) {
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
+
+      {open && <PrePlatformNote offset={lesson.lessonNumberOffset} className="mlh-preplatform" />}
 
       {open && (
         lesson.students.length === 0 ? (

@@ -19,7 +19,11 @@ function remainingTone(remaining: number): 'danger' | 'warn' | 'ok' {
 /** Тон остатка → цвет бейджа (рецепт .chip: ok / warn / bad). */
 const TONE_CHIP = { ok: 'ok', warn: 'warn', danger: 'bad' } as const;
 
-function StudentRow({ student }: { student: TStudent }) {
+/**
+ * paymentGuard=false — школа не ведёт оплаты в платформе: остаток у всех <= 0 и
+ * ничего не значит, поэтому бейдж остатка не показываем вовсе (иначе «Долг» у всех).
+ */
+function StudentRow({ student, paymentGuard }: { student: TStudent; paymentGuard: boolean }) {
   const remaining = student.remaining ?? 0;
   const tone = remainingTone(remaining);
   return (
@@ -28,11 +32,13 @@ function StudentRow({ student }: { student: TStudent }) {
         <span className="grp-student-name">{student.name}</span>
 <span className="grp-student-age">{ageLabel(student.birthDate) || 'возраст не указан'}</span>
       </div>
-      <span className={`chip grp-student-balance ${TONE_CHIP[tone]}`}>
-        {remaining <= 0
-          ? `Долг · остаток ${remaining}`
-          : `Осталось ${remaining} опл. ур.`}
-      </span>
+      {paymentGuard && (
+        <span className={`chip grp-student-balance ${TONE_CHIP[tone]}`}>
+          {remaining <= 0
+            ? `Долг · остаток ${remaining}`
+            : `Осталось ${remaining} опл. ур.`}
+        </span>
+      )}
     </div>
   );
 }
@@ -102,7 +108,7 @@ export default function GroupDetailPage() {
               ) : (
                 <div className="grp-students">
                   {groupData.students.map((s) => (
-                    <StudentRow key={s.id} student={s} />
+                    <StudentRow key={s.id} student={s} paymentGuard={groupData.paymentGuard} />
                   ))}
                 </div>
               )}

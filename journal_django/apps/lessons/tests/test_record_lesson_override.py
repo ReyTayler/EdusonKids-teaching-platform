@@ -39,6 +39,7 @@ def group_in_debt(group_fixture, teacher_id_fixture, student_fixture):
         cur.execute('DELETE FROM group_memberships WHERE id = %s', [membership_id])
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_normal_path_still_blocked(group_in_debt):
     """Защита на месте: обычная запись при долге по-прежнему запрещена."""
     with pytest.raises(UnpaidAttendanceBlocked):

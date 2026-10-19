@@ -86,6 +86,7 @@ def test_superadmin_records_lesson_in_debt(superadmin_client, group_in_debt,
     assert Lesson.objects.filter(group_id=group_in_debt['group']).count() == 1
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_superadmin_without_flag_still_blocked(superadmin_client, group_in_debt,
                                                teacher_id_fixture):
     """Флаг обязан быть явным — иначе долги записывались бы случайно."""
@@ -124,6 +125,7 @@ def test_superadmin_marks_cell_in_debt(superadmin_client, group_in_debt,
         assert cur.fetchone()[0] is True
 
 
+@pytest.mark.usefixtures('payment_balance_guard_on')
 def test_cell_without_flag_still_blocked(superadmin_client, group_in_debt,
                                          teacher_id_fixture):
     lesson_id = _absent_lesson(group_in_debt, teacher_id_fixture)

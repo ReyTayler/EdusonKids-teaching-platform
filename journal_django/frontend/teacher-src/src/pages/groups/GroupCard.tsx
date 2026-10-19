@@ -18,8 +18,11 @@ export function GroupCard({
   onOpen: () => void;
 }) {
   const limit = limitProp !== undefined ? limitProp : getCourseLimit(name);
-  // «Долг» — по ЛЮБОМУ ученику с исчерпанным остатком (не только первому).
-  const debtors = data.students.filter((s) => (s.remaining ?? 0) <= 0).length;
+  // «Долг» — по ЛЮБОМУ ученику с исчерпанным остатком (не только первому). Без
+  // гарда оплат (школа не ведёт оплаты в платформе) остаток <= 0 у всех — не долг.
+  const debtors = data.paymentGuard
+    ? data.students.filter((s) => (s.remaining ?? 0) <= 0).length
+    : 0;
   const pct = limit ? Math.min(100, Math.round((data.lessonsDone / limit) * 100)) : null;
 
   return (

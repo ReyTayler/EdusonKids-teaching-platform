@@ -44,6 +44,9 @@ class ImportContext:
     teacher_by_eduson: dict[int, int] = field(default_factory=dict)       # teachers.id → Teacher.id
     account_by_user: dict[int, int] = field(default_factory=dict)         # users.id → Account.id
     direction_by_course: dict[str, int] = field(default_factory=dict)     # 'python' → Direction.id
+    # student_groups.id → курс-направление ('python'…). У курса 'groups' — по первой букве
+    # кода (шаг people); группы берут направление только отсюда.
+    course_by_group: dict[int, str] = field(default_factory=dict)
     group_by_eduson: dict[int, int] = field(default_factory=dict)         # student_groups.id → Group.id
     student_by_participant: dict[int, int] = field(default_factory=dict)  # participants.id → Student.id
     skipped_participants: list[int] = field(default_factory=list)         # пустые строки participants

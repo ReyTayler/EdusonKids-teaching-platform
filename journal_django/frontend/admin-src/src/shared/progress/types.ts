@@ -37,6 +37,9 @@ export interface ProgressStudent {
 
 export interface GroupProgress {
   group_id: number;
+  /** Пройдено до учёта (в уроках) и число ведущих слотов под него; 0 — обычная группа. */
+  lesson_number_offset?: number;
+  pre_platform_slots?: number;
   total_slots: number;
   held_slots: number;
   slots: ProgressSlot[];

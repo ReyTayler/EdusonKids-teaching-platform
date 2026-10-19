@@ -76,7 +76,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('sqlite_path', help='Путь к okk.db (рядом может лежать okk.db-wal).')
         parser.add_argument('--as-of', metavar='ГГГГ-ММ-ДД',
-                            help='День импорта: held позже него — фиктивные. По умолчанию — сегодня (МСК).')
+                            help='День импорта: held позже него — с ошибочным годом (уроки годом раньше) или фиктивные. '
+                                 'По умолчанию — сегодня (МСК).')
         parser.add_argument('--superadmin', action='append', default=[], metavar='EMAIL',
                             help='Почта учётки-admin Eduson, которая станет superadmin (можно несколько раз).')
         parser.add_argument('--dry-run', action='store_true',

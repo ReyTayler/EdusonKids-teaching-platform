@@ -38,8 +38,22 @@ substitution/original_teacher — только если провёл не owner.
 ЗАРПЛАТА за импортированные уроки не начисляется (решение 2026-10-18, спека §5.4):
 ставки и правила оплаты KOTOKOD — не Eduson; правила Eduson — этап 3.
 
-ФИКТИВНЫЕ held (ImportContext.fake_held) — ни уроком, ни позицией: они уже учтены
-в N группы. Отзывов на них по данным нет; если встретится — на ручную проверку.
+HELD С ОШИБОЧНЫМ ГОДОМ (ImportContext.year_fixed; решение владельца 2026-10-19).
+Held «2027-06-DD» — настоящие уроки июня 2026, отмеченные в таблицах Eduson на
+вкладке «Июнь 2027». Они идут ровно как настоящие held, только с датой годом
+раньше: время — своё у сессии, иначе слот группы (как у всех уроков без времени);
+посещаемость — «был» всем ученикам группы; кто провёл — то же правило §5.4 (owner на
+исправленную дату по истории; дата раньше первой записи истории даёт первого
+известного преподавателя группы — TeacherTimeline начинается «с начала времён»);
+зарплата не начисляется. Номер — по дате, вперемешку с настоящими. Источник виден
+по submitted_by_token = SUBMITTED_BY_YEAR_FIXED (поля комментария у Lesson нет).
+Два проведённых урока группы в один день модель допускает (уникальность урока —
+дата + номер + токен, у плана — seq), поэтому совпавшая дата не сдвигается, а только
+отмечается в отчёте; health покажет её как duplicate_dates (предупреждение).
+
+ФИКТИВНЫЕ held (ImportContext.fake_held: дата позже дня импорта, год не исправить) —
+ни уроком, ни позицией: они уже учтены в N группы. Отзывов на них по данным нет;
+если встретится — на ручную проверку.
 
 ПРОИЗВОДИТЕЛЬНОСТЬ. ~5 000 сессий: всё собирается в памяти и пишется тремя
 bulk_create (уроки — с возвратом id, PostgreSQL его поддерживает), запросов в
@@ -71,6 +85,9 @@ from apps.scheduling.occurrences import CANCELLED, DONE, PENDING
 # ('admin-imported', 'manual-override'): по ней импортированные факты отличимы от
 # записанных людьми, и natural key урока не пересекается с их отправками.
 SUBMITTED_BY = 'eduson-import'
+# Урок из held с ошибочным годом: перенесён из таблицы Eduson (вкладка «Июнь 2027»,
+# год исправлен). Отдельная метка — чтобы такие уроки можно было найти и пересмотреть.
+SUBMITTED_BY_YEAR_FIXED = 'eduson-import:year-fixed'
 
 MSK = ZoneInfo('Europe/Moscow')
 HELD, SCHEDULED, CANCELLED_EDUSON = 'held', 'scheduled', 'cancelled'
@@ -140,6 +157,7 @@ def import_lessons(src: EdusonSource, ctx: ImportContext) -> None:
             day = datetime.date.fromisoformat(_text(s['date']))
         except ValueError:
             raise ImportDataError(f'урок #{s["id"]}: дата не в формате ГГГГ-ММ-ДД') from None
+        day = ctx.year_fixed.get(s['id'], day)
         by_group[s['group_id']].append(_Session(s, day, _time(s['time'], s['id'])))
 
     now = msk_now()
@@ -149,6 +167,12 @@ def import_lessons(src: EdusonSource, ctx: ImportContext) -> None:
     for gid in sorted(by_group):
         _plan_group(gid, by_group[gid], groups[gid], ctx, now, lessons, positions)
     ctx.report.append('зарплата за импортированные уроки не начисляется (спека §5.4)')
+    if ctx.year_fixed:
+        ctx.report.append(f'проведённых с датой следующего года (таблицы Eduson, вкладка «Июнь 2027») — '
+                          f'{len(ctx.year_fixed)}: перенесены уроками с годом −1')
+    if ctx.fake_held:
+        ctx.report.append(f'фиктивных проведённых, чей год не исправить (дата −1 год всё ещё позже дня '
+                          f'импорта) — {len(ctx.fake_held)}: учтены в пройденном до учёта')
 
     created = Lesson.objects.bulk_create([lesson for _, _, lesson in lessons], batch_size=1000)
     for (sid, _, _), lesson in zip(lessons, created):
@@ -207,6 +231,8 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
     number = ctx.pre_system.get(gid, Decimal(0))
     seq = 0
     counts: Counter[str] = Counter()
+    held_days: Counter[datetime.date] = Counter()     # дата → проведённых в этот день
+    fixed_days: list[datetime.date] = []
 
     for s in sessions:
         row, sid = s.row, s.row['id']
@@ -269,7 +295,7 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
             submitted_at=ctx.held_at.get(sid) or max(
                 parse_moment(row['created_at']) or datetime.datetime.min.replace(tzinfo=MSK),
                 datetime.datetime.combine(s.date, when, tzinfo=MSK)),
-            submitted_by_token=SUBMITTED_BY,
+            submitted_by_token=SUBMITTED_BY_YEAR_FIXED if sid in ctx.year_fixed else SUBMITTED_BY,
         )))
         positions.append((sid, PlannedLesson(
             group_id=info.group_id, seq=seq, lesson_number=number,
@@ -279,7 +305,12 @@ def _plan_group(gid: int, sessions: list[_Session], info: _GroupInfo, ctx: Impor
             status=DONE, created_at=now, updated_at=now,
         ), sid))
         counts['held'] += 1
+        held_days[s.date] += 1
+        if sid in ctx.year_fixed:
+            fixed_days.append(s.date)
 
+    counts['year_fixed'] = len(fixed_days)
+    counts['year_fixed_same_day'] = sum(1 for d in fixed_days if held_days[d] > 1)
     _report_group(info, counts, ctx)
 
 
@@ -326,6 +357,12 @@ def _report_group(info: _GroupInfo, counts: Counter, ctx: ImportContext) -> None
     if counts['fake']:
         ctx.report.append(f'группа {code}: фиктивных проведённых (дата позже дня импорта) — '
                           f'{counts["fake"]}, учтены в пройденном до учёта, уроками не созданы')
+    if counts['year_fixed']:
+        ctx.report.append(f'группа {code}: перенесено из таблицы Eduson (вкладка «Июнь 2027», год исправлен) '
+                          f'— {counts["year_fixed"]} проведённых')
+    if counts['year_fixed_same_day']:
+        ctx.report.append(f'группа {code}: из них {counts["year_fixed_same_day"]} пришлись на дату, где есть '
+                          'другой проведённый урок — оставлены два урока в один день')
     if counts['past_pending']:
         ctx.report.append(f'группа {code}: прошлых незаполненных занятий — {counts["past_pending"]} '
                           '(в KOTOKOD — просроченные, блокируют отметку следующих)')
@@ -388,7 +425,7 @@ def _feedback_place(r: dict, sessions: dict[int, dict], ctx: ImportContext) -> t
                                      '(фиктивный проведённый) — дата урока неизвестна, отзыв не перенесён')
             return None
         s = sessions[sid]
-        return s['group_id'], datetime.date.fromisoformat(_text(s['date']))
+        return s['group_id'], ctx.year_fixed.get(sid) or datetime.date.fromisoformat(_text(s['date']))
     if sid in ctx.deleted_sessions:
         # Дата — из снимка удалённого урока; группа — из отчёта (спека §5.4), а если
         # её среди перенесённых нет — из того же снимка.

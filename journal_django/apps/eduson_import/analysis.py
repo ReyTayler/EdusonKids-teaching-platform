@@ -1,7 +1,7 @@
 """Анализ данных Eduson — чистые функции над EdusonSource, без БД Django.
 
 Единственный источник правды для шагов импорта (группы, уроки) и сверки: N
-«пройдено до учёта», фиктивные held, преподаватель группы на дату, дата «до»
+«пройдено до учёта», held с ошибочным годом и фиктивные held, преподаватель группы на дату, дата «до»
 переноса, дата удалённой сессии. Правила — спека §5.4; здесь — как они
 выводятся из того, что лежит в SQLite. Шаги берут результаты из ImportContext
 (считаются один раз), а не зовут функции сами.
@@ -88,22 +88,57 @@ def _parsed(src: EdusonSource) -> _Parsed:
     return parsed
 
 
-# ── фиктивные held и пройденное до учёта ─────────────────────────────────────
+# ── held с ошибочным годом, фиктивные held и пройденное до учёта ─────────────
+
+def corrected_year(day: datetime.date, as_of: datetime.date) -> datetime.date | None:
+    """Дата held, отмеченного в таблицах Eduson на вкладке следующего года (решение
+    владельца 2026-10-19: все 544 held «2027-06-DD» — настоящие уроки июня 2026,
+    отмеченные на вкладке «Июнь 2027»), или None.
+
+    Год исправляется, только если held стоит в календарном году ПОЗЖЕ дня импорта и
+    та же дата годом раньше уже наступила (≤ as_of). Требование «год позже» — защита
+    от ложных срабатываний: held на завтра того же года — не «не та вкладка», и
+    отправлять его на год назад значило бы выдумать урок. 29 февраля без пары в
+    прошлом году — None: дату не придумываем.
+    """
+    if day <= as_of or day.year <= as_of.year:
+        return None
+    try:
+        fixed = day.replace(year=day.year - 1)
+    except ValueError:
+        return None
+    return fixed if fixed <= as_of else None
+
 
 def _held_by_group(p: _Parsed, as_of: datetime.date) -> dict[int, tuple[list[dict], list[dict]]]:
-    """group_id → (настоящие held, фиктивные held)."""
+    """group_id → (проведённые held — настоящие и с исправленным годом, фиктивные held)."""
     out: dict[int, tuple[list[dict], list[dict]]] = defaultdict(lambda: ([], []))
     for s in p.sessions:
         if s['status'] == 'held':
             real, fake = out[s['group_id']]
-            (fake if p.session_dates[s['id']] > as_of else real).append(s)
+            day = p.session_dates[s['id']]
+            (fake if day > as_of and corrected_year(day, as_of) is None else real).append(s)
+    return out
+
+
+def year_fixed_held(src: EdusonSource, as_of: datetime.date) -> dict[int, datetime.date]:
+    """sessions.id → исправленная дата для held с ошибочным годом (corrected_year).
+    Шаг уроков заводит их проведёнными уроками на эту дату, как настоящие held."""
+    p = _parsed(src)
+    out: dict[int, datetime.date] = {}
+    for s in p.sessions:
+        if s['status'] == 'held':
+            fixed = corrected_year(p.session_dates[s['id']], as_of)
+            if fixed is not None:
+                out[s['id']] = fixed
     return out
 
 
 def fake_held_ids(src: EdusonSource, as_of: datetime.date) -> set[int]:
-    """held с датой позже дня импорта (спека §5.4): прошлые уроки, которым первичная
-    загрузка Eduson поставила дату-заглушку в будущем. В Lesson не превращаются,
-    а идут в N своей группы."""
+    """held с датой позже дня импорта, год которой исправить нельзя (corrected_year
+    вернул None): прошлые уроки без настоящей даты. В Lesson не превращаются, а идут
+    в N своей группы (спека §5.4). На копии 2026-10-19 таких нет — все 544 held
+    «2027» исправляются; правило оставлено на случай новых данных."""
     return {s['id'] for _, fake in _held_by_group(_parsed(src), as_of).values() for s in fake}
 
 
@@ -112,10 +147,15 @@ def pre_system_lessons(src: EdusonSource, as_of: datetime.date) -> dict[int, Dec
 
         N = max(0, L − 1) + F≥L
 
-    L   — минимальный целый lesson_no среди НАСТОЯЩИХ held (дата ≤ as_of); нет ни
-          одного номера — L = 1. Уроки №1..L−1 пройдены до первого учтённого.
-    F≥L — число фиктивных held группы (fake_held_ids), у которых lesson_no ≥ L или
-          номера нет: эти уроки были, но не входят в 1..L−1.
+    L   — минимальный целый lesson_no среди ПРОВЕДЁННЫХ held: настоящих (дата ≤ as_of)
+          и с исправленным годом (year_fixed_held) — последние тоже станут уроками;
+          нет ни одного номера — L = 1. Уроки №1..L−1 пройдены до первого учтённого.
+    F≥L — число оставшихся фиктивных held группы (fake_held_ids), у которых
+          lesson_no ≥ L или номера нет: эти уроки были, но не входят в 1..L−1.
+
+    Группа, у которой все заглушки «2027» перенесены уроками, получает N = L − 1
+    (на копии 2026-10-19 у всех 66 таких групп L = 1, N = 0). Группа без заглушек с
+    L > 1 (первый учтённый урок №13) — по-прежнему N = L − 1: о тех уроках данных нет.
 
     Почему не «все фиктивные + (L − 1)»: первичная загрузка часто ставила
     фиктивным held номера 1..F, а настоящие уроки продолжали с F+1 — тогда

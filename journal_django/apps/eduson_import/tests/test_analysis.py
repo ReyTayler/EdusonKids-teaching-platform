@@ -16,6 +16,7 @@ from apps.eduson_import.analysis import (
     moved_from_dates,
     pre_system_lessons,
     substituted_teacher_by_session,
+    year_fixed_held,
 )
 from apps.eduson_import.context import ImportDataError
 from apps.eduson_import.sqlite_source import EdusonSource
@@ -35,12 +36,34 @@ def test_fake_held_are_only_held_after_as_of(tmp_path):
     db = EdusonDB(tmp_path / 'e.db')
     db.group(1, 'ТС1001', teacher_id=5)
     db.session(10, 1, '2026-10-18')                          # день импорта — настоящий
-    db.session(11, 1, '2026-10-19')                          # завтра — фиктивный
-    db.session(12, 1, '2027-06-01', time='')                 # артефакт первичной загрузки
+    db.session(11, 1, '2026-10-19')                          # завтра, тот же год — фиктивный
+    db.session(12, 1, '2027-06-01', time='')                 # вкладка «Июнь 2027» — год исправляется
+    db.session(15, 1, '2028-06-01', time='')                 # год −1 всё ещё в будущем — фиктивный
     db.session(13, 1, '2027-06-08', status='scheduled')      # будущее по плану — не held
     db.session(14, 1, '2027-06-15', status='cancelled')
     with _src(db) as src:
-        assert fake_held_ids(src, AS_OF) == {11, 12}
+        assert fake_held_ids(src, AS_OF) == {11, 15}
+        assert year_fixed_held(src, AS_OF) == {12: D('2026-06-01')}
+
+
+def test_year_fixed_only_when_corrected_date_not_after_as_of(tmp_path):
+    """Год исправляется, только если held стоит в СЛЕДУЮЩЕМ году и дата с годом −1
+    уже прошла: 2027-10-19 → 2026-10-19 — всё ещё завтра, остаётся фиктивной;
+    29 февраля без пары в прошлом году — тоже (придумывать дату нельзя)."""
+    db = EdusonDB(tmp_path / 'e.db')
+    db.group(1, 'ТС1001', teacher_id=5)
+    db.session(20, 1, '2027-10-18')                          # → 2026-10-18 = день импорта
+    db.session(21, 1, '2027-10-19')                          # → 2026-10-19 > дня импорта
+    db.session(22, 1, '2028-02-29')
+    with _src(db) as src:
+        assert year_fixed_held(src, AS_OF) == {20: D('2026-10-18')}
+        assert fake_held_ids(src, AS_OF) == {21, 22}
+    db2 = EdusonDB(tmp_path / 'e2.db')
+    db2.group(1, 'ТС1001', teacher_id=5)
+    db2.session(30, 1, '2028-02-29')                         # 2027-02-29 не существует
+    with _src(db2) as src:
+        assert year_fixed_held(src, D('2027-10-01')) == {}
+        assert fake_held_ids(src, D('2027-10-01')) == {30}
 
 
 def test_fake_held_bad_date_is_import_error(tmp_path):
@@ -65,7 +88,7 @@ def test_pre_system_fake_numbered_first_real_continue(tmp_path):
     внутри 1..L−1, второй раз не считаются: N = 3, а не 3 + 3."""
     db = EdusonDB(tmp_path / 'e.db')
     db.group(1, 'ТС1001', teacher_id=5, done=7)   # lessons_done Eduson — двойной счёт, не берём
-    for no, day in ((1, '2027-06-01'), (2, '2027-06-08'), (3, '2027-06-15')):
+    for no, day in ((1, '2028-06-01'), (2, '2028-06-08'), (3, '2028-06-15')):
         db.session(None, 1, day, lesson_no=no)
     db.session(None, 1, '2026-09-01', lesson_no=4)
     db.session(None, 1, '2026-09-08', lesson_no=5)
@@ -79,7 +102,7 @@ def test_pre_system_real_first_lesson_fake_after(tmp_path, fake_numbers):
     db.group(1, 'ТС1001', teacher_id=5)
     db.session(None, 1, '2026-09-01', lesson_no=1)
     for i, no in enumerate(fake_numbers):
-        db.session(None, 1, f'2027-06-0{i + 1}', lesson_no=no)
+        db.session(None, 1, f'2028-06-0{i + 1}', lesson_no=no)
     assert _n(db) == {1: Decimal(3)}
 
 
@@ -102,11 +125,30 @@ def test_pre_system_unnumbered_fake_plus_gap(tmp_path):
     db = EdusonDB(tmp_path / 'e.db')
     db.group(1, 'ТС1001', teacher_id=5)
     db.session(None, 1, '2026-09-03', lesson_no=5)
-    db.session(None, 1, '2027-06-01', lesson_no=None)
-    db.session(None, 1, '2027-06-08', lesson_no=None)
-    db.session(None, 1, '2027-06-15', lesson_no=2)        # внутри 1..4
-    db.session(None, 1, '2027-06-22', lesson_no=9)        # после первого учтённого
+    db.session(None, 1, '2028-06-01', lesson_no=None)
+    db.session(None, 1, '2028-06-08', lesson_no=None)
+    db.session(None, 1, '2028-06-15', lesson_no=2)        # внутри 1..4
+    db.session(None, 1, '2028-06-22', lesson_no=9)        # после первого учтённого
     assert _n(db) == {1: Decimal(4 + 2 + 1)}
+
+
+def test_pre_system_year_fixed_are_real_held(tmp_path):
+    """Held из вкладки «Июнь 2027» — настоящие уроки: L считается и по ним, в N они
+    не входят. Заняли №1..3, настоящие с №4 — N = 0 (у ВИ1001/ПИ1007 на данных так)."""
+    db = EdusonDB(tmp_path / 'e.db')
+    db.group(1, 'ТС1001', teacher_id=5)
+    for no, day in ((1, '2027-06-01'), (2, '2027-06-08'), (3, '2027-06-15')):
+        db.session(None, 1, day, lesson_no=no)
+    db.session(None, 1, '2026-09-01', lesson_no=4)
+    db.group(2, 'ТС1002', teacher_id=5)           # только перенесённые, без номеров
+    db.session(None, 2, '2027-06-01', lesson_no=None)
+    db.group(3, 'ТС1003', teacher_id=5)           # перенесённый №7 + настоящий №9: задел 6
+    db.session(None, 3, '2027-06-01', lesson_no=7)
+    db.session(None, 3, '2026-09-01', lesson_no=9)
+    db.group(4, 'ТС1004', teacher_id=5)           # перенесённый №1 + оставшийся фиктивный №2
+    db.session(None, 4, '2027-06-01', lesson_no=1)
+    db.session(None, 4, '2028-06-01', lesson_no=2)
+    assert _n(db) == {1: Decimal(0), 2: Decimal(0), 3: Decimal(6), 4: Decimal(1)}
 
 
 def test_pre_system_edge_groups(tmp_path):
@@ -114,8 +156,8 @@ def test_pre_system_edge_groups(tmp_path):
     db.group(1, 'ТС1001', teacher_id=5)           # без проведённых
     db.session(None, 1, '2026-11-01', status='scheduled', lesson_no=1)
     db.group(2, 'ТС1002', teacher_id=5)           # только фиктивные: L = 1, все считаются
-    db.session(None, 2, '2027-06-01', lesson_no=1)
-    db.session(None, 2, '2027-06-08', lesson_no=None)
+    db.session(None, 2, '2028-06-01', lesson_no=1)
+    db.session(None, 2, '2028-06-08', lesson_no=None)
     db.group(3, 'ТС1003', teacher_id=5)           # номер 0 — задела нет, не минус
     db.session(None, 3, '2026-09-04', lesson_no=0)
     assert _n(db) == {1: Decimal(0), 2: Decimal(2), 3: Decimal(0)}

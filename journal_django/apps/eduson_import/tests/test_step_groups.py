@@ -128,11 +128,11 @@ def test_group_without_teacher_stops_import(tmp_path):
 
 def test_offset_and_lessons_done(tmp_path):
     db = _db(tmp_path)
-    # A: 2 фиктивных held (2027) + 3 настоящих, из них отработка 45 мин
+    # A: 2 фиктивных held (2028: год −1 всё ещё позже дня импорта) + 3 настоящих, из них отработка 45 мин
     db.group(5, 'ПИ1001', 'python', 1, fmt='group', done=9)
     db.participant(5, 'Миша', 'Мама Миши', '79990000001')
     db.participant(5, 'Петя', 'Мама Пети', '79990000002')
-    for day in ('2027-06-01', '2027-06-08'):
+    for day in ('2028-06-01', '2028-06-08'):
         db.session(None, 5, day, time='', lesson_no=None)
     db.session(None, 5, '2026-09-01', lesson_no=1)
     db.session(None, 5, '2026-09-08', lesson_no=2)
@@ -163,8 +163,8 @@ def test_fake_held_numbered_inside_gap_not_counted_twice(tmp_path):
     db = _db(tmp_path)
     db.group(5, 'ПИ1001', 'python', 1)
     db.participant(5, 'Миша', 'Мама', '79990000001')
-    db.session(None, 5, '2027-06-01', lesson_no=1)
-    db.session(None, 5, '2027-06-08', lesson_no=2)
+    db.session(None, 5, '2028-06-01', lesson_no=1)
+    db.session(None, 5, '2028-06-08', lesson_no=2)
     db.session(None, 5, '2026-09-01', lesson_no=3)
     ctx = _run(db)
     assert _group(ctx, 5).lesson_number_offset == Decimal('2')

@@ -3,7 +3,7 @@
 
 Выводы анализа (analysis.py) считаются ОДИН раз при создании контекста и дальше
 берутся только отсюда: шаги групп, уроков и сверка обязаны видеть одно и то же N,
-один и тот же набор фиктивных held и одну историю преподавателей. Посчитай их
+один и тот же набор held с исправленным годом и фиктивных held и одну историю преподавателей. Посчитай их
 каждый шаг заново — при правке правила в одном месте шаги разошлись бы молча.
 
 Отчёт и manual_review — без ПДн: только id записей Eduson, коды групп, названия
@@ -33,7 +33,10 @@ class ImportDataError(Exception):
 class ImportContext:
     as_of: datetime.date                                   # день импорта: граница фиктивных held
     teacher_timeline: TeacherTimeline
-    fake_held: frozenset[int] = frozenset()                # sessions.id held с датой > as_of
+    # sessions.id held с датой > as_of, год которой не исправить (analysis.corrected_year)
+    fake_held: frozenset[int] = frozenset()
+    # sessions.id → дата с исправленным годом: held с вкладки «Июнь 2027» → урок июня 2026
+    year_fixed: dict[int, datetime.date] = field(default_factory=dict)
     pre_system: dict[int, Decimal] = field(default_factory=dict)        # student_groups.id → N
     moved_from: dict[int, datetime.date] = field(default_factory=dict)  # sessions.id → дата «до»
     deleted_sessions: dict[int, tuple[int, datetime.date]] = field(default_factory=dict)
@@ -73,6 +76,7 @@ class ImportContext:
             as_of=as_of,
             teacher_timeline=analysis.group_teacher_timeline(src),
             fake_held=frozenset(analysis.fake_held_ids(src, as_of)),
+            year_fixed=analysis.year_fixed_held(src, as_of),
             pre_system=analysis.pre_system_lessons(src, as_of),
             moved_from=analysis.moved_from_dates(src),
             deleted_sessions=analysis.deleted_session_dates(src),

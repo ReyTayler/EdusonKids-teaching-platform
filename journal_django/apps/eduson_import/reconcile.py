@@ -6,9 +6,10 @@ reconcile(src, ctx) → (lines, errors, warnings):
   warnings — ожидаемые особенности данных, печатаются справочно.
 
 ЧТО СЧИТАЕТСЯ ОШИБКОЙ. Ожидание каждой строки таблицы выведено из правил шагов
-(фиктивные held не переносятся, администраторы без ссылок — только учётка,
+(held с ошибочным годом — уроками, фиктивные held не переносятся, администраторы без ссылок — только учётка,
 склейка учеников, отзывы «на проверку»), поэтому любое другое расхождение —
-дефект импорта. По каждой группе «проведено» = N + Σ вес настоящих held
+дефект импорта. По каждой группе «проведено» = N + Σ вес проведённых held (настоящих и с
+исправленным годом — всех, кроме фиктивных)
 (apps.lessons.weights.lesson_weight) обязано совпасть и с
 GroupMembership.lessons_done каждого ученика, и с Group.lesson_number_offset +
 Σ вес Lesson группы — на этих двух числах KOTOKOD строит нумерацию следующих
@@ -41,6 +42,7 @@ from apps.eduson_import.context import ImportContext
 from apps.eduson_import.sqlite_source import EdusonSource
 from apps.feedback.models import LessonFeedback
 from apps.groups.models import Group
+from apps.eduson_import.steps.lessons import SUBMITTED_BY_YEAR_FIXED
 from apps.lessons.models import Lesson, LessonAttendance
 from apps.lessons.weights import lesson_weight
 from apps.memberships.models import GroupMembership
@@ -96,9 +98,13 @@ def reconcile(src: EdusonSource, ctx: ImportContext) -> tuple[list[str], list[st
         f'склеено записей {merged}, пропущено пустых {len(ctx.skipped_participants)}, '
         f'на проверку {ctx.review_participants}')
     row('проведённые уроки', len(held_all), Lesson.objects.count(), len(real_held),
-        f'фиктивных held (дата позже дня импорта) {fake} — в «пройдено до учёта»')
+        f'held = уроки; фиктивных held (год не исправить) {fake} — в «пройдено до учёта»' if fake
+        else 'held = уроки')
+    row('из них год исправлен', len(ctx.year_fixed),
+        Lesson.objects.filter(submitted_by_token=SUBMITTED_BY_YEAR_FIXED).count(), len(ctx.year_fixed),
+        'таблицы Eduson, вкладка «Июнь 2027» → уроки 2026 года')
     row('позиции плана', len(sessions), PlannedLesson.objects.count(), len(sessions) - fake,
-        'сессии без фиктивных held')
+        'сессии без фиктивных held' if fake else 'все сессии')
     row('отзывы (submitted)', submitted, LessonFeedback.objects.count(), submitted - len(ctx.feedback_not_moved),
         f'на проверку {len(ctx.feedback_not_moved)}')
     row('продления (группы)', renewals, ctx.renewals_applied, None,
@@ -155,7 +161,7 @@ def _check_groups(src, ctx, real_held, sessions, row, errors, warnings) -> None:
             errors.append(f'группа {code}: у {len(wrong)} учени(ков) пройдено {_num(wrong[0])}, '
                           f'ожидалось {_num(done)}')
         if lesson_count[gid] != held_count[eid]:
-            errors.append(f'группа {code}: уроков {lesson_count[gid]}, настоящих held {held_count[eid]}')
+            errors.append(f'группа {code}: уроков {lesson_count[gid]}, проведённых held {held_count[eid]}')
         if positions.get(gid, 0) != positions_expected[eid]:
             errors.append(f'группа {code}: позиций плана {positions.get(gid, 0)}, ожидалось {positions_expected[eid]}')
         eduson_done = Decimal(g['lessons_done'] or 0) + held_eduson[eid]
@@ -165,7 +171,7 @@ def _check_groups(src, ctx, real_held, sessions, row, errors, warnings) -> None:
                             '(справочно)')
     if differ_eduson:
         warnings.append(f'«проведено» расходится с Eduson в {differ_eduson} группах — ожидаемо: Eduson считал '
-                        'lessons_done двойным счётом, фиктивные held и отработку 45 мин целым уроком (спека §5.4)')
+                        'lessons_done двойным счётом и отработку 45 мин целым уроком (спека §5.4)')
 
 
 def _check_health(warnings: list[str], errors: list[str]) -> None:

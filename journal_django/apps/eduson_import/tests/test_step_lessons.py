@@ -14,12 +14,14 @@ import pytest
 from apps.eduson_import.context import ImportContext, ImportDataError
 from apps.eduson_import.sqlite_source import EdusonSource
 from apps.eduson_import.steps.groups import import_groups
-from apps.eduson_import.steps.lessons import SUBMITTED_BY, import_feedback, import_lessons
+from apps.eduson_import.steps.lessons import SUBMITTED_BY, SUBMITTED_BY_YEAR_FIXED, import_feedback, import_lessons
 from apps.eduson_import.steps.people import import_people
 from apps.eduson_import.tests.factory import EdusonDB
 from apps.feedback.models import LessonFeedback
 from apps.groups.models import Group
 from apps.lessons.models import Lesson, LessonAttendance
+from apps.memberships.models import GroupMembership
+from apps.payroll.models import Payroll
 from apps.scheduling import health
 from apps.scheduling.models import PlannedLesson
 from apps.scheduling.occurrences import CANCELLED, DONE, PENDING
@@ -86,7 +88,7 @@ def _numbering_db(tmp_path) -> EdusonDB:
     db.participant(5, 'Миша', 'Мама Миши', '79990000001')
     db.participant(5, 'Маша', 'Мама Маши', '79990000002')
     # Фиктивная held первичной загрузки: дата-заглушка в будущем, без времени, №1.
-    db.session(90, 5, '2027-06-07', time='', lesson_no=1)
+    db.session(90, 5, '2028-06-07', time='', lesson_no=1)
     # Урок отметили «проведён» кнопкой статуса; updated_at потом сдвинула ссылка на запись.
     db.session(101, 5, '2026-07-06', status='scheduled', lesson_no=2, recording_url='https://rec/101',
                created_at='2026-06-28T20:58:00.000Z')
@@ -152,6 +154,107 @@ def test_held_lesson_fields(tmp_path):
     pos = _planned(ctx, 101)
     assert (pos.scheduled_date, pos.scheduled_time) == (D('2026-07-06'), dt.time(15, 0))
     assert (pos.teacher_id, pos.substitute_teacher_id, pos.moved_from_date) == (anna, None, None)
+
+
+# ── held из вкладки «Июнь 2027»: год исправляется ──────────────────────────
+#
+# Решение владельца 2026-10-19: held с датой 2027-06-DD — настоящие уроки, отмеченные
+# в таблицах Eduson на вкладке «Июнь 2027» вместо «Июнь 2026». Они становятся
+# проведёнными уроками с датой 2026-06-DD, а не уходят в «пройдено до учёта».
+
+def _year_fixed_db(tmp_path) -> EdusonDB:
+    db = _db(tmp_path)
+    db.group(5, 'ПИ1007', 'python', 1, fmt='group', package=20, dow=1, time='15:00')
+    db.participant(5, 'Миша', 'Мама Миши', '79990000001')
+    db.participant(5, 'Маша', 'Мама Маши', '79990000002')
+    # Ошибочный год: без времени (→ слот группы) и со временем (→ как есть).
+    db.session(91, 5, '2027-06-01', time='', lesson_no=1)            # пн 2026-06-01
+    db.session(92, 5, '2027-06-03', time='11:30', lesson_no=2)       # ср 2026-06-03
+    db.session(93, 5, '2027-06-19', time='', lesson_no=3)            # пт 2026-06-19 — занятая дата
+    # Настоящие уроки перемешаны с исправленными датами (как у СИ1015).
+    db.session(201, 5, '2026-06-10', time='15:00', lesson_no=3)
+    db.session(202, 5, '2026-06-19', time='18:00', lesson_no=4)
+    db.session(203, 5, '2026-09-07', time='15:00', lesson_no=5)
+    db.session(204, 5, '2030-01-07', status='scheduled', lesson_no=6)
+    # Группу передали Борису только в августе: июнь — у Анны.
+    db.update_group(5, teacher_id=2, audit_kw={'ts': _ts('2026-08-05')})
+    return db
+
+
+def test_year_fixed_held_become_lessons_dated_previous_year(tmp_path):
+    ctx = _run(_year_fixed_db(tmp_path))
+    assert set(ctx.lesson_by_session) == {91, 92, 93, 201, 202, 203}
+    fixed = [_lesson(ctx, s) for s in (91, 92, 93)]
+    assert [x.lesson_date for x in fixed] == [D('2026-06-01'), D('2026-06-03'), D('2026-06-19')]
+    assert {x.submitted_by_token for x in fixed} == {SUBMITTED_BY_YEAR_FIXED}
+    assert _lesson(ctx, 201).submitted_by_token == SUBMITTED_BY
+    assert {x.lesson_type for x in fixed} == {'regular'}
+    # Время: своё у сессии — как есть; нет — слот группы этого дня недели / первый слот.
+    assert [_planned(ctx, s).scheduled_time for s in (91, 92, 93)] == [
+        dt.time(15, 0), dt.time(11, 30), dt.time(15, 0)]
+    assert all(_planned(ctx, s).status == DONE for s in (91, 92, 93))
+    assert all(_planned(ctx, s).scheduled_date == _lesson(ctx, s).lesson_date for s in (91, 92, 93))
+    assert any('ПИ1007' in line and 'Июнь 2027' in line and '3' in line for line in ctx.report)
+    assert ctx.fake_held == frozenset()
+
+
+def test_year_fixed_numbering_by_date_and_offset_zero(tmp_path):
+    """Все заглушки перенесены — N = L − 1 = 0; номера идут по исправленной дате,
+    вперемешку с настоящими уроками; две проведённые в один день допустимы."""
+    ctx = _run(_year_fixed_db(tmp_path))
+    group = Group.objects.get(pk=ctx.group_by_eduson[5])
+    assert group.lesson_number_offset == Decimal('0')
+    order = (91, 92, 201, 93, 202, 203)
+    assert [_lesson(ctx, s).lesson_number for s in order] == [Decimal(n) for n in (1, 2, 3, 4, 5, 6)]
+    assert [_planned(ctx, s).seq for s in order + (204,)] == [1, 2, 3, 4, 5, 6, 7]
+    assert _planned(ctx, 204).lesson_number == Decimal('7')
+    # 2026-06-19: перенесённый и настоящий урок в один день — оба на месте.
+    same_day = Lesson.objects.filter(group=group, lesson_date=D('2026-06-19'))
+    assert same_day.count() == 2
+    assert set(GroupMembership.objects.filter(group=group).values_list('lessons_done', flat=True)) == {
+        Decimal('6')}
+    assert any('ПИ1007' in line and 'в один день' in line for line in ctx.report)
+    _assert_plan_healthy(ctx, 5)
+
+
+def test_year_fixed_attendance_teacher_and_no_payroll(tmp_path):
+    ctx = _run(_year_fixed_db(tmp_path))
+    anna, boris = _teacher('Анна Тестова'), _teacher('Борис Тестов')
+    for sid in (91, 92, 93):
+        lesson = _lesson(ctx, sid)
+        # Посещаемости в Eduson нет — «был» все ученики группы, как у настоящих held.
+        assert set(LessonAttendance.objects.filter(lesson=lesson).values_list('student_id', 'present')) == {
+            (st, True) for st in set(ctx.student_by_participant.values())}
+        # Преподаватель группы на исправленную дату — по истории (июнь — Анна).
+        assert (lesson.teacher_id, lesson.original_teacher_id) == (anna, None)
+        assert _planned(ctx, sid).teacher_id == anna
+    assert _lesson(ctx, 203).teacher_id == boris
+    assert Payroll.objects.count() == 0
+    assert not any(f'#{sid}' in line for sid in (91, 92, 93) for line in ctx.manual_review)
+
+
+def test_year_fixed_feedback_gets_corrected_date(tmp_path):
+    db = _year_fixed_db(tmp_path)
+    db.report(92, 5, 1, comment='ок')
+    ctx = _run(db, feedback=True)
+    fb = LessonFeedback.objects.get()
+    assert (fb.lesson_date, fb.lesson_id) == (D('2026-06-03'), ctx.lesson_by_session[92])
+    assert ctx.feedback_not_moved == []
+
+
+def test_group_without_stubs_keeps_gap_offset(tmp_path):
+    """Заглушек нет, первый учтённый урок №13 — N = L − 1 = 12, как раньше: о тех
+    уроках данных нет нигде."""
+    db = _db(tmp_path)
+    db.group(5, 'ПИ1008', 'python', 1, fmt='group', package=20)
+    db.participant(5, 'Миша', 'Мама Миши', '79990000001')
+    db.session(301, 5, '2026-09-01', lesson_no=13)
+    db.session(302, 5, '2026-09-08', lesson_no=14)
+    ctx = _run(db)
+    group = Group.objects.get(pk=ctx.group_by_eduson[5])
+    assert group.lesson_number_offset == Decimal('12')
+    assert [_lesson(ctx, s).lesson_number for s in (301, 302)] == [Decimal('13'), Decimal('14')]
+    assert GroupMembership.objects.get(group=group).lessons_done == Decimal('14')
 
 
 # ── преподаватель урока: замена и смена преподавателя группы ────────────────

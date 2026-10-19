@@ -36,7 +36,7 @@ def _db(tmp_path) -> EdusonDB:
     db.group(5, 'ПИ1001', 'python', 1, fmt='group', package=20, done=7)
     db.participant(5, 'Миша', 'Мама Миши', '79990000001')
     db.participant(5, 'Маша', 'Мама Маши', '79990000002')
-    db.session(90, 5, '2027-06-07', time='', lesson_no=1)
+    db.session(90, 5, '2028-06-07', time='', lesson_no=1)
     db.session(101, 5, '2026-07-06', lesson_no=2)
     db.session(102, 5, '2026-07-13', type='makeup', duration=45, lesson_no=3)
     db.session(103, 5, '2026-07-20', status='cancelled', lesson_no=4)
@@ -156,3 +156,39 @@ def test_unknown_health_check_is_error(tmp_path):
             _, errors, warnings = reconcile(src, ctx)
     assert any('new_check' in e for e in errors)
     assert not any('collision' in e for e in errors) and any('collision' in w for w in warnings)
+
+
+def test_year_fixed_held_reconcile_as_lessons(tmp_path):
+    """Held из вкладки «Июнь 2027» стали уроками: «проведённые уроки» Eduson = KOTOKOD
+    за вычетом только оставшихся фиктивных (у ПИ1001 — №1 на 2028 год), отдельная
+    строка — сколько перенесено с исправленным годом; «проведено» группы с ними сходится."""
+    db = _db(tmp_path)
+    db.group(7, 'ВИ1001', 'vibe', 2, fmt='group', package=20)
+    db.participant(7, 'Коля', 'Мама Коли', '79990000004')
+    db.session(301, 7, '2027-06-02', time='', lesson_no=1)
+    db.session(302, 7, '2027-06-09', time='', lesson_no=2)
+    db.session(303, 7, '2026-09-01', lesson_no=3)
+    ctx, lines, errors, warnings = _run(db)
+    assert errors == []
+    assert _line(lines, 'проведённые уроки') == ['9', '8']           # 1 фиктивный (2028) — в N
+    assert _line(lines, 'из них год исправлен') == ['2', '2']
+    assert _line(lines, 'позиции плана') == ['12', '11']
+    table = '\n'.join(lines)
+    assert 'Июнь 2027' in table
+    assert Group.objects.get(pk=ctx.group_by_eduson[7]).lesson_number_offset == Decimal('0')
+    assert GroupMembership.objects.get(group_id=ctx.group_by_eduson[7]).lessons_done == Decimal('3')
+
+
+def test_year_fixed_lesson_missing_is_error(tmp_path):
+    db = _db(tmp_path)
+    db.group(7, 'ВИ1001', 'vibe', 2, fmt='group', package=20)
+    db.participant(7, 'Коля', 'Мама Коли', '79990000004')
+    db.session(301, 7, '2027-06-02', time='', lesson_no=1)
+    db.session(303, 7, '2026-09-01', lesson_no=2)
+    with EdusonSource(db.close()) as src:
+        ctx = ImportContext.from_source(src, AS_OF)
+        import_people(src, ctx); import_groups(src, ctx); import_lessons(src, ctx)
+        Lesson.objects.filter(pk=ctx.lesson_by_session[301]).delete()
+        _, errors, _ = reconcile(src, ctx)
+    assert any(e.startswith('из них год исправлен') for e in errors)
+    assert any('ВИ1001' in e for e in errors)

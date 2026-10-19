@@ -16,8 +16,10 @@
 apps.memberships.repository._assert_individual_capacity при add/update/place).
 
 Пройденное до учёта (спека §5.4, «продолжение курса» как memberships._seed_continuation):
-  Group.lesson_number_offset = N; GroupMembership.lessons_done = N + Σ вес настоящих held
-группы (вес — apps.lessons.weights.lesson_weight: 45 мин = 0.5). N — из ImportContext.
+  Group.lesson_number_offset = N; GroupMembership.lessons_done = N + Σ вес проведённых held
+группы — настоящих и с исправленным годом (вкладка «Июнь 2027», ImportContext.year_fixed),
+то есть всех, кроме фиктивных (вес — apps.lessons.weights.lesson_weight: 45 мин = 0.5).
+N — из ImportContext.
 """
 from __future__ import annotations
 

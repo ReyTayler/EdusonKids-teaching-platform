@@ -534,43 +534,6 @@ def preview_permanent_change(group_id: int, from_seq: int, effective_from) -> li
         group_id, date_from=_to_date(effective_from), from_seq=from_seq)
 
 
-def freeze(group_id: int, data: dict, request) -> list[dict] | None:
-    """Заморозка группы: остаток курса с freeze_from переезжает так, чтобы первое
-    занятие шло с resume_date по тем же дням/времени; число уроков не меняется.
-
-    Не отдельный механизм, а «Изменить расписание» (repository.permanent_change)
-    с from_seq = первая изменяемая позиция ≥ freeze_from, effective_from =
-    resume_date и new_slots = текущий набор слотов. Поэтому всё, что делает
-    permanent_change (сброс разовых операций хвоста, версия слотов, сохранность
-    проведённых и головы), заморозка получает без копирования.
-
-    Уведомлений преподавателю нет — их не шлёт и permanent_change.
-
-    None → группы нет (404); ValueError → нечего замораживать / нет расписания
-    (view → 400). Одна транзакция: выбор from_seq под локом и сдвиг атомарны."""
-    resume_date = _to_date(data['resume_date'])
-    with transaction.atomic():
-        target = repository.freeze_target(
-            group_id, _to_date(data['freeze_from']), lock=True)
-        if target is None:
-            return None
-        return repository.permanent_change(
-            group_id,
-            from_seq=target['from_seq'],
-            effective_from=resume_date,
-            new_slots=target['slots'],
-        )
-
-
-def preview_freeze(group_id: int, data: dict) -> dict | None:
-    """Read-only превью заморозки (см. repository.preview_freeze)."""
-    return repository.preview_freeze(
-        group_id,
-        freeze_from=_to_date(data['freeze_from']),
-        resume_date=_to_date(data['resume_date']),
-    )
-
-
 def cancel(group_id: int, lesson_id: int, request) -> list[dict] | None:
     """Отмена (перенос отменённого урока в конец курса + перенумерация).
     from_date выводится из даты занятия lid.

@@ -72,14 +72,14 @@ export const STUDENT_LESSON_KIND_LABELS: Record<StudentLessonKind, string> = {
 // ===== Changelog: операции журнала изменений =====
 // Ключи — из apps/changelog/labels.py (бэкенд выводит их из method+url).
 
-// Короткие названия действий — колонка «Действие» и dropdown «Все действия».
-/** Разовые операции плана, которые сбрасываются при смене расписания/заморозке. */
+/** Разовые операции плана, которые сбрасываются при смене расписания. */
 export const AFFECTED_OP_LABELS: Record<'reschedule' | 'substitution' | 'cancellation', string> = {
   reschedule: 'перенос',
   substitution: 'замена преподавателя',
   cancellation: 'отмена',
 };
 
+// Короткие названия действий — колонка «Действие» и dropdown «Все действия».
 export const CHANGELOG_OPERATION_LABELS:Record<string, string> = {
   'group.create':                  'Новая группа',
   'group.update':                  'Правка группы',
@@ -87,7 +87,6 @@ export const CHANGELOG_OPERATION_LABELS:Record<string, string> = {
   'group.schedule_change':         'Смена расписания',
   'plan.generate':                 'Генерация плана',
   'plan.permanent_change':         'Смена расписания (план)',
-  'plan.freeze':                   'Заморозка',
   'plan.change_teacher_permanent': 'Смена преподавателя',
   'plan.change_teacher':           'Замена преподавателя',
   'plan.extra':                    'Доп. занятие',

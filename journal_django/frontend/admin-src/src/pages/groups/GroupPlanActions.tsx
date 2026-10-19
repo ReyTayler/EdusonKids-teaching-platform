@@ -21,7 +21,6 @@ import { AFFECTED_OP_LABELS } from '../../lib/labels';
 import type { LessonActionKind } from '../../shared/calendar/LessonPopup';
 import type { Occurrence } from '../../shared/calendar/types';
 import type { Group } from '../../lib/types';
-import FreezeGroupDialog from './FreezeGroupDialog';
 
 /** День недели Monday-first в UI, значения — уже в конвенции проекта (Вс=0..Сб=6),
  * поэтому дополнительная конвертация индекса при отправке не нужна. */
@@ -89,7 +88,6 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
 
   const [dialog, setDialog] = useState<DialogKind>(null);
   const closeDialog = () => setDialog(null);
-  const [freezeOpen, setFreezeOpen] = useState(false);
 
   const teacherOptions = useMemo(
     () => teachers.filter((t) => t.active).map((t) => ({ value: String(t.id), label: t.name })),
@@ -402,17 +400,12 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
             <Button onClick={() => openPermanent()} disabled={permanentRows.length === 0}>
               Изменить расписание
             </Button>
-            <Button onClick={() => setFreezeOpen(true)} disabled={!hasSlots}>
-              Заморозка
-            </Button>
             <Button variant="danger" onClick={() => openCancel()} disabled={courseRows.length === 0}>
               Отменить занятие
             </Button>
           </>
         )}
       </div>
-
-      <FreezeGroupDialog groupId={groupId} open={freezeOpen} onClose={() => setFreezeOpen(false)} />
 
       {/* Перенести занятие */}
       <Dialog

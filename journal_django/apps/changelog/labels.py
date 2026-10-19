@@ -14,7 +14,6 @@ RULES: list[tuple[str, re.Pattern, str]] = [
     # scheduling (план занятий) — до generic groups-правил
     ('POST', re.compile(r'^/api/admin/groups/\d+/plan/generate$'), 'plan.generate'),
     ('POST', re.compile(r'^/api/admin/groups/\d+/plan/permanent-change$'), 'plan.permanent_change'),
-    ('POST', re.compile(r'^/api/admin/groups/\d+/plan/freeze$'), 'plan.freeze'),
     ('POST', re.compile(r'^/api/admin/groups/\d+/plan/change-teacher-permanent$'), 'plan.change_teacher_permanent'),
     ('POST', re.compile(r'^/api/admin/groups/\d+/plan/resync$'), 'plan.resync'),
     ('POST', re.compile(r'^/api/admin/groups/\d+/plan/extra$'), 'plan.extra'),

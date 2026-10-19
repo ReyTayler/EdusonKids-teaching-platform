@@ -194,3 +194,65 @@ def test_resize_plan_refuses_to_cut_recorded(plan_setup):
 
     # План не пострадал.
     assert PlannedLesson.objects.filter(group_id=group_id, seq__isnull=False).count() == 8
+
+
+def _course_rows(group_id):
+    return list(PlannedLesson.objects.filter(group_id=group_id, seq__isnull=False)
+                .order_by('seq').values_list('seq', 'lesson_number'))
+
+
+@pytest.mark.django_db
+def test_resize_plan_extend_respects_offset(plan_setup):
+    """Группа-продолжение (офсет 3): план идёт с урока 4. Длина курса 6 → 8:
+    дописываются уроки 7–8, а не позиции до seq=8 (это дало бы уроки 9–11
+    сверх курса)."""
+    from apps.scheduling.repository import generate_for_group, resize_plan
+    direction_id, teacher_id = plan_setup
+    with connection.cursor() as cur:
+        group_id = _make_group(cur, direction_id, teacher_id,
+                               name='__plt_off_ext__', duration=90, lessons_total=6)
+        cur.execute("UPDATE groups SET lesson_number_offset = 3 WHERE id = %s", [group_id])
+    generate_for_group(group_id)
+    assert [float(n) for _, n in _course_rows(group_id)] == [4.0, 5.0, 6.0]
+
+    with connection.cursor() as cur:
+        cur.execute("UPDATE groups SET lessons_total = NULL WHERE id = %s", [group_id])
+    resize_plan(group_id)  # → длина направления, 8
+
+    rows = _course_rows(group_id)
+    assert [s for s, _ in rows] == [1, 2, 3, 4, 5]
+    assert [float(n) for _, n in rows] == [4.0, 5.0, 6.0, 7.0, 8.0]
+
+
+@pytest.mark.django_db
+def test_resize_plan_shrink_respects_offset(plan_setup):
+    """Офсет 3, длина 8 → 6: удаляются уроки 7–8 (номер > длины курса), хотя
+    их seq (4–5) не превышает новую длину."""
+    from apps.scheduling.repository import generate_for_group, resize_plan
+    direction_id, teacher_id = plan_setup
+    with connection.cursor() as cur:
+        group_id = _make_group(cur, direction_id, teacher_id,
+                               name='__plt_off_shr__', duration=90, lessons_total=None)
+        cur.execute("UPDATE groups SET lesson_number_offset = 3 WHERE id = %s", [group_id])
+    generate_for_group(group_id)
+    assert [float(n) for _, n in _course_rows(group_id)] == [4.0, 5.0, 6.0, 7.0, 8.0]
+
+    with connection.cursor() as cur:
+        cur.execute("UPDATE groups SET lessons_total = 6 WHERE id = %s", [group_id])
+    resize_plan(group_id)
+
+    assert [float(n) for _, n in _course_rows(group_id)] == [4.0, 5.0, 6.0]
+
+
+@pytest.mark.django_db
+def test_resize_plan_from_empty_starts_after_offset(plan_setup):
+    """Плана нет, офсет 3: resize строит план с урока 4, как generate_for_group."""
+    from apps.scheduling.repository import resize_plan
+    direction_id, teacher_id = plan_setup
+    with connection.cursor() as cur:
+        group_id = _make_group(cur, direction_id, teacher_id,
+                               name='__plt_off_new__', duration=90, lessons_total=6)
+        cur.execute("UPDATE groups SET lesson_number_offset = 3 WHERE id = %s", [group_id])
+    resize_plan(group_id)
+
+    assert [float(n) for _, n in _course_rows(group_id)] == [4.0, 5.0, 6.0]

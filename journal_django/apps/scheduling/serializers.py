@@ -93,25 +93,6 @@ class PlanPermanentChangeSerializer(StrictSerializer):
         return attrs
 
 
-class PlanFreezeSerializer(StrictSerializer):
-    """POST /plan/freeze — заморозка: пауза с freeze_from, остаток курса с resume_date.
-
-    preview=true — вернуть превью (что сдвинется и какие разовые операции
-    сбросятся) без записи, тем же контрактом дат."""
-
-    freeze_from = DateStringField()
-    resume_date = DateStringField()
-    preview = serializers.BooleanField(required=False, default=False)
-
-    def validate(self, attrs):
-        attrs = super().validate(attrs)  # отклонить неизвестные поля
-        # DateStringField уже проверил формат, ISO-строки сравниваются как даты.
-        if attrs['resume_date'] < attrs['freeze_from']:
-            raise serializers.ValidationError(
-                {'resume_date': 'Дата возобновления не может быть раньше даты заморозки.'})
-        return attrs
-
-
 class PlanChangeTeacherSerializer(StrictSerializer):
     """POST /plan/<lid>/change-teacher — разовая смена преподавателя одной строки."""
 

@@ -65,6 +65,8 @@ def plan_group(db):
 
     with connection.cursor() as cur:
         cur.execute('DELETE FROM security_audit_log WHERE target_id = %s', [group_id])
+        # Начисления за отмены создаёт сама операция отмены; FK держит группу.
+        cur.execute('DELETE FROM payroll_cancellations WHERE group_id = %s', [group_id])
         cur.execute('DELETE FROM planned_lessons WHERE group_id = %s', [group_id])
         cur.execute('DELETE FROM lessons WHERE group_id = %s', [group_id])
         cur.execute('DELETE FROM group_schedule_slots WHERE group_id = %s', [group_id])

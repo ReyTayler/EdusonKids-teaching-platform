@@ -475,10 +475,15 @@ def _seed_continuation(to_group_id: int, student_id: int, b) -> None:
     GroupMembership.objects.filter(
         group_id=to_group_id, student_id=student_id, active=True,
     ).update(lessons_done=b)
-    Group.objects.filter(id=to_group_id).update(lesson_number_offset=b)
 
     from apps.scheduling.repository import reset_plan, generate_for_group
+    # Сначала план, потом строка группы — порядок «план → Group», как у смены
+    # преподавателя и расписания (scheduling.repository). reset_plan офсет не
+    # читает; generate_for_group читает — поэтому офсет пишется между ними.
+    # У индивидуальной группы строка Group уже залочена проверкой ёмкости
+    # (_assert_individual_capacity) — там порядок задан раньше и не меняется.
     reset_plan(to_group_id)
+    Group.objects.filter(id=to_group_id).update(lesson_number_offset=b)
     generate_for_group(to_group_id)
 
 

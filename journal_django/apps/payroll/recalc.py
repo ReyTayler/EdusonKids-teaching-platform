@@ -13,9 +13,16 @@ CancellationPay по id. Два параллельных пересчёта по
 друг с другом; лок урока до чтения агрегата присутствия защищает от расчёта по
 устаревшей посещаемости и от двойного bulk_create одного начисления. Удаление
 урока (lessons.repository.delete_lesson_full, extra_lessons.services.delete_fact)
-и правки посещаемости лочат урок раньше его Payroll — тот же порядок. Удаление
-маркеров (reset_plan/wipe_one_offs) к нему приводится отдельно (задача 3б) —
-пока этого нет, дедлок с ними не исключён.
+и правки посещаемости лочат урок раньше его Payroll — тот же порядок.
+
+Операции расписания (scheduling.repository: отмена, замена, перенос, reset_plan,
+wipe_one_offs) лочат строки плана ПЕРВЫМИ, поэтому полный recalculate из них
+звать нельзя: он полез бы лочить уроки после плана, а параллельный пересчёт по
+смене ставок лочит уроки до плана — дедлок. Им — recalculate_cancellations:
+уроки он не лочит и не читает, только маркеры → деньги. Удаление маркеров
+Django-коллектором обнуляет ссылку в payroll_cancellations (UPDATE … SET
+planned_lesson_id = NULL) раньше DELETE плана, то есть «деньги → план»; поэтому
+перед удалением маркеров scheduling лочит удаляемые строки плана сам.
 """
 from __future__ import annotations
 
@@ -36,7 +43,7 @@ from apps.payroll.engine import (
     rates_on,
 )
 
-__all__ = ['load_rate_cards', 'recalculate']
+__all__ = ['load_rate_cards', 'recalculate', 'recalculate_cancellations']
 
 _CANCELLED = 'cancelled'
 _BATCH = 500
@@ -279,15 +286,47 @@ def recalculate(*, lesson_ids=None, marker_ids=None, group_ids=None,
     'changed'}: lessons/cancellations — сколько уроков и маркеров рассмотрено;
     created/updated/deleted — строк Payroll + CancellationPay; changed — их сумма.
     """
+    return _run(
+        lesson_ids=lesson_ids, marker_ids=marker_ids, group_ids=group_ids,
+        date_from=date_from, date_to=date_to,
+        with_lessons=not (lesson_ids is None and marker_ids is not None),
+        with_markers=not (marker_ids is None and lesson_ids is not None),
+    )
+
+
+def recalculate_cancellations(*, marker_ids=None, group_ids=None,
+                              date_from: datetime.date | None = None,
+                              date_to: datetime.date | None = None,
+                              from_today: bool = False) -> dict:
+    """
+    Пересчитать только начисления за отмены — для операций расписания, которые
+    уже держат строки плана (см. шапку модуля). Уроки не лочатся и не читаются.
+
+    Охват и сироты — как у recalculate с теми же фильтрами без lesson_ids:
+    marker_ids — эти маркеры (будущие сироты — в их группах); group_ids /
+    date_from / date_to — маркеры и сироты групп за период. Будущие сироты
+    охвата удаляются, прошлые остаются. Ответ — как у recalculate (lessons = 0).
+
+    from_today=True — охват с сегодняшнего дня по МСК (вместо date_from): то же
+    «сегодня», по которому пересчёт делит сирот на прошлые и будущие, — иначе на
+    границе суток два вызова часов разошлись бы (после удаления маркеров).
+    """
+    return _run(lesson_ids=None, marker_ids=marker_ids, group_ids=group_ids,
+                date_from=date_from, date_to=date_to, from_today=from_today,
+                with_lessons=False, with_markers=True)
+
+
+def _run(*, lesson_ids, marker_ids, group_ids, date_from, date_to,
+         with_lessons: bool, with_markers: bool, from_today: bool = False) -> dict:
     from apps.lessons.models import Lesson
     from apps.payroll.models import CancellationPay
 
-    with_lessons = not (lesson_ids is None and marker_ids is not None)
-    with_markers = not (marker_ids is None and lesson_ids is not None)
     by_ids = lesson_ids is not None or marker_ids is not None
     # Одно «сегодня» на весь пересчёт: иначе на границе суток выборка сирот и
     # их удаление разошлись бы.
     today = msk_now().date()
+    if from_today:
+        date_from = today
 
     with transaction.atomic():
         # 1. Уроки охвата (лок по id), затем агрегат присутствия.

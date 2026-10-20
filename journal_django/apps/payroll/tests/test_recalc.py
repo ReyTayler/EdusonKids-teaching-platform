@@ -474,3 +474,49 @@ def test_full_recalc_cleans_future_orphans_in_all_groups(db_school):
     recalculate()
     assert not CancellationPay.objects.filter(id__in=[mine.id, theirs.id]).exists()
     assert CancellationPay.objects.filter(id=past.id).exists()
+
+
+# ── режим «только отмены» (операции расписания, задача 3б) ──────────────────
+
+def test_cancellations_only_does_not_touch_lessons(db_school):
+    from apps.payroll.models import CancellationPay, Payroll
+    from apps.payroll.recalc import recalculate_cancellations
+    db_version(datetime.date(2026, 6, 1))
+    lesson = db_lesson(db_school, datetime.date(2026, 6, 10), 1)
+    marker = db_marker(db_school, datetime.date(2026, 6, 11))
+    stats = recalculate_cancellations(group_ids=[db_school['group'].id])
+    assert (stats['lessons'], stats['cancellations'], stats['created']) == (0, 1, 1)
+    assert not Payroll.objects.filter(lesson=lesson).exists()
+    assert CancellationPay.objects.get(planned_lesson=marker).payment == D('300.00')
+
+
+def test_cancellations_only_cleans_future_orphans_keeps_past(db_school):
+    from apps.payroll.models import CancellationPay
+    from apps.payroll.recalc import recalculate_cancellations
+    db_version(datetime.date(2020, 1, 1))
+    today = msk_now().date()
+    past = db_orphan(db_school, today - datetime.timedelta(days=2))
+    future = db_orphan(db_school, today + datetime.timedelta(days=2))
+    stats = recalculate_cancellations(group_ids=[db_school['group'].id], date_from=today)
+    assert stats['deleted'] == 1
+    assert CancellationPay.objects.filter(id=past.id).exists()
+    assert not CancellationPay.objects.filter(id=future.id).exists()
+
+
+def test_cancellations_only_never_locks_or_reads_lessons(db_school):
+    # Операции расписания держат строки плана: лок уроков после них дал бы
+    # обратный порядок к пересчёту по ставкам (уроки → план) — дедлок.
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    from apps.payroll.recalc import recalculate_cancellations
+    db_version(datetime.date(2026, 6, 1))
+    db_lesson(db_school, datetime.date(2026, 6, 10), 1)
+    marker = db_marker(db_school, datetime.date(2026, 6, 11))
+    with CaptureQueriesContext(connection) as ctx:
+        recalculate_cancellations(group_ids=[db_school['group'].id])
+        recalculate_cancellations(marker_ids=[marker.id])
+    sqls = [q['sql'] for q in ctx.captured_queries]
+    assert not [sql for sql in sqls if '"lessons"' in sql or '"payroll"' in sql]
+    locked = [sql for sql in sqls if 'FOR UPDATE' in sql]
+    assert locked and all('"payroll_cancellations"' in sql or '"planned_lessons"' in sql
+                          for sql in locked)

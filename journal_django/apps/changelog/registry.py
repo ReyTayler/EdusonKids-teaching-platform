@@ -60,6 +60,13 @@ TRACKED: dict[str, TrackedModel] = {
     'feedback.LessonFeedback':        TrackedModel('lesson_feedback', True, 50),
     'payments.Payment':               TrackedModel('payment', True, 50),
     'payroll.Payroll':                TrackedModel('payroll', True, 50),
+    # «Мотивация» (спека 2026-10-20): ставки школы → ставки направлений версии;
+    # персональные ставки после групп (20); начисление за отмену — после маркера
+    # отмены (planned_lesson, 30), как Payroll после урока.
+    'payroll.PayRateVersion':         TrackedModel('pay_rate_version', True, 10),
+    'payroll.PayRateDirection':       TrackedModel('pay_rate_direction', True, 15),
+    'payroll.PersonalRate':           TrackedModel('personal_rate', True, 30),
+    'payroll.CancellationPay':        TrackedModel('cancellation_pay', True, 50),
     # renewals: справочники воронки → сделки → активность (лог, не откатываем)
     'renewals.RenewalPipeline':       TrackedModel('renewal_pipeline', True, 20),
     'renewals.RenewalStage':          TrackedModel('renewal_stage', True, 25),

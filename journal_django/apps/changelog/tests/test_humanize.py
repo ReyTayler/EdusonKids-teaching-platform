@@ -139,3 +139,41 @@ def test_humanize_event_shape():
     assert human['title'] and human['text']
     assert human['changes'][0]['label'] == 'название'
     assert human['changes'][0]['new'] == 'Робототехника'
+
+
+@pytest.mark.django_db
+def test_motivation_entities_titles():
+    """Сущности «Мотивации» (apps.payroll) получают человеческие заголовки, а не «#id»."""
+    def ev(entity, model, data):
+        return {'entity': entity, 'pgh_obj_model': model, 'pgh_label': 'insert',
+                'pgh_obj_id': '1', 'pgh_data': data, 'pgh_diff': {}}
+
+    assert humanize.humanize_title(
+        ev('pay_rate_version', 'payroll.PayRateVersion', {'effective_from': '2026-09-01'}),
+        _LK) == 'Ставки школы с 01.09.2026'
+    assert humanize.humanize_title(
+        ev('pay_rate_direction', 'payroll.PayRateDirection', {'direction_id': 5}),
+        _LK) == 'Ставки направления Робототехника'
+    assert humanize.humanize_title(
+        ev('personal_rate', 'payroll.PersonalRate', {'teacher_id': 1, 'group_id': 7}),
+        _LK) == 'Персональная ставка Пётр — ПИ1012'
+    assert humanize.humanize_title(
+        ev('cancellation_pay', 'payroll.CancellationPay',
+           {'teacher_id': 2, 'group_id': 7, 'lesson_date': '2026-09-14'}),
+        _LK) == 'Начисление за отмену Мария — ПИ1012, 14.09.2026'
+
+
+@pytest.mark.django_db
+def test_rate_version_changes_money_vs_percent():
+    """Ставки — рубли; размер оплаты отмены — НЕ рубли (в режиме percent это %)."""
+    ev = {'entity': 'pay_rate_version', 'pgh_obj_model': 'payroll.PayRateVersion',
+          'pgh_label': 'update', 'pgh_obj_id': '1',
+          'pgh_data': {'group_rate': '900.00', 'cancel_value': '50.00',
+                       'cancel_mode': 'percent'},
+          'pgh_diff': {'group_rate': ['800.00', '900.00'],
+                       'cancel_value': ['40.00', '50.00'],
+                       'cancel_mode': ['fixed', 'percent']}}
+    changes = {c['label']: (c['old'], c['new']) for c in humanize.humanize_changes(ev, _LK)}
+    assert changes['ставка группового'] == (f'800{_N}₽', f'900{_N}₽')
+    assert '₽' not in changes['размер оплаты отмены'][1]
+    assert changes['оплата отмены'] == ('Фиксированная сумма', 'Процент от ставки')

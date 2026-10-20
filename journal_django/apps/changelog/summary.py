@@ -174,6 +174,8 @@ _ENTITY_RU = {
     'planned_lesson': 'Плановое занятие', 'lesson': 'Урок',
     'attendance': 'Посещаемость', 'payment': 'Оплата', 'payroll': 'Начисление',
     'lesson_feedback': 'Отзыв по уроку',
+    'pay_rate_version': 'Ставки школы', 'pay_rate_direction': 'Ставки направления',
+    'personal_rate': 'Персональная ставка', 'cancellation_pay': 'Начисление за отмену',
 }
 
 
@@ -229,6 +231,17 @@ FIELD_RU = {
     'took_place': 'урок состоялся', 'understanding': 'понимание', 'interest': 'интерес',
     'tech_problems': 'тех. проблемы', 'submitted_at': 'отправлено',
     'created_at': 'создано', 'updated_at': 'обновлено',
+    # Зарплата и «Мотивация» (apps.payroll)
+    'payment': 'начислено', 'calc_payment': 'расчётная сумма',
+    'calc_penalty': 'расчётный штраф', 'is_manual': 'правка вручную',
+    'rule_note': 'как посчитано',
+    'group_rate': 'ставка группового', 'individual_rate': 'ставка индивидуального',
+    'cancel_mode': 'оплата отмены', 'cancel_value': 'размер оплаты отмены',
+    'penalty_enabled': 'штраф включён', 'penalty_mode': 'штраф начисляется',
+    'penalty_amount': 'размер штрафа',
+    'version_id': 'версия ставок', 'planned_lesson_id': 'занятие',
+    'lesson_from': 'с урока', 'lesson_to': 'по урок', 'kind': 'вид', 'value': 'значение',
+    'created_by_id': 'кто создал',
 }
 
 

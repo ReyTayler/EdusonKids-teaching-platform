@@ -33,7 +33,11 @@ from apps.changelog import registry, summary
 
 # Денежные поля → «3 600 ₽» (разделитель тысяч — узкий неразрывный пробел, копейки
 # только если они есть). `amount` СЮДА НЕ входит: у Discount это доля 0..1, не рубли.
-MONEY_FIELDS = {'total_amount', 'unit_price', 'price', 'subscription_price', 'penalty'}
+MONEY_FIELDS = {'total_amount', 'unit_price', 'price', 'subscription_price', 'penalty',
+                # Зарплата и ставки «Мотивации». cancel_value / value сюда НЕ входят:
+                # в зависимости от режима это проценты, а не рубли.
+                'payment', 'calc_payment', 'calc_penalty',
+                'group_rate', 'individual_rate', 'penalty_amount'}
 
 # day_of_week: конвенция проекта Вс=0 (JS getDay), проверена на реальных данных.
 DAY_OF_WEEK_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
@@ -53,6 +57,9 @@ _TITLE_FK_FIELDS = {
     'membership':     {'student_id', 'group_id'},
     'attendance':     {'student_id', 'lesson_id'},
     'lesson_feedback': {'group_id'},
+    'personal_rate':   {'teacher_id', 'group_id'},
+    'cancellation_pay': {'teacher_id', 'group_id'},
+    'pay_rate_direction': {'direction_id'},
 }
 
 
@@ -204,6 +211,16 @@ def humanize_title(ev: dict, lk: summary.Lookups) -> str:
         return f'Оплата {amount} — {lk.student(data.get("student_id"))}'
     if entity == 'payroll':
         return f'Начисление {lk.teacher(data.get("teacher_id"))}'
+    if entity == 'cancellation_pay':
+        return (f'Начисление за отмену {lk.teacher(data.get("teacher_id"))}'
+                f' — {lk.group(data.get("group_id"))}, {_fmt_date(data.get("lesson_date"))}')
+    if entity == 'pay_rate_version':
+        return f'Ставки школы с {_fmt_date(data.get("effective_from"))}'
+    if entity == 'pay_rate_direction':
+        return f'Ставки направления {lk.direction(data.get("direction_id"))}'
+    if entity == 'personal_rate':
+        return (f'Персональная ставка {lk.teacher(data.get("teacher_id"))}'
+                f' — {lk.group(data.get("group_id"))}')
     if entity == 'lesson_feedback':
         return f'Отзыв по уроку — {lk.group(data.get("group_id"))}, {data.get("lesson_date")}'
     if entity == 'schedule_slot':

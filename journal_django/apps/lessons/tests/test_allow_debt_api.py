@@ -62,14 +62,15 @@ def _payload(ctx, teacher_id, **extra):
     }
 
 
-def _absent_lesson(ctx, teacher_id) -> int:
+def _absent_lesson(ctx, teacher_id, present_classmate=None) -> int:
     """Записанное занятие, где ученик отмечен отсутствующим (баланс не нужен)."""
     result = services.record_lesson(
         lesson_date='2026-06-29', teacher_id=teacher_id, group_id=ctx['group'],
         original_teacher_id=None, lesson_number=Decimal('1'),
         lesson_duration_minutes=60, lesson_type='regular', record_url=None,
-        submitted_by_token='__allow_debt_test__', submit_date='2026-06-29',
-        attendance=[{'student_id': ctx['student'], 'present': False}],
+        submitted_by_token='__allow_debt_test__', 
+        attendance=present_classmate(
+            [{'student_id': ctx['student'], 'present': False}], ctx['group']),
     )
     return result['lesson_id']
 
@@ -111,8 +112,8 @@ def test_admin_cannot_record_in_debt(admin_client, group_in_debt, teacher_id_fix
 # --- точечная правка ячейки посещаемости ------------------------------------
 
 def test_superadmin_marks_cell_in_debt(superadmin_client, group_in_debt,
-                                       teacher_id_fixture):
-    lesson_id = _absent_lesson(group_in_debt, teacher_id_fixture)
+                                       teacher_id_fixture, present_classmate):
+    lesson_id = _absent_lesson(group_in_debt, teacher_id_fixture, present_classmate=present_classmate)
     url = f"{BASE_URL}/{lesson_id}/attendance/{group_in_debt['student']}"
 
     resp = superadmin_client.patch(url, {'present': True, 'allow_debt': True},
@@ -127,8 +128,8 @@ def test_superadmin_marks_cell_in_debt(superadmin_client, group_in_debt,
 
 @pytest.mark.usefixtures('payment_balance_guard_on')
 def test_cell_without_flag_still_blocked(superadmin_client, group_in_debt,
-                                         teacher_id_fixture):
-    lesson_id = _absent_lesson(group_in_debt, teacher_id_fixture)
+                                         teacher_id_fixture, present_classmate):
+    lesson_id = _absent_lesson(group_in_debt, teacher_id_fixture, present_classmate=present_classmate)
     url = f"{BASE_URL}/{lesson_id}/attendance/{group_in_debt['student']}"
 
     resp = superadmin_client.patch(url, {'present': True}, format='json')
@@ -138,8 +139,8 @@ def test_cell_without_flag_still_blocked(superadmin_client, group_in_debt,
 
 
 def test_admin_cannot_mark_cell_in_debt(admin_client, group_in_debt,
-                                        teacher_id_fixture):
-    lesson_id = _absent_lesson(group_in_debt, teacher_id_fixture)
+                                        teacher_id_fixture, present_classmate):
+    lesson_id = _absent_lesson(group_in_debt, teacher_id_fixture, present_classmate=present_classmate)
     url = f"{BASE_URL}/{lesson_id}/attendance/{group_in_debt['student']}"
 
     resp = admin_client.patch(url, {'present': True, 'allow_debt': True}, format='json')

@@ -186,8 +186,8 @@ class ExtraLessonCancelView(APIView):
 
 class ExtraLessonBurnView(APIView):
     """POST /api/admin/extra-lessons/:id/burn — «Сжечь» нерешённый пропуск
-    (pending → burned): создаёт burned-урок present=true, флет 200₽, списывает
-    урок с баланса. 200 | 404 | 409 (не pending) | 400 (balance<=0)."""
+    (pending → burned): создаёт burned-урок present=true (начисление движка —
+    0, сгорание не оплачивается), списывает урок с баланса. 200 | 404 | 409 (не pending) | 400 (balance<=0)."""
 
     permission_classes = [IsManagerOrAdmin]
 
@@ -229,8 +229,6 @@ class TeacherExtraLessonRecordView(APIView):
                 teacher_id=request.user.teacher_id,
                 present=v['present'],
                 record_url=v.get('record_url') or None,
-                submitted_by_token=f'acct:{request.user.id}',
-                submit_date=msk_today(),
                 request=request,
             )
         except NotTeachersAssignment as e:

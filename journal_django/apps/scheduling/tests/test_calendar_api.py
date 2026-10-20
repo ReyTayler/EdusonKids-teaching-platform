@@ -265,7 +265,7 @@ class TestExtraLessonMerge:
     occurrence-карточки, дискриминированные полем extraLessonId, в календаре
     ПОЛУЧАТЕЛЯ доп.урока (assignment.teacher_id), а не исходного учителя."""
 
-    def test_calendar_includes_extra_lesson_assignment(self, planned_setup, client_b):
+    def test_calendar_includes_extra_lesson_assignment(self, planned_setup, client_b, present_classmate):
         from apps.extra_lessons import services as extra_services
         from apps.lessons import services as lessons_services
 
@@ -301,7 +301,8 @@ class TestExtraLessonMerge:
             'lesson_date': '2099-05-01', 'group_id': group_a,
             'teacher_id': teacher_a, 'lesson_number': 1,
             'lesson_duration_minutes': 60,
-            'attendance': [{'student_id': student_id, 'present': False}],
+            'attendance': present_classmate(
+                [{'student_id': student_id, 'present': False}], group_a),
         })
         created = extra_services.create_assignment({
             'missed_lesson_id': fact['lesson_id'], 'teacher_id': teacher_b,

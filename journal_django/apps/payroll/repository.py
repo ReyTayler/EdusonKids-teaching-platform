@@ -14,7 +14,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Optional
 
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Count, DecimalField, F, Sum, Value
 from django.db.models.functions import Coalesce
 
@@ -224,6 +224,7 @@ def teacher_month_entries(teacher_id: int, date_from: str, date_to: str) -> list
         )
         .values(
             'id', 'lesson_id', 'total_students', 'present_count', 'payment', 'penalty',
+            'is_manual', 'calc_payment', 'calc_penalty', 'rule_note',
             'lesson_date', 'lesson_number', 'lesson_type', 'duration_minutes',
             'submitted_at', 'group_name', 'direction_name', 'direction_color',
         )
@@ -276,19 +277,26 @@ def update_payroll(payroll_id: int, fields: dict) -> Optional[dict]:
     Частичное обновление payroll (COALESCE-семантика). Возвращает RETURNING * или None.
 
     total_students/present_count/payment/penalty — set если значение не None.
+    Правка суммы (payment/penalty) — ручная: ставит is_manual, и пересчёт движка
+    зарплат дальше обновляет у строки только calc_* (спека 2026-10-20, §1.9).
     """
-    obj = Payroll.objects.filter(id=payroll_id).first()
-    if obj is None:
-        return None
+    with transaction.atomic():
+        # Лок строки: пересчёт (apps.payroll.recalc) держит тот же FOR UPDATE, так
+        # что правка не перемешается с ним. Пишем только изменяемые поля — полный
+        # save() вернул бы прочитанные до лока calc_*/rule_note/teacher поверх
+        # свежего пересчёта.
+        obj = Payroll.objects.select_for_update().filter(id=payroll_id).first()
+        if obj is None:
+            return None
 
-    if fields.get('total_students') is not None:
-        obj.total_students = fields['total_students']
-    if fields.get('present_count') is not None:
-        obj.present_count = fields['present_count']
-    if fields.get('payment') is not None:
-        obj.payment = fields['payment']
-    if fields.get('penalty') is not None:
-        obj.penalty = fields['penalty']
-
-    obj.save()
+        changed = []
+        for name in ('total_students', 'present_count', 'payment', 'penalty'):
+            if fields.get(name) is not None:
+                setattr(obj, name, fields[name])
+                changed.append(name)
+        if 'payment' in changed or 'penalty' in changed:
+            obj.is_manual = True
+            changed.append('is_manual')
+        if changed:
+            obj.save(update_fields=changed)
     return dictrow(Payroll.objects.filter(id=payroll_id).values(*_PAYROLL_FIELDS))

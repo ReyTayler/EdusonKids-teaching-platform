@@ -1,5 +1,8 @@
 """
-GET /api/my-payroll — зарплата преподавателя за месяц с расшифровкой.
+GET /api/my-payroll — зарплата преподавателя за месяц с пояснением строк.
+
+Пояснение — Payroll.rule_note, записанный движком зарплат (apps/payroll/engine.py);
+кабинет его только показывает, ставок не знает.
 
 Главное, что проверяем: скоуп. Эндпоинт обязан отдавать ТОЛЬКО строки того
 преподавателя, чей JWT предъявлен, и не иметь способа попросить чужие.
@@ -66,6 +69,7 @@ def make_lesson(group_fixture, teacher_id_fixture):
     def _make(
         date='2026-07-03', payment='800.00', penalty='0', total=5, present=4,
         duration=60, lesson_type='regular', teacher_id=None, number=1,
+        rule_note='', is_manual=False, calc_payment=None, calc_penalty=None,
     ):
         with connection.cursor() as cur:
             cur.execute(
@@ -78,8 +82,12 @@ def make_lesson(group_fixture, teacher_id_fixture):
             lesson_id = cur.fetchone()[0]
             cur.execute(
                 "INSERT INTO payroll (lesson_id, teacher_id, total_students, present_count, "
-                "payment, penalty) VALUES (%s, %s, %s, %s, %s, %s)",
-                [lesson_id, teacher_id or teacher_id_fixture, total, present, payment, penalty],
+                "payment, penalty, rule_note, is_manual, calc_payment, calc_penalty) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                [lesson_id, teacher_id or teacher_id_fixture, total, present, payment, penalty,
+                 rule_note, is_manual,
+                 payment if calc_payment is None else calc_payment,
+                 penalty if calc_penalty is None else calc_penalty],
             )
         created.append(lesson_id)
         return lesson_id
@@ -217,14 +225,19 @@ def test_totals_equal_sum_of_rows(client, make_lesson):
     assert body['totals']['presences'] == 6
 
 
-def test_row_carries_rule_breakdown(client, make_lesson):
-    make_lesson(date='2026-07-03', payment='800.00', total=5, present=4)
+_NOTE = 'Групповой урок · ставка по умолчанию с 01.01.2026 — 800 ₽'
+
+
+def test_row_carries_engine_rule_note(client, make_lesson):
+    """Пояснение — ровно rule_note движка, без пересчёта ставок в кабинете."""
+    make_lesson(date='2026-07-03', payment='800.00', total=5, present=4, rule_note=_NOTE)
 
     row = client.get(f'{URL}?month=2026-07').json()['rows'][0]
 
-    assert row['rule']['code'] == 'per_student'
-    assert row['rule']['text'] == '4 × 200 ₽'
-    assert row['adjusted'] is False
+    assert row['ruleNote'] == _NOTE
+    assert row['rule'] == {'code': 'calc', 'text': '800.00 ₽', 'note': _NOTE}
+    assert row['adjusted'] is False and row['isManual'] is False
+    assert (row['calcPayment'], row['calcPenalty']) == ('800.00', '0.00')
     assert row['net'] == '800.00'
 
 
@@ -238,12 +251,14 @@ def test_row_carries_group_and_direction(client, make_lesson):
 
 
 def test_penalty_is_explained(client, make_lesson):
-    make_lesson(date='2026-07-03', payment='800.00', penalty='160.00', present=4)
+    note = f'{_NOTE} · Штраф за отчёт не в день урока: 40 ₽ × 4'
+    make_lesson(date='2026-07-03', payment='800.00', penalty='160.00', present=4,
+                rule_note=note)
 
     row = client.get(f'{URL}?month=2026-07').json()['rows'][0]
 
     assert row['net'] == '640.00'
-    assert '40 ₽ × 4' in row['penaltyNote']
+    assert row['penaltyNote'] == note
 
 
 def test_no_penalty_leaves_note_empty(client, make_lesson):
@@ -253,13 +268,18 @@ def test_no_penalty_leaves_note_empty(client, make_lesson):
 
 
 def test_manual_correction_is_flagged(client, make_lesson):
-    """Админ переписал сумму руками — расшифровка не выдаёт её за формулу."""
-    make_lesson(date='2026-07-03', payment='777.00', total=5, present=4)
+    """Ручная правка (is_manual) — пояснение не выдаёт её за правило движка и
+    показывает расчётную сумму рядом."""
+    make_lesson(date='2026-07-03', payment='777.00', penalty='50.00', total=5, present=4,
+                rule_note=_NOTE, is_manual=True, calc_payment='800.00', calc_penalty='0')
 
     row = client.get(f'{URL}?month=2026-07').json()['rows'][0]
 
-    assert row['adjusted'] is True
-    assert row['rule']['code'] == 'adjusted'
+    assert row['adjusted'] is True and row['isManual'] is True
+    assert row['rule']['code'] == 'manual'
+    assert row['rule']['note'].startswith('Сумма изменена администратором · расчёт: 800.00 ₽')
+    assert (row['payment'], row['calcPayment'], row['calcPenalty']) == ('777.00', '800.00', '0.00')
+    assert row['penaltyNote'] == 'Удержание задано администратором'
 
 
 def test_excluded_students_are_explained(client, make_lesson, student_fixture):

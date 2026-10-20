@@ -32,13 +32,14 @@ def _cleanup(lesson_id):
 
 def test_regular_lesson_autocreates_pending_for_absent(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     res = services.record_lesson(
         lesson_date='2026-05-01', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-01',
-        attendance=[{'student_id': student_fixture, 'present': False}])
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == [student_fixture]
@@ -57,7 +58,6 @@ def test_present_student_gets_no_pending(
         lesson_date='2026-05-03', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-03',
         attendance=[{'student_id': student_fixture, 'present': True}])
     lesson_id = res['lesson_id']
     try:
@@ -68,6 +68,7 @@ def test_present_student_gets_no_pending(
 
 def test_delete_lesson_blocked_when_makeup_done(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Обычный урок с проведённым доп.уроком по его пропуску (makeup_done) удалить
     нельзя (409/LessonHasMakeupResolutions) — иначе ON DELETE CASCADE осиротил бы
@@ -76,8 +77,8 @@ def test_delete_lesson_blocked_when_makeup_done(
         lesson_date='2026-05-04', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-04',
-        attendance=[{'student_id': student_fixture, 'present': False}])
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         # Симулируем проведённый доп.урок: pending → makeup_done.
@@ -102,6 +103,7 @@ def test_delete_lesson_blocked_when_makeup_done(
 @pytest.mark.parametrize('status', ['makeup_done', 'burned'])
 def test_attendance_toggle_to_present_blocked_when_compensated(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture, status,
+    present_classmate,
 ):
     """Critical-гард: нельзя вручную флипнуть исходную ячейку пропуска в present=true,
     если пропуск уже компенсирован (makeup_done) или сожжён (burned) — иначе урок
@@ -110,8 +112,8 @@ def test_attendance_toggle_to_present_blocked_when_compensated(
         lesson_date='2026-05-06', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-06',
-        attendance=[{'student_id': student_fixture, 'present': False}])
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         with connection.cursor() as cur:
@@ -135,6 +137,7 @@ def test_attendance_toggle_to_present_blocked_when_compensated(
 
 def test_delete_lesson_blocked_when_burned(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Обычный урок со сгоревшим пропуском (burned) удалить нельзя
     (409/LessonHasMakeupResolutions) — иначе ON DELETE CASCADE осиротил бы
@@ -143,8 +146,8 @@ def test_delete_lesson_blocked_when_burned(
         lesson_date='2026-05-05', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-05',
-        attendance=[{'student_id': student_fixture, 'present': False}])
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         # Симулируем сгорание: pending → burned.
@@ -168,13 +171,14 @@ def test_delete_lesson_blocked_when_burned(
 
 def test_extra_lesson_does_not_autocreate(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     res = services.record_lesson(
         lesson_date='2026-05-02', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='extra', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-02',
-        attendance=[{'student_id': student_fixture, 'present': False}])
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == []  # extra не порождает pending
@@ -185,6 +189,7 @@ def test_extra_lesson_does_not_autocreate(
 @pytest.mark.parametrize('lesson_type', ['substitution', 'reschedule'])
 def test_course_lesson_types_autocreate_pending(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture, lesson_type,
+    present_classmate,
 ):
     """Замена и перенос — такие же занятия курса, как regular: пропуск на них
     обязан вставать в очередь «ждёт решения».
@@ -197,8 +202,8 @@ def test_course_lesson_types_autocreate_pending(
         lesson_date='2026-05-07', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type=lesson_type, record_url=None, submitted_by_token='t',
-        submit_date='2026-05-07',
-        attendance=[{'student_id': student_fixture, 'present': False}])
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == [student_fixture]
@@ -209,6 +214,7 @@ def test_course_lesson_types_autocreate_pending(
 @pytest.mark.parametrize('lesson_type', ['regular', 'substitution', 'reschedule'])
 def test_unpaid_skip_never_autocreates_on_any_course_type(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture, lesson_type,
+    present_classmate,
 ):
     """«Неоплачиваемый пропуск» — терминальный прощённый исход (перевод / начал не
     с 1-го урока): отработка не требуется, заявка НЕ создаётся. Расширение гейта на
@@ -223,9 +229,9 @@ def test_unpaid_skip_never_autocreates_on_any_course_type(
         lesson_date='2026-05-08', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type=lesson_type, record_url=None, submitted_by_token='t',
-        submit_date='2026-05-08',
         # Приходит «пришёл» — маркер обязан переписать исход в неоплачиваемый пропуск.
-        attendance=[{'student_id': student_fixture, 'present': True}])
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': True}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         with connection.cursor() as cur:
@@ -241,6 +247,7 @@ def test_unpaid_skip_never_autocreates_on_any_course_type(
 
 def test_flip_to_absent_autocreates_pending(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Ретроактивное снятие present (админ правит ячейку задним числом) ставит
     пропуск в очередь. Прежде pending создавался ТОЛЬКО в момент записи урока,
@@ -249,8 +256,9 @@ def test_flip_to_absent_autocreates_pending(
         lesson_date='2026-05-09', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-09',
-        attendance=[{'student_id': student_fixture, 'present': True}])
+        # Одноклассник пришёл: снять отметку с последнего пришедшего нельзя (§1.2).
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': True}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == []          # пришёл — заявки нет
@@ -265,6 +273,7 @@ def test_flip_to_absent_autocreates_pending(
 
 def test_flip_to_absent_does_not_autocreate_for_unpaid_skip_cell(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Ячейка, помеченная «неоплачиваемым пропуском», заявку не порождает и при
     ретро-правке: исход терминальный, отработка не требуется."""
@@ -272,8 +281,9 @@ def test_flip_to_absent_does_not_autocreate_for_unpaid_skip_cell(
         lesson_date='2026-05-10', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-10',
-        attendance=[{'student_id': student_fixture, 'present': True}])
+        # Одноклассник пришёл: снять отметку с последнего пришедшего нельзя (§1.2).
+        attendance=present_classmate(
+            [{'student_id': student_fixture, 'present': True}], group_fixture))
     lesson_id = res['lesson_id']
     try:
         services.set_unpaid_skip(lesson_id, student_fixture, True)
@@ -345,23 +355,24 @@ def _count_for_lesson(lesson_id):
         return cur.fetchone()[0]
 
 
-def _record(group_id, teacher_id, student_id, date, attendance=None, number=1):
+def _record(group_id, teacher_id, student_id, date, attendance=None, number=1, present_classmate=None):
     return services.record_lesson(
         lesson_date=date, teacher_id=teacher_id, group_id=group_id,
         original_teacher_id=None, lesson_number=number, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date=date,
-        attendance=attendance or [{'student_id': student_id, 'present': False}])
+        attendance=present_classmate(
+            attendance or [{'student_id': student_id, 'present': False}], group_id))
 
 
 def test_scheduled_extra_adopted_instead_of_second_pending(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Главный случай: доп.урок назначен заранее за урок №1, урок проводится,
     ученика нет. Второй записи по этому пропуску быть не должно — назначение
     само становится отработкой ЭТОГО урока."""
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1)
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-10')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-10', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         # Никакого нового pending: по пропуску ровно одна запись — та самая,
@@ -386,13 +397,14 @@ def test_scheduled_extra_adopted_instead_of_second_pending(
 
 def test_conducted_extra_adopted(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Доп.урок могли ПРОВЕСТИ раньше пропущенного занятия. Тогда усыновляем уже
     закрытую запись: списание остаётся одно, а пропуск сразу помечен
     компенсированным (иначе появился бы pending и второе списание)."""
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1,
                       status='makeup_done')
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-11')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-11', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == []
@@ -407,11 +419,12 @@ def test_conducted_extra_adopted(
 
 def test_extra_for_other_number_not_adopted(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Доп.урок назначен за ДРУГОЙ урок — к этому пропуску отношения не имеет:
     остаётся сверх курса, а пропуск встаёт в очередь как обычно."""
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 2)
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-12')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-12', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == [student_fixture]
@@ -425,11 +438,12 @@ def test_extra_for_other_number_not_adopted(
 
 def test_extra_without_target_number_not_adopted(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Доп.урок без указания «за какой урок» — свободное занятие сверх курса,
     привязывать его к первому попавшемуся пропуску нельзя."""
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, None)
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-13')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-13', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == [student_fixture]
@@ -442,6 +456,7 @@ def test_extra_without_target_number_not_adopted(
 def test_extra_of_other_group_not_adopted(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
     direction_fixture,
+    present_classmate,
 ):
     """Номер урока совпал, но доп.урок назначен в ДРУГОЙ группе — усыновлять
     нельзя: нумерация уроков сквозная внутри группы, а не по школе."""
@@ -454,7 +469,7 @@ def test_extra_of_other_group_not_adopted(
             """, [direction_fixture, teacher_id_fixture])
         other_group = cur.fetchone()[0]
     rid = _make_extra(other_group, student_fixture, teacher_id_fixture, 1)
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-14')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-14', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == [student_fixture]
@@ -468,13 +483,14 @@ def test_extra_of_other_group_not_adopted(
 
 def test_extra_not_adopted_for_unpaid_skip(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """«Неоплачиваемый пропуск» — терминальный прощённый исход: отработки не
     требует, поэтому и назначенный доп.урок к нему не привязывается."""
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1)
     res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-16',
                   attendance=[{'student_id': student_fixture, 'present': False,
-                               'unpaid_skip': True}])
+                               'unpaid_skip': True}], present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert _pending_students(lesson_id) == []
@@ -486,13 +502,14 @@ def test_extra_not_adopted_for_unpaid_skip(
 
 def test_only_one_duplicate_extra_adopted(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Два доп.урока за один и тот же номер раздел создать позволяет (UNIQUE их
     не ловит: missed_lesson=NULL, а NULL в Postgres не конфликтуют). Усыновить
     можно только ОДИН — второй нарушил бы UNIQUE(missed_lesson, student)."""
     first = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1)
     second = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1)
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-17')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-17', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert sorted([_resolution(first)['kind'], _resolution(second)['kind']]) == \
@@ -509,6 +526,7 @@ def test_only_one_duplicate_extra_adopted(
 
 def test_retro_absence_adopts_extra(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Ретро-правка: урок записали с «был», позже отметку сняли. Пропуск встаёт
     в очередь тем же путём (_autocreate_pending_for_cell), значит и усыновление
@@ -518,7 +536,7 @@ def test_retro_absence_adopts_extra(
     назначенный за этот урок доп.урок (drop_extra_for_present_students), поэтому
     созданное заранее до проверки бы не дожило."""
     res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-18',
-                  attendance=[{'student_id': student_fixture, 'present': True}])
+                  attendance=[{'student_id': student_fixture, 'present': True}], present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1)
     try:
@@ -535,12 +553,13 @@ def test_retro_absence_adopts_extra(
 
 def test_adoption_idempotent(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Повторный проход по тому же уроку (ретро-флипы туда-обратно) не плодит
     записей и не сбрасывает уже усыновлённое назначение обратно в pending."""
     from apps.extra_lessons import services as el
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1)
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-19')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-19', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         el.autocreate_pending_for_lesson(lesson_id, [student_fixture])
@@ -564,12 +583,13 @@ def test_adoption_idempotent(
 
 def test_present_student_extra_deleted(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Ученик пришёл на урок, за который заранее назначен доп.урок → назначение
     снято."""
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1)
     res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-20',
-                  attendance=[{'student_id': student_fixture, 'present': True}])
+                  attendance=[{'student_id': student_fixture, 'present': True}], present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert _resolution(rid) is None
@@ -580,11 +600,12 @@ def test_present_student_extra_deleted(
 
 def test_extra_for_other_number_survives_when_present(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Доп.урок за ДРУГОЙ урок к этому занятию отношения не имеет — не трогаем."""
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 2)
     res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-21',
-                  attendance=[{'student_id': student_fixture, 'present': True}])
+                  attendance=[{'student_id': student_fixture, 'present': True}], present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         r = _resolution(rid)
@@ -597,6 +618,7 @@ def test_extra_for_other_number_survives_when_present(
 def test_extra_of_other_group_survives_when_present(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
     direction_fixture,
+    present_classmate,
 ):
     """Совпал только номер, группа другая — не трогаем."""
     with connection.cursor() as cur:
@@ -609,7 +631,7 @@ def test_extra_of_other_group_survives_when_present(
         other_group = cur.fetchone()[0]
     rid = _make_extra(other_group, student_fixture, teacher_id_fixture, 1)
     res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-22',
-                  attendance=[{'student_id': student_fixture, 'present': True}])
+                  attendance=[{'student_id': student_fixture, 'present': True}], present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert _resolution(rid) is not None
@@ -622,6 +644,7 @@ def test_extra_of_other_group_survives_when_present(
 
 def test_conducted_extra_survives_when_present(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """ПРОВЕДЁННЫЙ доп.урок не снимается никогда: за ним стоит факт-урок и
     Payroll, удаление резолюции осиротило бы их. Занятие состоялось сверх курса —
@@ -629,7 +652,7 @@ def test_conducted_extra_survives_when_present(
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1,
                       status='makeup_done')
     res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-23',
-                  attendance=[{'student_id': student_fixture, 'present': True}])
+                  attendance=[{'student_id': student_fixture, 'present': True}], present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         r = _resolution(rid)
@@ -641,10 +664,11 @@ def test_conducted_extra_survives_when_present(
 
 def test_retro_present_deletes_extra(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Тот же исход при простановке «был» задним числом: правило одно на оба
     пути, кто именно отметил присутствие — значения не имеет."""
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-24')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-24', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     # Назначение заводим ПОСЛЕ записи урока напрямую (минуя роутинг раздела,
     # который при существующем уроке увёл бы его в makeup) — так в базе
@@ -660,13 +684,14 @@ def test_retro_present_deletes_extra(
 
 def test_free_lesson_counts_as_present_for_drop(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """«Бесплатное занятие» — это present=true: ученик на уроке был, значит
     основание доп.урока исчезло ровно так же."""
     rid = _make_extra(group_fixture, student_fixture, teacher_id_fixture, 1)
     res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-25',
                   attendance=[{'student_id': student_fixture, 'present': True,
-                               'is_free': True}])
+                               'is_free': True}], present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         assert _resolution(rid) is None
@@ -692,7 +717,6 @@ def test_lesson_full_reports_compensated_for_student_without_attendance_row(
         lesson_date='2026-05-07', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='t',
-        submit_date='2026-05-07',
         attendance=[{'student_id': student_fixture, 'present': True}])
     lesson_id = res['lesson_id']
     late_id = None
@@ -732,12 +756,13 @@ def test_lesson_full_reports_compensated_for_student_without_attendance_row(
 @pytest.mark.parametrize('status', ['pending', 'waived'])
 def test_retro_present_drops_undecided_resolution(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture, status,
+    present_classmate,
 ):
     """Инцидент ВДГ18 (урок №32, 2026-09-19): ячейку исправили на «был», а
     заявка на пропуск осталась в «Доп.уроках» — её потом сожгли, урок учёлся
     дважды. Пропуска больше нет → заявка без факта и денег (pending/waived)
     удаляется в той же транзакции, что и флип."""
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-26')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-26', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         with connection.cursor() as cur:
@@ -751,10 +776,11 @@ def test_retro_present_drops_undecided_resolution(
 
 def test_retro_present_blocked_when_makeup_scheduled(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """За назначенным доп.уроком стоят преподаватель и время — снимать его молча
     нельзя. Отметка отклоняется, ячейка и назначение не меняются."""
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-27')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-27', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         with connection.cursor() as cur:
@@ -778,10 +804,11 @@ def test_retro_present_blocked_when_makeup_scheduled(
 
 def test_retro_present_then_absent_recreates_pending(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     """Туда-обратно: «был» удалил заявку, повторное «не был» заводит её заново —
     ровно одну."""
-    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-28')
+    res = _record(group_fixture, teacher_id_fixture, student_fixture, '2026-05-28', present_classmate=present_classmate)
     lesson_id = res['lesson_id']
     try:
         services.update_attendance_cell(lesson_id, student_fixture, True)

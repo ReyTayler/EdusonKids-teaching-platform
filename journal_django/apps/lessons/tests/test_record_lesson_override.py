@@ -47,7 +47,7 @@ def test_normal_path_still_blocked(group_in_debt):
             lesson_date='2026-06-29', teacher_id=None, group_id=group_in_debt['group'],
             original_teacher_id=None, lesson_number=Decimal('1'),
             lesson_duration_minutes=60, lesson_type='regular', record_url=None,
-            submitted_by_token='__t__', submit_date='2026-06-29',
+            submitted_by_token='__t__', 
             attendance=[{'student_id': group_in_debt['student'], 'present': True}],
         )
 
@@ -88,16 +88,44 @@ def test_refuses_when_lesson_already_exists(group_in_debt):
 
 
 def test_absent_student_marked_absent(group_in_debt):
+    # Второй ученик пришёл: урок без присутствующих команда не записывает.
+    with connection.cursor() as cur:
+        cur.execute("INSERT INTO students (full_name) VALUES ('__override_mate__') RETURNING id")
+        mate_id = cur.fetchone()[0]
+        cur.execute('INSERT INTO group_memberships (group_id, student_id, lessons_done, active) '
+                    'VALUES (%s, %s, 0, true) RETURNING id', [group_in_debt['group'], mate_id])
+        mate_membership = cur.fetchone()[0]
+    try:
+        _check_absent_marked_absent(group_in_debt)
+    finally:
+        with connection.cursor() as cur:
+            cur.execute('DELETE FROM lesson_attendance WHERE student_id = %s', [mate_id])
+            cur.execute('DELETE FROM group_memberships WHERE id = %s', [mate_membership])
+            cur.execute('DELETE FROM students WHERE id = %s', [mate_id])
+
+
+def _check_absent_marked_absent(group_in_debt):
     call_command('record_lesson_override', '--group', str(group_in_debt['group']),
                  '--date', '2026-06-29', '--absent', str(group_in_debt['student']), '--apply')
     lesson_id = Lesson.objects.filter(group_id=group_in_debt['group']).values_list(
         'id', flat=True).first()
     with connection.cursor() as cur:
-        cur.execute('SELECT present FROM lesson_attendance WHERE lesson_id = %s', [lesson_id])
+        cur.execute('SELECT present FROM lesson_attendance WHERE lesson_id = %s '
+                    'AND student_id = %s', [lesson_id, group_in_debt['student']])
         assert cur.fetchone()[0] is False
         cur.execute('SELECT lessons_done FROM group_memberships WHERE id = %s',
                     [group_in_debt['membership']])
         assert cur.fetchone()[0] == Decimal('0.0'), 'отсутствовавшему прогресс не идёт'
+
+
+def test_all_absent_is_refused(group_in_debt):
+    """Все в --absent — это перенос/отмена, а не занятие (спека 2026-10-20 §1.2):
+    команда отказывает понятной ошибкой и ничего не пишет."""
+    with pytest.raises(CommandError, match='без присутствующих'):
+        call_command('record_lesson_override', '--group', str(group_in_debt['group']),
+                     '--date', '2026-06-29', '--absent', str(group_in_debt['student']),
+                     '--apply')
+    assert not Lesson.objects.filter(group_id=group_in_debt['group']).exists()
 
 
 def test_unknown_group_fails(group_in_debt):

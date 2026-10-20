@@ -124,3 +124,6 @@ def _lessons_done(group_id: int, student_id: int):
 @pytest.fixture
 def lessons_done():
     return _lessons_done
+
+
+

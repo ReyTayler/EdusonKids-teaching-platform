@@ -23,6 +23,7 @@ from rest_framework.views import APIView
 from apps.core.permissions import IsManagerOrAdmin
 from apps.groups import services
 from apps.lessons import services as lessons_services
+from apps.lessons.exceptions import LessonWithoutPresentStudents
 from apps.groups.exceptions import ImmutableGroupFormat
 from apps.groups.serializers import (
     GroupReadSerializer, GroupUpdateSerializer, GroupWriteSerializer,
@@ -215,7 +216,12 @@ class GroupLessonSkipView(APIView):
             raise ValidationError({'error': 'student_id, lesson_number, value required'})
         # В журнал ИБ не пишем — доменное действие покрыто «Журналом изменений»
         # (правило group.lesson_skip в apps/changelog/labels.py).
-        lessons_services.set_lesson_skip(pk, student_id, lesson_number, value)
+        try:
+            lessons_services.set_lesson_skip(pk, student_id, lesson_number, value)
+        except LessonWithoutPresentStudents as e:
+            # Пометка на проведённом уроке сняла бы последнего пришедшего (§1.2
+            # спеки 2026-10-20) — отказ, пометка слота откатывается вместе с ним.
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'ok': True})
 
 

@@ -38,6 +38,7 @@ from django.db import transaction
 
 from apps.groups.models import Group
 from apps.lessons import services
+from apps.lessons.exceptions import LessonWithoutPresentStudents
 from apps.lessons.models import Lesson
 from apps.memberships.models import GroupMembership
 from apps.students.models import Student
@@ -120,20 +121,23 @@ class Command(BaseCommand):
                 method='COMMAND',
                 note='Занятие записано вручную, невзирая на отрицательный баланс',
             ):
-                result = services.record_lesson(
-                    lesson_date=date_str,
-                    teacher_id=group['teacher_id'],
-                    group_id=group_id,
-                    original_teacher_id=None,
-                    lesson_number=lesson_number,
-                    lesson_duration_minutes=group['lesson_duration_minutes'],
-                    lesson_type='regular',
-                    record_url=None,
-                    submitted_by_token='manual-override',
-                    submit_date=date_str,
-                    attendance=attendance,
-                    skip_balance_check=True,
-                )
+                try:
+                    result = services.record_lesson(
+                        lesson_date=date_str,
+                        teacher_id=group['teacher_id'],
+                        group_id=group_id,
+                        original_teacher_id=None,
+                        lesson_number=lesson_number,
+                        lesson_duration_minutes=group['lesson_duration_minutes'],
+                        lesson_type='regular',
+                        record_url=None,
+                        submitted_by_token='manual-override',
+                        attendance=attendance,
+                        skip_balance_check=True,
+                    )
+                except LessonWithoutPresentStudents as exc:
+                    # Все в --absent: это перенос/отмена, а не занятие.
+                    raise CommandError(str(exc)) from exc
 
             lesson = Lesson.objects.filter(id=result['lesson_id']).values(
                 'id', 'lesson_number', 'lesson_date').first()

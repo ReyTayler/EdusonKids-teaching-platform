@@ -23,16 +23,14 @@ from apps.lessons import repository as lessons_repository
 from apps.lessons.exceptions import AttendanceCompensatedElsewhere, AttendanceHasScheduledMakeup
 from apps.lessons.models import Lesson
 from apps.memberships.models import GroupMembership
-from apps.payroll.calculator import (
-    calculate_extra_lesson_payment, calculate_payment, calculate_penalty,
-)
 from apps.payroll.models import Payroll
 from apps.students.models import Student
 from apps.teachers.models import Teacher
 
-# insert_payroll (apps.lessons.repository) принимает ровно этот набор полей —
-# переиспользуем его вместо повторной ORM-вставки Payroll здесь (единственное
-# отличие доп.урока — ОТКУДА берутся payment/penalty, см. record() ниже).
+# Зарплату за факт доп.урока/сгорания начисляет движок «Мотивации» через
+# apps.lessons.repository.recalculate_payroll — тот же путь, что у обычного
+# урока (спека 2026-10-20-eduson-motivation-payroll-design: доп.урок — обычный
+# урок формата группы, сгорание — 0). Своих ставок здесь нет.
 
 
 # Доменные действия доп.уроков в журнал ИБ (security_audit_log) НЕ пишутся: он
@@ -378,8 +376,6 @@ def record(
     teacher_id: int,
     present: bool,
     record_url: Optional[str],
-    submitted_by_token: str,
-    submit_date: str,
     request,
 ) -> Optional[dict]:
     """
@@ -387,10 +383,13 @@ def record(
       1. Lesson(lesson_type='extra') — group/lesson_number/длительность унаследованы
          от ПРОПУЩЕННОГО урока (длительность = вес потребления исходного занятия),
          teacher — от резолюции.
-      2. LessonAttendance ученика этой резолюции (present, как отметил учитель).
-      3. Payroll — payment=200×present (calculate_extra_lesson_payment),
-         penalty — та же формула просрочки, что у обычных уроков.
-      4. Если present — инкремент group_memberships.lessons_done в группе
+      2. LessonAttendance ученика этой резолюции (present=true — неявку
+         записать нельзя, см. блокер ниже).
+      3. Payroll — движком зарплат (recalculate_payroll): ставка формата группы
+         факта, как у обычного урока; штраф за поздний отчёт — только уроку с
+         токеном кабинета 'acct:…', у факта доп.урока токен свой (extra:/makeup:),
+         поэтому штрафа нет.
+      4. Инкремент group_memberships.lessons_done в группе
          пропуска на вес исходного урока. Потребление баланса идёт от САМОГО факта
          доп.урока (present=true), а ИСХОДНЫЙ пропуск остаётся present=false.
       5. AbsenceResolution → status=makeup_done, fact_lesson=новый Lesson.
@@ -419,15 +418,7 @@ def record(
     if not present:
         raise AbsentStudentNotRecordable()
 
-    if present:
-        lessons_repository.assert_students_paid([full['student_id']])
-
-    present_count = 1 if present else 0
-    # payment считается ниже, внутри atomic — зависит от kind/длительности/индива
-    # факта, которые известны только после блокировки резолюции.
-    penalty = calculate_penalty(
-        full['scheduled_date'].isoformat(), submit_date, present_count,
-    )
+    lessons_repository.assert_students_paid([full['student_id']])
 
     with transaction.atomic():
         # Авторитетная проверка статуса под блокировкой строки — гонка двух
@@ -477,18 +468,6 @@ def record(
             # статуса резолюции, а не этот индекс (см. lock_for_record).
             fact_token = f'makeup:{resolution_id}'
 
-        # Оплата: доп.урок СВЕРХ курса (kind='extra') для ИНДИВ-группы — это по сути
-        # обычное индивидуальное занятие, поэтому платится по стандартной ставке
-        # (45 мин → 250, полный → 500; calculate_payment с total=1). Отработка
-        # пропуска (makeup) и extra в обычной группе остаются плоскими 200
-        # (calculate_extra_lesson_payment). Решение пользователя 2026-07-24.
-        if locked['kind'] == EXTRA and Group.objects.filter(
-                id=fact_group_id, is_individual=True).exists():
-            payment = calculate_payment(
-                total=1, present=present_count, is_half=(fact_duration == 45))
-        else:
-            payment = calculate_extra_lesson_payment(present_count)
-
         lesson_id = lessons_repository.insert_lesson({
             'lesson_date': locked['scheduled_date'].isoformat(),
             'teacher_id': teacher_id,
@@ -501,40 +480,34 @@ def record(
             'submitted_by_token': fact_token,
         })
         lessons_repository.insert_attendance(
-            lesson_id, [{'student_id': locked['student_id'], 'present': present}],
+            lesson_id, [{'student_id': locked['student_id'], 'present': True}],
         )
-        lessons_repository.insert_payroll({
-            'lesson_id': lesson_id,
-            'teacher_id': teacher_id,
-            'total_students': 1,
-            'present_count': present_count,
-            'payment': payment,
-            'penalty': penalty,
-        })
-        if present:
-            # Потребление идёт от самого факта доп.урока (present=true, вес =
-            # длительность факта). Двигаем lessons_done группы факта на этот вес
-            # (как record_lesson). Для makeup исходный пропуск остаётся present=false.
-            step = _step(fact_duration)
-            lessons_repository.increment_lessons_done(
-                fact_group_id, [locked['student_id']], step,
-            )
-            # Доп.урок двигает авто-стадию «Продлений» (как обычный урок в record_lesson).
-            direction_id = Group.objects.filter(
-                id=fact_group_id).values_list('direction_id', flat=True).first()
-            transaction.on_commit(
-                lambda: lessons_repository.sync_renewal_stage(locked['student_id'], direction_id))
+        pay = lessons_repository.recalculate_payroll(lesson_id)
+        # Потребление идёт от самого факта доп.урока (present=true, вес =
+        # длительность факта). Двигаем lessons_done группы факта на этот вес
+        # (как record_lesson). Для makeup исходный пропуск остаётся present=false.
+        step = _step(fact_duration)
+        lessons_repository.increment_lessons_done(
+            fact_group_id, [locked['student_id']], step,
+        )
+        # Доп.урок двигает авто-стадию «Продлений» (как обычный урок в record_lesson).
+        direction_id = Group.objects.filter(
+            id=fact_group_id).values_list('direction_id', flat=True).first()
+        transaction.on_commit(
+            lambda: lessons_repository.sync_renewal_stage(locked['student_id'], direction_id))
         repository.mark_makeup_done(resolution_id, fact_lesson_id=lesson_id)
 
-    return {'lesson_id': lesson_id, 'payment': payment, 'penalty': penalty}
+    return {'lesson_id': lesson_id, 'payment': pay['payment'], 'penalty': pay['penalty']}
 
 
 def _burn_payment_teacher_id(missed_lesson) -> int:
-    """Флет-надбавку за сгорание получает преподаватель пропущенного урока. Если
-    он уволен (Teacher.active=False) — надбавка уходит ТЕКУЩЕМУ преподавателю
-    группы (Group.teacher_id), но только если тот сам активен: уволенному платить
-    нельзя. Если активной альтернативы нет — остаётся исходный (не допускаем NULL
-    teacher_id в Payroll; крайний вырожденный случай)."""
+    """Преподаватель факта сгорания (и его строки Payroll): преподаватель
+    пропущенного урока. Если он уволен (Teacher.active=False) — ТЕКУЩИЙ
+    преподаватель группы (Group.teacher_id), но только если тот сам активен.
+    Если активной альтернативы нет — остаётся исходный (не допускаем NULL
+    teacher_id в Payroll; крайний вырожденный случай). Сумма сгорания по
+    правилам движка — 0 (спека 2026-10-20 §1.10); выбор сохранён, чтобы при
+    пересмотре правила владельцем начисление ушло тому же человеку, что раньше."""
     active = Teacher.objects.filter(
         id=missed_lesson.teacher_id).values_list('active', flat=True).first()
     if active:
@@ -552,9 +525,10 @@ def burn(resolution_id: int, *, request, burn_date: str) -> Optional[dict]:
     создаёт отдельную запись-урок Lesson(lesson_type='burned') present=true для
     ученика, дата=burn_date (сегодня), длительность=ИСХОДНОГО урока (вес
     потребления, half-lesson 45→0.5), teacher=преподаватель пропущенного урока
-    (уволенному — текущему преп. группы, см. _burn_payment_teacher_id). Флет
-    payment=200 (calculate_extra_lesson_payment), penalty=0 (админское действие,
-    submit_date==lesson_date). Урок списывается с баланса штатно (present=true на
+    (уволенному — текущему преп. группы, см. _burn_payment_teacher_id).
+    Начисление — движком зарплат: сгорание не оплачивается (0, «Сгорание — не
+    оплачивается», спека §1.10); строка Payroll заводится ради единообразия
+    учёта (как у любого факта). Урок списывается с баланса штатно (present=true на
     burned-факте в свою дату); ИСХОДНЫЙ пропуск остаётся present=false.
 
     None → резолюции нет (view → 404). ValueError → не в статусе pending
@@ -570,9 +544,6 @@ def burn(resolution_id: int, *, request, burn_date: str) -> Optional[dict]:
 
     # Нельзя сжечь урок ученику без оплаченного остатка (нечего сжигать).
     lessons_repository.assert_students_paid([full['student_id']])
-
-    payment = calculate_extra_lesson_payment(1)
-    penalty = 0  # админское действие: submit_date == lesson_date
 
     with transaction.atomic():
         # Авторитетная проверка статуса под блокировкой строки — гонка двух
@@ -603,14 +574,7 @@ def burn(resolution_id: int, *, request, burn_date: str) -> Optional[dict]:
         lessons_repository.insert_attendance(
             lesson_id, [{'student_id': locked['student_id'], 'present': True}],
         )
-        lessons_repository.insert_payroll({
-            'lesson_id': lesson_id,
-            'teacher_id': payment_teacher_id,
-            'total_students': 1,
-            'present_count': 1,
-            'payment': payment,
-            'penalty': penalty,
-        })
+        pay = lessons_repository.recalculate_payroll(lesson_id)
         step = _step(missed_lesson.lesson_duration_minutes)
         lessons_repository.increment_lessons_done(
             locked['missed_lesson_group_id'], [locked['student_id']], step,
@@ -623,7 +587,7 @@ def burn(resolution_id: int, *, request, burn_date: str) -> Optional[dict]:
             lambda: lessons_repository.sync_renewal_stage(locked['student_id'], direction_id))
         repository.mark_burned(resolution_id, fact_lesson_id=lesson_id)
 
-    return {'lesson_id': lesson_id, 'payment': payment}
+    return {'lesson_id': lesson_id, 'payment': pay['payment']}
 
 
 def delete_resolution(resolution_id: int, request) -> bool:
@@ -696,7 +660,9 @@ def delete_fact(resolution_id: int, request) -> bool:
             raise ValueError('Удалить факт можно только у проведённого доп.урока или сгорания.')
 
         fact_lesson_id = locked['fact_lesson_id']
-        fact = Lesson.objects.get(id=fact_lesson_id)
+        # Лок факта-урока до удаления его Payroll: порядок «урок → деньги», как у
+        # пересчёта зарплаты (apps.payroll.recalc) — без дедлока с ним.
+        fact = Lesson.objects.select_for_update().get(id=fact_lesson_id)
         present_ids = list(
             fact.attendance.filter(present=True).values_list('student_id', flat=True)
         )

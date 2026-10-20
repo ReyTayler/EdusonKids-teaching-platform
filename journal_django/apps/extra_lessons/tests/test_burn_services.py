@@ -78,7 +78,7 @@ def test_has_active_resolution_true_for_burned(absence_pending):
 
 # --- Task 3: сервис burn() -------------------------------------------------
 
-def test_burn_creates_burned_fact(absence_pending):
+def test_burn_creates_burned_fact(absence_pending, payroll_rates):
     student_id = absence_pending.student_id
     missed = Lesson.objects.get(id=absence_pending.missed_lesson_id)
 
@@ -92,17 +92,19 @@ def test_burn_creates_burned_fact(absence_pending):
     # вес списания = длительность ИСХОДНОГО урока (60), не операционная.
     assert fact.lesson_duration_minutes == missed.lesson_duration_minutes == 60
     assert fact.lesson_number == missed.lesson_number
-    # преподаватель пропущенного урока (активен) — получатель надбавки.
+    # преподаватель пропущенного урока (активен) — преподаватель факта.
     assert fact.teacher_id == missed.teacher_id
     # present=true на burned-факте; ИСХОДНЫЙ пропуск ОСТАЁТСЯ present=false.
     assert LessonAttendance.objects.get(
         lesson_id=fact.id, student_id=student_id).present is True
     assert LessonAttendance.objects.get(
         lesson_id=missed.id, student_id=student_id).present is False
-    # флет 200, penalty 0.
+    # Сгорание не оплачивается (спека 2026-10-20 §1.10): 0 даже при действующих
+    # ставках, правило названо в rule_note.
     pr = Payroll.objects.get(lesson_id=fact.id)
-    assert pr.payment == 200 and pr.penalty == 0 and pr.teacher_id == missed.teacher_id
-    assert res['payment'] == 200 and res['lesson_id'] == fact.id
+    assert pr.payment == 0 and pr.penalty == 0 and pr.teacher_id == missed.teacher_id
+    assert pr.rule_note == 'Сгорание — не оплачивается'
+    assert res['payment'] == 0 and res['lesson_id'] == fact.id
 
 
 def test_burn_requires_pending(absence_pending):

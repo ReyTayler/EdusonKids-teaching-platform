@@ -10,6 +10,13 @@ Root conftest.py — центральные JWT-фикстуры для API-те
   - admin_client → APIClient с JWT для свежесозданного admin-аккаунта
   - manager_client → APIClient с JWT для свежесозданного manager-аккаунта
   - teacher_client → APIClient с JWT для свежесозданного teacher-аккаунта
+  - superadmin_client → APIClient с JWT для superadmin
+  - payment_balance_guard_on / _off → включить/выключить гард оплат
+  - payroll_rates → версия ставок зарплаты на любую дату (групповой 500,
+    индивидуальный 700, отмена 50 %, штраф выключен) — без неё движок
+    начисляет 0 «нет ставки»
+  - present_classmate → помощник (attendance, group_id) → attendance +
+    пришедший одноклассник: урок без присутствующих не записывается
 
 CSRF в тестах: CookieJWTAuthentication._enforce_csrf уважает
 request._dont_enforce_csrf_checks. DRF APIClient c enforce_csrf_checks=False
@@ -186,3 +193,87 @@ def payment_balance_guard_off(settings):
     """Явно выключить гард оплат (режим Eduson) — для тестов выключенного режима,
     чтобы они не зависели от значения в окружении разработчика."""
     settings.PAYMENT_BALANCE_GUARD = False
+
+
+# ---------------------------------------------------------------------------
+# Ставки зарплаты (apps/payroll: движок «Мотивации»)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def payroll_rates(db):
+    """Версия ставок школы, действующая на любую дату тестов: групповой урок 500,
+    индивидуальный 700, отмена — 50 % от ставки, штраф выключен.
+
+    Без версии движок начисляет 0 с пометкой «нет ставки» (спека §1.5) — тесты,
+    проверяющие сумму за урок, подключают фикстуру явно (как
+    payment_balance_guard_on). Чужие версии из общей тестовой БД убираем внутри
+    транзакции теста: иначе более поздняя версия перехватила бы выбор
+    «действующей на дату». Тест, которому важен штраф, правит возвращённую
+    версию (penalty_enabled/…) и сохраняет её до записи урока.
+    """
+    import datetime
+    from decimal import Decimal
+
+    from apps.payroll.models import PayRateVersion
+
+    PayRateVersion.objects.all().delete()
+    return PayRateVersion.objects.create(
+        effective_from=datetime.date(2000, 1, 1), group_rate=Decimal('500'),
+        individual_rate=Decimal('700'), cancel_mode='percent', cancel_value=Decimal('50'),
+        penalty_enabled=False,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Пришедший одноклассник для записи урока
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def present_classmate(db):
+    """
+    Помощник present_classmate(attendance, group_id) → attendance + пришедший
+    одноклассник (новый ученик группы с оплатой — проходит и включённый гард
+    оплат).
+
+    Для тестов, которые пишут урок ради ОТСУТСТВИЯ основного ученика (пропуск,
+    pending-резолюция, неоплачиваемый пропуск): урок без единого присутствующего
+    ядро не записывает (спека 2026-10-20-eduson-motivation-payroll-design, §1.2).
+
+    Заведённых одноклассников фикстура убирает в своём teardown — до закрытия
+    тестовой транзакции: фикстуры приложений удаляют группы/направления сырым
+    DELETE, и при проверке отложенных внешних ключей в конце теста оставшиеся
+    членство и оплата одноклассника на них бы упали.
+    """
+    created: list[int] = []
+
+    def add(attendance: list[dict], group_id: int) -> list[dict]:
+        with connection.cursor() as cur:
+            cur.execute("INSERT INTO students (full_name) VALUES ('__test_classmate__') "
+                        "RETURNING id")
+            student_id = cur.fetchone()[0]
+            created.append(student_id)
+            cur.execute(
+                'INSERT INTO group_memberships (group_id, student_id, lessons_done, active) '
+                'VALUES (%s, %s, 0, true)',
+                [group_id, student_id],
+            )
+            cur.execute(
+                """
+                INSERT INTO payments (student_id, direction_id, subscriptions_count,
+                                      lessons_count, unit_price, total_amount, paid_at,
+                                      created_by)
+                SELECT %s, direction_id, 2, 8, 1000, 8000, '2026-06-01', 'test'
+                  FROM groups WHERE id = %s
+                """,
+                [student_id, group_id],
+            )
+        return [*attendance, {'student_id': student_id, 'present': True}]
+
+    yield add
+
+    if created:
+        with connection.cursor() as cur:
+            cur.execute('DELETE FROM lesson_attendance WHERE student_id = ANY(%s)', [created])
+            cur.execute('DELETE FROM group_memberships WHERE student_id = ANY(%s)', [created])
+            cur.execute('DELETE FROM payments WHERE student_id = ANY(%s)', [created])
+            cur.execute('DELETE FROM students WHERE id = ANY(%s)', [created])

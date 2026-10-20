@@ -79,7 +79,7 @@ def test_revert_lesson_record_keeps_feedback_from_other_operation(school, held):
 
 
 @pytest.mark.django_db
-def test_revert_teacher_record_removes_lesson_and_its_feedback(school):
+def test_revert_teacher_record_removes_lesson_and_its_feedback(school, present_classmate):
     """Преподаватель записал урок с отзывом — одна операция «lesson.submit».
     Её откат убирает и урок, и отзыв: отзыв без урока, ради которого его
     написали, — висящая запись «состоялся» без факта."""
@@ -87,13 +87,16 @@ def test_revert_teacher_record_removes_lesson_and_its_feedback(school):
     from apps.lessons.models import Lesson
     from apps.lessons.services import record_lesson
 
+    # Пришедший ученик заводится ДО операции: урок без присутствующих не
+    # записывается, а сам одноклассник не часть отката.
+    attendance = present_classmate([], school['group_id'])
     with pghistory.context(url='/api/submitLesson', method='POST'):
         result = record_lesson(
             lesson_date='2026-01-20', teacher_id=school['teacher_id'],
             group_id=school['group_id'], original_teacher_id=None, lesson_number=2,
             lesson_duration_minutes=90, lesson_type='regular', record_url=None,
-            submitted_by_token='__feedback_revert_submit__', submit_date='2026-01-20',
-            attendance=[],
+            submitted_by_token='__feedback_revert_submit__',
+            attendance=attendance,
             feedback={'understanding': 5, 'interest': 6, 'tech_problems': False,
                       'comment': 'Тест'},
         )

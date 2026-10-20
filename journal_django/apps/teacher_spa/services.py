@@ -13,11 +13,13 @@ import logging
 from typing import Optional
 
 from apps.accounts.repository import get_by_id_with_teacher
-from apps.lessons.exceptions import LessonAlreadyRecorded, UnpaidAttendanceBlocked
+from apps.core.utils.dates import msk_today
+from apps.lessons.exceptions import (
+    LessonAlreadyRecorded, LessonWithoutPresentStudents, UnpaidAttendanceBlocked,
+)
 from apps.lessons.services import record_lesson
 from apps.scheduling import repository as scheduling_repository
 from apps.teacher_spa import repository
-from apps.teacher_spa.calculator import format_msk_date
 
 
 logger = logging.getLogger(__name__)
@@ -150,7 +152,9 @@ def submit_lesson(account_id: int, validated: dict) -> dict:
     link_facts+балансовая проверка) — apps.lessons.services.record_lesson.
 
     Возвращает:
-      {'success': True, 'payment': int, 'penalty': int, 'lessonNumber': float|int}
+      {'success': True, 'payment': Decimal, 'penalty': Decimal, 'lessonNumber': float|int}
+                                         — суммы начисления движком зарплат (на проводе
+                                           строки '500.00', DateSafeJSONRenderer)
       {'success': False, 'error': str}   — ошибки без статуса 4xx (как Express)
       {'_error': str, '_status': 403}    — аккаунт не привязан к преподу
     """
@@ -165,7 +169,7 @@ def submit_lesson(account_id: int, validated: dict) -> dict:
     # это подстраховка от гонки состояний (устаревший кэш календаря) и прямых
     # запросов к API. Сравнение только по дню (строки 'YYYY-MM-DD' сравнимы
     # лексикографически), без учёта времени начала урока.
-    if date > format_msk_date():
+    if date > msk_today():
         return {
             'success': False,
             'error': 'Урок ещё не наступил — отметить его можно только в день занятия или позже.',
@@ -311,18 +315,6 @@ def submit_lesson(account_id: int, validated: dict) -> dict:
             'is_free': bool(s.get('is_free', False)),
         })
 
-    # 5b. Блокер «пустого» урока: нельзя записать урок, на котором не отмечен ни
-    #     один присутствующий ученик (все «Не пришёл» / пустой список). Урок без
-    #     присутствия смысла не несёт (0 посещаемости, 0 потребления, 0 выплаты)
-    #     и чаще всего означает ошибочное сохранение. Фронт тоже гейтит кнопку
-    #     (LessonForm), это — авторитетная проверка на бэке.
-    if not any(a['present'] for a in attendance):
-        return {
-            'success': False,
-            'error': 'Нельзя сохранить урок без присутствующих учеников — '
-                     'отметьте хотя бы одного пришедшего.',
-        }
-
     # 6. subLabel — тип урока. Выводится СЕРВЕРОМ из плана (клиентский lessonType
     #    не принимается): замена — чужая группа (шаг 3); перенос — плановая строка
     #    этой группы/даты/препода перенесена НА эту дату (moved_from_date задан).
@@ -346,13 +338,17 @@ def submit_lesson(account_id: int, validated: dict) -> dict:
             lesson_duration_minutes=ids['lesson_duration_minutes'],
             lesson_type=sub_label,
             record_url=record_url,
+            # 'acct:' — признак записи из кабинета: только такой урок движок
+            # штрафует за отчёт не в день урока (по submitted_at, спека §1.4).
             submitted_by_token=f'acct:{account_id}',
-            submit_date=format_msk_date(),
             attendance=attendance,
             planned_lesson_id=position['id'] if position is not None else None,
             feedback=feedback,
         )
-    except UnpaidAttendanceBlocked as e:
+    except (LessonWithoutPresentStudents, UnpaidAttendanceBlocked) as e:
+        # Блокер «пустого» урока (никто не пришёл — это перенос/отмена) — общий
+        # с админкой, живёт в ядре; здесь лишь заворачиваем в контракт кабинета.
+        # Фронт тоже гейтит кнопку (LessonForm), авторитетна проверка ядра.
         return {'success': False, 'error': str(e)}
 
     # lessonNumber: если целое → int, иначе float (JS-совместимость)

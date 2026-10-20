@@ -48,13 +48,18 @@ def debtor(group_fixture, student_fixture):
         cur.execute('DELETE FROM group_memberships WHERE id = %s', [membership_id])
 
 
-def _record(ctx, teacher_id, present=True):
+def _record(ctx, teacher_id, present=True, present_classmate=None):
+    attendance = [{'student_id': ctx['student'], 'present': present}]
+    if not present:
+        # Урок без присутствующих не записывается (§1.2 спеки 2026-10-20) —
+        # отсутствие должника фиксируем на уроке, где кто-то пришёл.
+        attendance = present_classmate(attendance, ctx['group'])
     return services.record_lesson(
         lesson_date='2026-06-29', teacher_id=teacher_id, group_id=ctx['group'],
         original_teacher_id=None, lesson_number=Decimal('1'),
         lesson_duration_minutes=60, lesson_type='regular', record_url=None,
-        submitted_by_token='__guard_flag_test__', submit_date='2026-06-29',
-        attendance=[{'student_id': ctx['student'], 'present': present}],
+        submitted_by_token='__guard_flag_test__',
+        attendance=attendance,
     )
 
 
@@ -74,9 +79,10 @@ class TestGuardOff:
         assert balance_for_student(debtor['student']) <= 0
         repository.assert_students_paid([debtor['student']])  # не бросает
 
+    @pytest.mark.usefixtures('payroll_rates')
     def test_record_lesson_marks_debtor_as_ordinary_paid_presence(
-            self, debtor, teacher_id_fixture):
-        result = _record(debtor, teacher_id_fixture)
+            self, debtor, teacher_id_fixture, present_classmate):
+        result = _record(debtor, teacher_id_fixture, present_classmate=present_classmate)
 
         att = LessonAttendance.objects.get(lesson_id=result['lesson_id'],
                                            student_id=debtor['student'])
@@ -87,10 +93,10 @@ class TestGuardOff:
         # Зарплата начислена как за обычный урок.
         payroll = Payroll.objects.get(lesson_id=result['lesson_id'])
         assert payroll.present_count == 1
-        assert result['payment'] > 0
+        assert result['payment'] == payroll.payment == Decimal('500.00')
 
-    def test_toggle_cell_to_present_allowed(self, debtor, teacher_id_fixture):
-        lesson_id = _record(debtor, teacher_id_fixture, present=False)['lesson_id']
+    def test_toggle_cell_to_present_allowed(self, debtor, teacher_id_fixture, present_classmate):
+        lesson_id = _record(debtor, teacher_id_fixture, present=False, present_classmate=present_classmate)['lesson_id']
 
         assert services.update_attendance_cell(lesson_id, debtor['student'], True)
 
@@ -116,9 +122,9 @@ class TestGuardOff:
 @pytest.mark.usefixtures('payment_balance_guard_on')
 class TestGuardOn:
 
-    def test_record_lesson_blocked(self, debtor, teacher_id_fixture):
+    def test_record_lesson_blocked(self, debtor, teacher_id_fixture, present_classmate):
         with pytest.raises(UnpaidAttendanceBlocked):
-            _record(debtor, teacher_id_fixture)
+            _record(debtor, teacher_id_fixture, present_classmate=present_classmate)
         assert not Lesson.objects.filter(group_id=debtor['group']).exists()
 
     def test_admin_api_blocked(self, admin_client, debtor, teacher_id_fixture):

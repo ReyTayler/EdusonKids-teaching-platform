@@ -74,6 +74,7 @@ def test_create_lesson_full_advances_renewal_stage(
 def test_update_attendance_cell_advances_renewal_stage(
     django_capture_on_commit_callbacks, direction_fixture, group_fixture,
     teacher_id_fixture, student_fixture, membership_fixture,
+    present_classmate,
 ):
     payment_id = _make_payment(student_fixture, direction_fixture)
     deal = engine.ensure_deal(student_fixture, cycle_no=1)
@@ -83,7 +84,8 @@ def test_update_attendance_cell_advances_renewal_stage(
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
-        'attendance': [{'student_id': student_fixture, 'present': False}],
+        'attendance': present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture),
     })['lesson_id']
     deal.refresh_from_db()
     assert deal.stage.key == 'no_lesson_yet'  # не отмечен присутствующим — прогресса нет

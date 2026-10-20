@@ -325,7 +325,7 @@ def test_worked_off_month_uses_extra_lesson_completion_date(
     try:
         extra_services.record(
             rid, teacher_id=teacher_id_fixture, present=True,
-            record_url=None, submitted_by_token='test', submit_date='2026-07-10',
+            record_url=None, 
             request=_FakeRequest(),
         )
 

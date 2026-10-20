@@ -67,7 +67,6 @@ def test_record_lesson_without_feedback_creates_none(group_fixture, teacher_id_f
         lesson_date='2026-03-22', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='__fb_core_test__',
-        submit_date='2026-03-22',
         attendance=[{'student_id': student_fixture, 'present': True}],
     )
     try:
@@ -84,7 +83,6 @@ def test_record_lesson_with_feedback_links_it_to_lesson(group_fixture, teacher_i
         lesson_date='2026-03-22', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='__fb_core_test__',
-        submit_date='2026-03-22',
         attendance=[{'student_id': student_fixture, 'present': True}],
         feedback={'understanding': 6, 'interest': 7, 'tech_problems': False,
                   'comment': 'Нормально'},

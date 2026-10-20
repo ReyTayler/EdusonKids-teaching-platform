@@ -53,10 +53,20 @@ def race_group():
             [direction_id, teacher_id],
         )
         group_id = cur.fetchone()[0]
+        # Пришедший ученик: урок без присутствующих ядро не записывает
+        # (спека 2026-10-20-eduson-motivation-payroll-design, §1.2).
+        cur.execute("INSERT INTO students (full_name) VALUES ('__race_student__') RETURNING id")
+        student_id = cur.fetchone()[0]
+        cur.execute(
+            'INSERT INTO group_memberships (group_id, student_id, lessons_done, active) '
+            'VALUES (%s, %s, 0, true)', [group_id, student_id],
+        )
 
-    yield group_id, teacher_id
+    yield group_id, teacher_id, student_id
 
     with connection.cursor() as cur:
+        cur.execute('DELETE FROM lesson_attendance WHERE student_id = %s', [student_id])
+        cur.execute('DELETE FROM group_memberships WHERE student_id = %s', [student_id])
         cur.execute(
             'DELETE FROM payroll WHERE lesson_id IN '
             '(SELECT id FROM lessons WHERE group_id = %s)', [group_id],
@@ -65,6 +75,7 @@ def race_group():
         cur.execute('DELETE FROM groups WHERE id = %s', [group_id])
         cur.execute('DELETE FROM directions WHERE id = %s', [direction_id])
         cur.execute('DELETE FROM teachers WHERE id = %s', [teacher_id])
+        cur.execute('DELETE FROM students WHERE id = %s', [student_id])
 
 
 def test_two_simultaneous_submits_create_one_lesson(race_group):
@@ -72,7 +83,7 @@ def test_two_simultaneous_submits_create_one_lesson(race_group):
     from apps.lessons.exceptions import LessonAlreadyRecorded
     from apps.lessons.services import record_lesson
 
-    group_id, teacher_id = race_group
+    group_id, teacher_id, student_id = race_group
     date = '2026-08-25'
     barrier = threading.Barrier(2)
     outcomes: list[str] = []
@@ -91,8 +102,7 @@ def test_two_simultaneous_submits_create_one_lesson(race_group):
                 lesson_type='regular',
                 record_url=None,
                 submitted_by_token='acct:race',
-                submit_date=date,
-                attendance=[],
+                attendance=[{'student_id': student_id, 'present': True}],
                 planned_lesson_id=None,
             )
             with lock:
@@ -138,7 +148,7 @@ def test_two_simultaneous_submits_of_same_position(race_group):
     from apps.lessons.exceptions import LessonAlreadyRecorded
     from apps.lessons.services import record_lesson
 
-    group_id, teacher_id = race_group
+    group_id, teacher_id, student_id = race_group
     date = '2026-08-26'
     with connection.cursor() as cur:
         cur.execute(
@@ -170,8 +180,7 @@ def test_two_simultaneous_submits_of_same_position(race_group):
                 lesson_type='regular',
                 record_url=None,
                 submitted_by_token='acct:race-pos',
-                submit_date=date,
-                attendance=[],
+                attendance=[{'student_id': student_id, 'present': True}],
                 planned_lesson_id=position_id,
             )
             with lock:

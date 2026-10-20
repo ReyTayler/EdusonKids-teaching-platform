@@ -30,6 +30,10 @@ def _cleanup_lessons(group_with_group):
     """
     yield
     with connection.cursor() as cur:
+        # Правка урока пересчитывает зарплату и заводит строку Payroll (движок
+        # зарплат) — её FK на урок снимаем первой.
+        cur.execute('DELETE FROM payroll WHERE lesson_id IN '
+                    '(SELECT id FROM lessons WHERE submitted_by_token = %s)', [_MARKER])
         cur.execute('DELETE FROM lessons WHERE submitted_by_token = %s', [_MARKER])
 
 

@@ -116,6 +116,7 @@ def test_two_free_positions_are_ambiguous(group_with_two_slots):
 
 def test_renumbered_position_refuses_instead_of_writing_mismatch(
     group_with_two_slots, teacher_fixture,
+    present_classmate,
 ):
     """
     План перенумеровали между предпроверкой и захватом позиции → отказ.
@@ -150,15 +151,14 @@ def test_renumbered_position_refuses_instead_of_writing_mismatch(
                 lesson_type='regular',
                 record_url=None,
                 submitted_by_token='test:number',
-                submit_date=date,
-                attendance=[],
+                attendance=present_classmate([], group_id),
                 planned_lesson_id=positions[0],
             )
     finally:
         _purge_group_lessons(group_id)
 
 
-def test_lesson_number_comes_from_locked_position(group_with_two_slots, teacher_fixture):
+def test_lesson_number_comes_from_locked_position(group_with_two_slots, teacher_fixture, present_classmate):
     """
     Согласованный номер пишется из позиции, захваченной под блокировкой, а не из
     аргумента: позиция — источник правды, аргумент лишь дублирует её значение.
@@ -179,8 +179,7 @@ def test_lesson_number_comes_from_locked_position(group_with_two_slots, teacher_
             lesson_type='regular',
             record_url=None,
             submitted_by_token='test:number',
-            submit_date=date,
-            attendance=[],
+            attendance=present_classmate([], group_id),
             planned_lesson_id=positions[0],
         )
 
@@ -202,7 +201,7 @@ def test_lesson_number_comes_from_locked_position(group_with_two_slots, teacher_
         _purge_group_lessons(group_id)
 
 
-def test_vanished_position_raises_instead_of_silent_fallback(group_with_two_slots, teacher_fixture):
+def test_vanished_position_raises_instead_of_silent_fallback(group_with_two_slots, teacher_fixture, present_classmate):
     """
     Позицию отменили между предпроверкой и локом → явная ошибка. Молчаливое
     продолжение записи означало бы переход на незащищённый путь.
@@ -229,8 +228,7 @@ def test_vanished_position_raises_instead_of_silent_fallback(group_with_two_slot
             lesson_type='regular',
             record_url=None,
             submitted_by_token='test:vanished',
-            submit_date=date,
-            attendance=[],
+            attendance=present_classmate([], group_id),
             planned_lesson_id=positions[0],
         )
 
@@ -274,7 +272,7 @@ def test_matching_position_id_is_used(group_with_two_slots):
 # здесь не работает вовсе — держит только ключ отправки (submission_key).
 # ---------------------------------------------------------------------------
 
-def test_second_record_without_position_is_rejected(group_fixture, teacher_fixture):
+def test_second_record_without_position_is_rejected(group_fixture, teacher_fixture, present_classmate):
     """
     Группа без плана: повторная запись того же занятия обязана отказать, а не
     создать второй платный урок. Это путь, на котором произошёл ПГ215.
@@ -291,8 +289,7 @@ def test_second_record_without_position_is_rejected(group_fixture, teacher_fixtu
         lesson_duration_minutes=60,
         lesson_type='regular',
         record_url=None,
-        submit_date='2026-08-20',
-        attendance=[],
+        attendance=present_classmate([], group_fixture),
         planned_lesson_id=None,
     )
 
@@ -307,7 +304,7 @@ def test_second_record_without_position_is_rejected(group_fixture, teacher_fixtu
         _purge_group_lessons(group_fixture)
 
 
-def test_duplicate_across_different_actors_is_rejected(group_fixture, teacher_fixture):
+def test_duplicate_across_different_actors_is_rejected(group_fixture, teacher_fixture, present_classmate):
     """
     Препод записал урок, следом админ записывает то же занятие. Старый ключ
     включал submitted_by_token и такой дубль пропускал.
@@ -324,8 +321,7 @@ def test_duplicate_across_different_actors_is_rejected(group_fixture, teacher_fi
         lesson_duration_minutes=60,
         lesson_type='regular',
         record_url=None,
-        submit_date='2026-08-21',
-        attendance=[],
+        attendance=present_classmate([], group_fixture),
         planned_lesson_id=None,
         lesson_number=5,
     )
@@ -339,7 +335,7 @@ def test_duplicate_across_different_actors_is_rejected(group_fixture, teacher_fi
         _purge_group_lessons(group_fixture)
 
 
-def test_different_dates_are_not_duplicates(group_fixture, teacher_fixture):
+def test_different_dates_are_not_duplicates(group_fixture, teacher_fixture, present_classmate):
     """Два занятия одной группы в РАЗНЫЕ дни — не дубль, оба должны записаться."""
     from apps.lessons.services import record_lesson
 
@@ -351,21 +347,21 @@ def test_different_dates_are_not_duplicates(group_fixture, teacher_fixture):
         lesson_duration_minutes=60,
         lesson_type='regular',
         record_url=None,
-        attendance=[],
+        attendance=present_classmate([], group_fixture),
         planned_lesson_id=None,
         submitted_by_token='acct:1',
     )
 
     try:
-        a = record_lesson(**common, lesson_date='2026-08-23', submit_date='2026-08-23', lesson_number=1)
-        b = record_lesson(**common, lesson_date='2026-08-24', submit_date='2026-08-24', lesson_number=2)
+        a = record_lesson(**common, lesson_date='2026-08-23', lesson_number=1)
+        b = record_lesson(**common, lesson_date='2026-08-24', lesson_number=2)
 
         assert a['lesson_id'] != b['lesson_id']
     finally:
         _purge_group_lessons(group_fixture)
 
 
-def test_admin_duplicate_returns_409_not_500(admin_client, group_fixture, teacher_fixture):
+def test_admin_duplicate_returns_409_not_500(admin_client, group_fixture, teacher_fixture, present_classmate):
     """
     Повторное создание урока админом — понятный 409, а не «сломался сервер».
 
@@ -380,6 +376,7 @@ def test_admin_duplicate_returns_409_not_500(admin_client, group_fixture, teache
         'lesson_number': 3,
         'lesson_duration_minutes': 60,
         'lesson_type': 'regular',
+        'attendance': present_classmate([], group_fixture),
     }
     try:
         first = admin_client.post('/api/admin/lessons', payload, format='json')
@@ -394,6 +391,7 @@ def test_admin_duplicate_returns_409_not_500(admin_client, group_fixture, teache
 
 def test_admin_can_record_both_slots_of_multislot_day(
     admin_client, group_with_two_slots, teacher_fixture,
+    present_classmate,
 ):
     """
     Мультислот: в плане две позиции на день — админ обязан записать ОБА занятия.
@@ -410,6 +408,7 @@ def test_admin_can_record_both_slots_of_multislot_day(
         'teacher_id': teacher_id,
         'lesson_duration_minutes': 60,
         'lesson_type': 'regular',
+        'attendance': present_classmate([], group_id),
     }
     try:
         first = admin_client.post('/api/admin/lessons', {**base, 'lesson_number': 31}, format='json')
@@ -423,6 +422,7 @@ def test_admin_can_record_both_slots_of_multislot_day(
 
 def test_admin_cannot_duplicate_lesson_recorded_by_teacher(
     admin_client, group_with_two_slots, teacher_fixture,
+    present_classmate,
 ):
     """
     Преподаватель записал занятие, ответ потерялся, и то же занятие заводит админ.
@@ -440,12 +440,13 @@ def test_admin_cannot_duplicate_lesson_recorded_by_teacher(
             group_id=group_id, teacher_id=teacher_id, original_teacher_id=None,
             lesson_date=date, lesson_number=31, lesson_duration_minutes=60,
             lesson_type='regular', record_url=None, submitted_by_token='acct:7',
-            submit_date=date, attendance=[], planned_lesson_id=positions[0],
+            attendance=present_classmate([], group_id), planned_lesson_id=positions[0],
         )
 
         clash = admin_client.post('/api/admin/lessons', {
             'lesson_date': date, 'group_id': group_id, 'teacher_id': teacher_id,
             'lesson_number': 31, 'lesson_duration_minutes': 60, 'lesson_type': 'regular',
+            'attendance': present_classmate([], group_id),
         }, format='json')
 
         assert clash.status_code == 409, clash.content
@@ -453,7 +454,7 @@ def test_admin_cannot_duplicate_lesson_recorded_by_teacher(
         _purge_group_lessons(group_id)
 
 
-def test_editing_date_moves_the_guard_with_the_lesson(group_fixture, teacher_fixture):
+def test_editing_date_moves_the_guard_with_the_lesson(group_fixture, teacher_fixture, present_classmate):
     """
     Правка даты урока переносит ключ отправки на новую дату.
 
@@ -469,7 +470,7 @@ def test_editing_date_moves_the_guard_with_the_lesson(group_fixture, teacher_fix
             group_id=group_fixture, teacher_id=teacher_id, original_teacher_id=None,
             lesson_date='2026-09-10', lesson_number=1, lesson_duration_minutes=60,
             lesson_type='regular', record_url=None, submitted_by_token='acct:9',
-            submit_date='2026-09-10', attendance=[], planned_lesson_id=None,
+            attendance=present_classmate([], group_fixture), planned_lesson_id=None,
         )
         update_lesson(created['lesson_id'], {'lesson_date': '2026-09-11'})
 

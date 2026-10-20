@@ -19,14 +19,13 @@ from apps.groups.models import Group
 from apps.lessons import repository
 from apps.lessons.exceptions import (
     CoursePositionVanished, LessonAlreadyRecorded,
-    LessonHasMakeupResolutions, SystemLessonProtected,
+    LessonHasMakeupResolutions, LessonWithoutPresentStudents, SystemLessonProtected,
 )
 from apps.core.utils.decimal import to_decimal
 from apps.feedback import services as feedback_services
 from apps.lessons.models import SYSTEM_LESSON_TYPES, Lesson, LessonAttendance
 from apps.lessons.submission_key import build_submission_key
 from apps.memberships.repository import locked_through_map
-from apps.payroll.calculator import calculate_payment, calculate_penalty
 from apps.scheduling.repository import (
     attach_fact, find_course_position_by_date_and_number, link_facts,
     lock_course_position, relink_fact, sync_position_date,
@@ -62,7 +61,6 @@ def record_lesson(*,
     lesson_type: str,
     record_url: Optional[str],
     submitted_by_token: str,
-    submit_date: str,
     attendance: list[dict],
     skip_balance_check: bool = False,
     planned_lesson_id: Optional[int] = None,
@@ -71,9 +69,10 @@ def record_lesson(*,
     """
     Единое ядро записи урока. Атомарно создаёт Lesson+LessonAttendance,
     инкрементирует group_memberships.lessons_done, привязывает факт к
-    planned_lessons (link_facts), создаёт Payroll (сервер считает
-    payment/penalty сам — клиентского payroll не принимает), синхронизирует
-    авто-стадию «Продлений» после коммита.
+    planned_lessons (link_facts), начисляет зарплату движком «Мотивации»
+    (apps.payroll.recalc.recalculate — в этой же транзакции, после записи урока
+    и посещаемости; клиентского payroll не принимает), синхронизирует авто-стадию
+    «Продлений» после коммита.
 
     planned_lesson_id — позиция курса, за которой закрепляется факт (резолвит
     вызывающий: apps.teacher_spa.services.submit_lesson). Если задан:
@@ -91,10 +90,15 @@ def record_lesson(*,
     резолвлен вызывающей стороной (teacher_spa резолвит по имени, admin SPA
     передаёт id напрямую).
 
-    submit_date — для calculate_penalty: teacher SPA передаёт «сегодня»
-    (штраф за просрочку отчёта), admin SPA передаёт submit_date=lesson_date
-    всегда (админ не должен штрафоваться за административную запись задним
-    числом — см. design doc).
+    submitted_by_token — источник записи. Штраф за поздний отчёт движок
+    начисляет только уроку из кабинета преподавателя ('acct:<id>') по дате
+    submitted_at (момент записи, по МСК) — отдельная «дата отправки» не нужна;
+    админская запись ('admin-imported') и команды штраф не получают (спека
+    2026-10-20-eduson-motivation-payroll-design, §1.4).
+
+    Бросает LessonWithoutPresentStudents, если после исключения переведённых и
+    слот-маркеров «неоплачиваемый пропуск» не осталось ни одного присутствующего
+    (§1.2: это перенос/отмена, а не урок) — ДО транзакции, ничего не пишется.
 
     Бросает UnpaidAttendanceBlocked (apps.lessons.exceptions), если у кого-то
     из present-учеников остаток оплаченных уроков <= 0 — ДО открытия транзакции,
@@ -115,8 +119,16 @@ def record_lesson(*,
     management-команды передают None — отзыв не создаётся. Пишется в ТОЙ ЖЕ
     транзакции, что и урок: сбой отзыва откатывает урок целиком.
 
-    Возвращает {'lesson_id': int, 'payment': int, 'penalty': int}.
+    Возвращает {'lesson_id': int, 'payment': Decimal, 'penalty': Decimal} —
+    суммы из записанной строки Payroll.
     """
+    # Только существующие ученики: строки остальных insert_attendance всё равно
+    # не вставит, а блокер «пустого» урока и счётчики обязаны считать по тому,
+    # что реально запишется (иначе несуществующий «пришедший» пропустил бы урок
+    # без присутствующих).
+    valid_ids = repository.existing_student_ids(a['student_id'] for a in attendance)
+    attendance = [a for a in attendance if a['student_id'] in valid_ids]
+
     all_student_ids = [a['student_id'] for a in attendance]
     locked_map = locked_through_map(group_id, all_student_ids)
     if locked_map:
@@ -151,6 +163,11 @@ def record_lesson(*,
     skip_ids = {a['student_id'] for a in attendance if a.get('unpaid_skip')}
 
     present_student_ids = [a['student_id'] for a in attendance if a['present']]
+    # Блокер «пустого» урока — единый для кабинета, админки и команд: считается
+    # по уже отфильтрованной посещаемости (переведённые и помеченные пропуски
+    # присутствующими не являются). Раньше баланса: отказ по существу важнее.
+    if not present_student_ids:
+        raise LessonWithoutPresentStudents()
     # Оплату проверяем только у ПЛАТНЫХ present-учеников (free не обязан иметь баланс).
     # skip_balance_check — ручное решение администратора «записать, невзирая на долг»:
     # занятие остаётся платным (спишется с баланса, зарплата начислится), снят только
@@ -159,22 +176,10 @@ def record_lesson(*,
     if not skip_balance_check:
         repository.assert_students_paid([s for s in present_student_ids if s not in free_ids])
 
-    is_half = lesson_duration_minutes == 45
     step = _step(lesson_duration_minutes)
-    # Зарплата (правило 2026-09-28):
-    #   • unpaid_skip — ученика на этом уроке как будто нет: вне total И вне present;
-    #   • is_free — оплачивается преподавателю как обычное присутствие (в total и в
-    #     present). Бесплатность касается только денег ученика.
-    payroll_attendance = [a for a in attendance if a['student_id'] not in skip_ids]
-    total_students = len(payroll_attendance)
-    present_count = len([a for a in payroll_attendance if a['present']])
-
-    payment = calculate_payment(total_students, present_count, is_half)
-    penalty = calculate_penalty(lesson_date, submit_date, present_count)
 
     direction_id = (
         Group.objects.filter(id=group_id).values_list('direction_id', flat=True).first()
-        if present_student_ids else None
     )
 
     with transaction.atomic():
@@ -254,14 +259,10 @@ def record_lesson(*,
             link_facts(group_id)
         repository.increment_lessons_done(group_id, present_student_ids, step)
         repository.insert_attendance(lesson_id, attendance)
-        repository.insert_payroll({
-            'lesson_id': lesson_id,
-            'teacher_id': teacher_id,
-            'total_students': total_students,
-            'present_count': present_count,
-            'payment': payment,
-            'penalty': penalty,
-        })
+        # Зарплата — только движок (строку Payroll создаёт он же). Headcount
+        # (unpaid_skip вне total и present, is_free — присутствие) движок
+        # считает по записанной посещаемости, поэтому вызов строго после неё.
+        pay = repository.recalculate_payroll(lesson_id)
         if feedback is not None:
             # Группа/дата/автор — с урока: отзыв описывает именно этот факт, а
             # автор — тот, кто его провёл (при замене — заменяющий).
@@ -307,7 +308,7 @@ def record_lesson(*,
         for sid in present_student_ids:
             transaction.on_commit(lambda sid=sid: repository._sync_renewal_stage(sid, direction_id))
 
-    return {'lesson_id': lesson_id, 'payment': payment, 'penalty': penalty}
+    return {'lesson_id': lesson_id, 'payment': pay['payment'], 'penalty': pay['penalty']}
 
 
 def list_lessons(
@@ -332,9 +333,9 @@ def get_lesson_full(lesson_id: int) -> Optional[dict]:
 
 def create_lesson_full(data: dict) -> dict:
     """
-    Admin SPA — тонкий адаптер над record_lesson. submit_date=lesson_date
-    всегда (админ не штрафуется за административную запись задним числом).
-    Возвращает {'lesson_id', 'payment', 'penalty'} (view делает повторный
+    Admin SPA — тонкий адаптер над record_lesson. Токен 'admin-imported':
+    админ не штрафуется за административную запись задним числом (штраф —
+    только записи из кабинета, §1.4). Возвращает {'lesson_id', 'payment', 'penalty'} (view делает повторный
     get_lesson_full для полного ответа, как раньше).
 
     Позиция курса резолвится по дате И НОМЕРУ: номер — единственное, чем админ
@@ -360,7 +361,6 @@ def create_lesson_full(data: dict) -> dict:
         lesson_type=data.get('lesson_type') or 'regular',
         record_url=data.get('record_url') or None,
         submitted_by_token=data.get('submitted_by_token') or 'admin-imported',
-        submit_date=data['lesson_date'],
         attendance=data.get('attendance') or [],
         # Право на флаг проверено во вьюхе (только superadmin) — сюда он приходит
         # уже разрешённым. Занятие остаётся платным, снят лишь запрет по балансу.
@@ -406,6 +406,11 @@ def _update_lesson(lesson_id: int, fields: dict) -> Optional[dict]:
     #     упирается в уникальный индекс, то есть ЛОЖНЫЙ 409 и незаполнимая позиция.
     if fields.get('lesson_date') is not None or fields.get('lesson_number') is not None:
         _refresh_submission_key(lesson_id)
+    # Дата (версия ставок), номер (персональная ставка по диапазону уроков) и
+    # преподаватель (получатель, его персональные ставки) — входы движка
+    # зарплат: начисление урока следует за правкой в той же транзакции.
+    if any(fields.get(k) is not None for k in ('lesson_date', 'lesson_number', 'teacher_id')):
+        repository.recalculate_payroll(lesson_id)
     return updated
 
 

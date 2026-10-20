@@ -249,7 +249,7 @@ def test_unpaid_student_makeup_assigned_and_recorded_when_guard_off(
     rid = created['resolution_ids'][0]
     result = services.record(
         rid, teacher_id=teacher_fixture, present=True,
-        record_url=None, submitted_by_token='acct:1', submit_date='2026-04-05',
+        record_url=None, 
         request=_FakeRequest(),
     )
     try:
@@ -285,7 +285,7 @@ def test_record_raises_if_student_balance_dropped_since_assignment(
     with pytest.raises(UnpaidAttendanceBlocked):
         services.record(
             rid, teacher_id=teacher_fixture, present=True,
-            record_url=None, submitted_by_token='acct:1', submit_date='2026-04-05',
+            record_url=None, 
             request=_FakeRequest(),
         )
     assert AbsenceResolution.objects.get(id=rid).status == MAKEUP_SCHEDULED
@@ -352,7 +352,7 @@ def test_reassign_after_cancel_is_allowed(
 
 
 def test_record_consumes_from_extra_keeps_original_absent(
-    group_fixture, teacher_fixture, other_teacher_fixture, missed_lesson_fixture,
+    group_fixture, teacher_fixture, other_teacher_fixture, payroll_rates, missed_lesson_fixture,
     student_fixture, lessons_done, resolution_cleanup,
 ):
     """Новая модель компенсации: потребление идёт от САМОГО факта доп.урока
@@ -374,12 +374,12 @@ def test_record_consumes_from_extra_keeps_original_absent(
         teacher_id=other_teacher_fixture,
         present=True,
         record_url=None,
-        submitted_by_token='acct:1',
-        submit_date='2026-04-05',
         request=_FakeRequest(),
     )
     try:
-        assert result['payment'] == 200
+        # Доп.урок — обычный урок формата группы (ставка группового, 500 по
+        # payroll_rates); штрафа нет — у факта токен makeup:, не кабинетный acct:.
+        assert result['payment'] == 500
         assert result['penalty'] == 0
 
         fact = Lesson.objects.get(id=result['lesson_id'])
@@ -387,7 +387,7 @@ def test_record_consumes_from_extra_keeps_original_absent(
         assert fact.teacher_id == other_teacher_fixture
         # Факт доп.урока несёт длительность ИСХОДНОГО урока (60), не резолюции (45).
         assert fact.lesson_duration_minutes == 60
-        assert Payroll.objects.get(lesson_id=fact.id).payment == 200
+        assert Payroll.objects.get(lesson_id=fact.id).payment == 500
 
         assert repository.get_resolution_full(rid)['status'] == MAKEUP_DONE
 
@@ -421,7 +421,7 @@ def test_record_rejects_wrong_teacher(
     with pytest.raises(NotTeachersAssignment):
         services.record(
             rid, teacher_id=other_teacher_fixture, present=True,
-            record_url=None, submitted_by_token='acct:2', submit_date='2026-04-05',
+            record_url=None, 
             request=_FakeRequest(),
         )
 
@@ -443,7 +443,7 @@ def test_record_rejects_absent_student(
     with pytest.raises(AbsentStudentNotRecordable):
         services.record(
             rid, teacher_id=teacher_fixture, present=False,
-            record_url=None, submitted_by_token='acct:1', submit_date='2026-04-05',
+            record_url=None, 
             request=_FakeRequest(),
         )
     full = repository.get_resolution_full(rid)
@@ -475,14 +475,14 @@ def test_record_second_call_on_same_assignment_raises_value_error(
     rid = created['resolution_ids'][0]
     result = services.record(
         rid, teacher_id=teacher_fixture, present=True,
-        record_url=None, submitted_by_token='acct:1', submit_date='2026-04-05',
+        record_url=None, 
         request=_FakeRequest(),
     )
     try:
         with pytest.raises(ValueError):
             services.record(
                 rid, teacher_id=teacher_fixture, present=True,
-                record_url=None, submitted_by_token='acct:2', submit_date='2026-04-05',
+                record_url=None, 
                 request=_FakeRequest(),
             )
     finally:
@@ -508,7 +508,7 @@ def test_delete_fact_reverses_consumption(
     rid = created['resolution_ids'][0]
     result = services.record(
         rid, teacher_id=teacher_fixture, present=True,
-        record_url=None, submitted_by_token='acct:1', submit_date='2026-04-05',
+        record_url=None, 
         request=_FakeRequest(),
     )
     assert lessons_done(group_fixture, student_fixture) == Decimal('1.0')
@@ -553,7 +553,7 @@ def test_delete_fact_second_call_raises_value_error(
     rid = created['resolution_ids'][0]
     services.record(
         rid, teacher_id=teacher_fixture, present=True,
-        record_url=None, submitted_by_token='acct:1', submit_date='2026-04-05',
+        record_url=None, 
         request=_FakeRequest(),
     )
     ok = services.delete_fact(rid, _FakeRequest())
@@ -675,10 +675,11 @@ def test_create_extra_assignment_rejects_non_member(
 
 
 def test_record_extra_creates_fact_and_consumes_balance(
-    group_fixture, teacher_fixture, student_fixture, membership_fixture,
+    group_fixture, teacher_fixture, student_fixture, membership_fixture, payroll_rates,
 ):
     """Проведение ручного доп.урока: extra-Lesson с выбранным номером, +1 к
-    lessons_done, списание с баланса (8→7), флет-выплата 200₽, статус makeup_done."""
+    lessons_done, списание с баланса (8→7), выплата — ставка группового урока
+    (500 по payroll_rates), статус makeup_done."""
     from apps.finances.repository import balance_for_student
     from apps.memberships.models import GroupMembership
 
@@ -692,8 +693,8 @@ def test_record_extra_creates_fact_and_consumes_balance(
         assert float(balance_for_student(student_fixture)) == 8.0
         rec = services.record(
             rid, teacher_id=teacher_fixture, present=True, record_url=None,
-            submitted_by_token='acct:1', submit_date='2026-04-25', request=_FakeRequest())
-        assert rec['payment'] == 200
+            request=_FakeRequest())
+        assert rec['payment'] == 500
         res = AbsenceResolution.objects.get(id=rid)
         assert res.status == MAKEUP_DONE
         fact = Lesson.objects.get(id=res.fact_lesson_id)
@@ -741,7 +742,7 @@ def test_delete_fact_of_extra_rolls_back_and_removes_resolution(
     rid = result['resolution_ids'][0]
     try:
         services.record(rid, teacher_id=teacher_fixture, present=True, record_url=None,
-                        submitted_by_token='acct:1', submit_date='2026-04-25', request=_FakeRequest())
+                        request=_FakeRequest())
         assert services.delete_fact(rid, _FakeRequest()) is True
         assert not AbsenceResolution.objects.filter(id=rid).exists()
         md = GroupMembership.objects.get(group_id=group_fixture, student_id=student_fixture)
@@ -841,8 +842,8 @@ def test_manual_assign_unknown_number_routes_to_extra(
 
 
 # ---------------------------------------------------------------------------
-# Оплата доп.урока СВЕРХ курса для ИНДИВ-группы: как обычный индив-урок
-# (45 мин → 250, полный → 500). Групповой extra и makeup остаются флет-200.
+# Оплата доп.урока СВЕРХ курса для ИНДИВ-группы: как обычный урок формата
+# группы — ставка индивидуального урока (движок зарплат, спека 2026-10-20).
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -888,13 +889,15 @@ def individual_membership_fixture(individual_group_fixture, student_fixture, dir
         cur.execute('DELETE FROM payments WHERE id = %s', [pid])
 
 
-@pytest.mark.parametrize('duration, expected', [(45, 250), (90, 500), (60, 500)])
-def test_record_extra_individual_pays_by_duration(
+@pytest.mark.parametrize('duration', [45, 60, 90])
+def test_record_extra_individual_pays_individual_rate(
     individual_group_fixture, teacher_fixture, student_fixture,
-    individual_membership_fixture, duration, expected,
+    individual_membership_fixture, payroll_rates, duration,
 ):
-    """Доп.урок СВЕРХ курса для ИНДИВ-группы оплачивается как обычный индив-урок:
-    45 мин → 250, полный (60/90) → 500. Групповой extra и makeup — флет-200."""
+    """Доп.урок в ИНДИВ-группе — обычный урок формата группы: ставка
+    индивидуального урока (700 по payroll_rates). Длительность на сумму не влияет
+    (спека 2026-10-20 §1.1)."""
+    expected = Decimal('700.00')
     result = services.create_extra_assignment({
         'group_id': individual_group_fixture, 'teacher_id': teacher_fixture,
         'student_ids': [student_fixture], 'scheduled_date': '2026-04-25',
@@ -904,7 +907,7 @@ def test_record_extra_individual_pays_by_duration(
     try:
         rec = services.record(
             rid, teacher_id=teacher_fixture, present=True, record_url=None,
-            submitted_by_token='acct:1', submit_date='2026-04-25', request=_FakeRequest())
+            request=_FakeRequest())
         assert rec['payment'] == expected
         assert Payroll.objects.get(lesson_id=rec['lesson_id']).payment == expected
     finally:
@@ -971,7 +974,7 @@ def test_delete_resolution_of_done_falls_back_to_rollback(
     rid = created['resolution_ids'][0]
     result = services.record(
         rid, teacher_id=teacher_fixture, present=True,
-        record_url=None, submitted_by_token='acct:1', submit_date='2026-04-05',
+        record_url=None, 
         request=_FakeRequest(),
     )
 
@@ -1026,7 +1029,6 @@ def test_record_two_makeups_same_group_date_and_teacher(
         for rid in created['resolution_ids']:
             result = services.record(
                 rid, teacher_id=teacher_fixture, present=True, record_url=None,
-                submitted_by_token='acct:36', submit_date='2026-04-05',
                 request=_FakeRequest(),
             )
             fact_ids.append(result['lesson_id'])

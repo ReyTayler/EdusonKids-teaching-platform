@@ -41,7 +41,7 @@ def absence_pending(missed_lesson_fixture, student_fixture):
             cur.execute('DELETE FROM lessons WHERE id = %s', [fid])
 
 
-def test_burn_lifecycle_reconciles(absence_pending):
+def test_burn_lifecycle_reconciles(absence_pending, payroll_rates):
     student_id = absence_pending.student_id
     missed = Lesson.objects.get(id=absence_pending.missed_lesson_id)
 
@@ -53,12 +53,13 @@ def test_burn_lifecycle_reconciles(absence_pending):
     absence_pending.refresh_from_db()
     fact_id = absence_pending.fact_lesson_id
 
-    # Списание ровно на 1 (60-мин пропуск), payroll 200 в месяц сжигания,
+    # Списание ровно на 1 (60-мин пропуск), строка payroll в месяц сжигания с
+    # нулём (сгорание не оплачивается, спека 2026-10-20 §1.10 — даже при ставках),
     # прогресс продлений +1, исходный пропуск остаётся present=false.
     assert fin_repo.balance_for_student(student_id) == bal0 - 1
     assert fin_repo.attended_units_total(student_id) == att0 + 1
     assert renewals_engine._attended_total(student_id) == ren0 + 1.0
-    assert Payroll.objects.get(lesson_id=fact_id).payment == 200
+    assert Payroll.objects.get(lesson_id=fact_id).payment == 0
     assert Lesson.objects.get(id=fact_id).lesson_date.isoformat() == '2026-07-18'
     assert LessonAttendance.objects.get(
         lesson_id=missed.id, student_id=student_id).present is False

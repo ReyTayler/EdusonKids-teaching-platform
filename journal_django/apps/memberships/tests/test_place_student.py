@@ -252,13 +252,14 @@ class TestTransferContinuationPhase1b:
                 cur.execute('DELETE FROM group_memberships WHERE group_id = %s', [group_c['id']])
                 cur.execute('DELETE FROM groups WHERE id = %s', [group_c['id']])
 
-    def test_no_seed_when_target_group_already_has_regular_lesson(self, seed):
+    def test_no_seed_when_target_group_already_has_regular_lesson(self, seed, present_classmate):
         """group_a2 уже вело курс (есть regular-урок) — offset не переписываем."""
         from apps.lessons import services as lessons_services
         lesson = lessons_services.create_lesson_full({
             'lesson_date': '2026-03-01', 'group_id': seed['group_a2'],
             'teacher_id': seed['teacher_id'], 'lesson_number': 1,
             'lesson_duration_minutes': 90,
+            'attendance': present_classmate([], seed['group_a2']),
         })
         try:
             old = repository.add_membership({

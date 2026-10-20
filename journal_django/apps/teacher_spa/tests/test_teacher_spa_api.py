@@ -500,12 +500,15 @@ class TestSubmitLesson:
         assert 'присутств' in body['error']
         assert _get_lesson_id(group_fixture, token) is None
 
-    def test_payment_calculation_small_group(
+    def test_payment_from_engine(
         self,
         teacher_fixture, account_fixture,
-        group_fixture, student_fixture, membership_fixture,
+        group_fixture, student_fixture, membership_fixture, payroll_rates,
     ):
-        """Малая группа (1 ученик, пришёл) → payment=500."""
+        """Сумма в ответе — начисление движка: ставка группового урока (500 по
+        payroll_rates), деньги строкой с копейками (Decimal, DateSafeJSONRenderer).
+        Урок прошлой даты из кабинета — отчёт не в день урока, но штраф в версии
+        выключен → 0."""
         group_name = '__spa_test_group__ пн 10:00'
         student_name = '__spa_test_student__'
         token = f'acct:{account_fixture}'
@@ -517,7 +520,7 @@ class TestSubmitLesson:
         })
         body = resp.json()
         assert body['success'] is True
-        assert body['payment'] == 500
+        assert (body['payment'], body['penalty']) == ('500.00', '0.00')
 
         lesson_id = _get_lesson_id(group_fixture, token)
         if lesson_id:
@@ -980,9 +983,9 @@ class TestSubmitLesson:
             raise RuntimeError('payroll insert failed')
 
         # submit_lesson теперь делегирует запись в apps.lessons.services.record_lesson,
-        # которое зовёт apps.lessons.repository.insert_payroll (единое ядро — см.
+        # которое зовёт apps.lessons.repository.recalculate_payroll (единое ядро — см.
         # docs/superpowers/specs/2026-07-14-unify-lesson-recording-design.md).
-        monkeypatch.setattr(lessons_repository, 'insert_payroll', _boom)
+        monkeypatch.setattr(lessons_repository, 'recalculate_payroll', _boom)
 
         with pytest.raises(RuntimeError):
             services.submit_lesson(account_fixture, {

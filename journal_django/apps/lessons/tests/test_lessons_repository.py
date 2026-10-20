@@ -87,14 +87,15 @@ def test_create_lesson_half_lesson_step_05(
 
 def test_create_lesson_absent_student_no_increment(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture, lessons_done
-):
+, present_classmate):
     result = services.create_lesson_full({
         'lesson_date': '2026-03-03',
         'group_id': group_fixture,
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
-        'attendance': [{'student_id': student_fixture, 'present': False}],
+        'attendance': present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture),
     })
     try:
         assert lessons_done(group_fixture, student_fixture) == Decimal('0.0')
@@ -102,12 +103,13 @@ def test_create_lesson_absent_student_no_increment(
         _delete_lesson(result['lesson_id'])
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_create_lesson_with_payroll(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture
 ):
-    """Payroll теперь всегда считается сервером из attendance — total=1,
-    present=1 → small-group-full formula = 500. Клиентский payroll больше не
-    принимается (payroll не передаём вообще)."""
+    """Payroll всегда считает сервер (движок зарплат): headcount из attendance,
+    сумма — ставка группового урока по версии (payroll_rates: 500). Клиентский
+    payroll не принимается (payroll не передаём вообще)."""
     result = services.create_lesson_full({
         'lesson_date': '2026-03-04',
         'group_id': group_fixture,
@@ -173,13 +175,14 @@ def test_get_lesson_full_missing_returns_none():
 # update_lesson
 # ---------------------------------------------------------------------------
 
-def test_update_lesson_coalesce(group_fixture, teacher_id_fixture):
+def test_update_lesson_coalesce(group_fixture, teacher_id_fixture, present_classmate):
     result = services.create_lesson_full({
         'lesson_date': '2026-03-05',
         'group_id': group_fixture,
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
+        'attendance': present_classmate([], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -191,7 +194,7 @@ def test_update_lesson_coalesce(group_fixture, teacher_id_fixture):
         _delete_lesson(lesson_id)
 
 
-def test_update_lesson_original_teacher_explicit_null(group_fixture, teacher_id_fixture):
+def test_update_lesson_original_teacher_explicit_null(group_fixture, teacher_id_fixture, present_classmate):
     result = services.create_lesson_full({
         'lesson_date': '2026-03-06',
         'group_id': group_fixture,
@@ -199,6 +202,7 @@ def test_update_lesson_original_teacher_explicit_null(group_fixture, teacher_id_
         'original_teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
+        'attendance': present_classmate([], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -305,13 +309,14 @@ def test_delete_lesson_missing_returns_false():
 
 def test_attendance_toggle_delta(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture, lessons_done
-):
+, present_classmate):
     result = services.create_lesson_full({
         'lesson_date': '2026-03-08',
         'group_id': group_fixture,
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
+        'attendance': present_classmate([], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -342,7 +347,7 @@ def _present(lesson_id: int, student_id: int):
 
 def test_attendance_toggle_flips_present_and_lessons_done(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture, lessons_done
-):
+, present_classmate):
     """update_attendance_cell — простой toggle посещаемости: false→true списывает
     урок (lessons_done += вес), true→false возвращает. Никаких «сгораний» задним
     числом: ретроактивная отметка пропуска теперь идёт через раздел «Доп.уроки»
@@ -353,7 +358,8 @@ def test_attendance_toggle_flips_present_and_lessons_done(
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
-        'attendance': [{'student_id': student_fixture, 'present': False}],
+        'attendance': present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -380,14 +386,14 @@ def test_attendance_toggle_missing_lesson_returns_false(student_fixture):
     assert repository.update_attendance_cell(999_999_999, student_fixture, True) is False
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_attendance_toggle_recomputes_payroll(
     group_fixture, teacher_id_fixture, student_fixture, membership_fixture, lessons_done
-):
+, present_classmate):
     """
-    Переключение ячейки посещаемости пересчитывает present_count И payment по
-    фактическому present_total (спец-надбавок «сгорания» больше нет — payment
-    считается напрямую calculate_payment). penalty не трогается (она про
-    своевременность исходной записи урока).
+    Переключение ячейки посещаемости пересчитывает headcount начисления
+    (present_count) движком зарплат. Сумма — фикс по формату группы и от числа
+    пришедших не зависит (спека 2026-10-20 §1.1): 500 и до, и после правки.
     """
     result = services.create_lesson_full({
         'lesson_date': '2026-03-08',
@@ -395,27 +401,28 @@ def test_attendance_toggle_recomputes_payroll(
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
-        'attendance': [{'student_id': student_fixture, 'present': False}],
+        'attendance': present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
+        # Пришёл только одноклассник (present_classmate).
         before = repository.get_lesson_full(lesson_id)
-        assert before['payroll']['present_count'] == 0
-        assert before['payroll']['payment'] == Decimal('0.00')
+        assert (before['payroll']['total_students'], before['payroll']['present_count']) == (2, 1)
+        assert before['payroll']['payment'] == Decimal('500.00')
 
         ok = repository.update_attendance_cell(lesson_id, student_fixture, True)
         assert ok is True
 
         after = repository.get_lesson_full(lesson_id)
-        assert after['payroll']['present_count'] == 1
-        # total_students=1, present=1 → малая группа, все пришли → 500.
+        assert after['payroll']['present_count'] == 2
         assert after['payroll']['payment'] == Decimal('500.00')
 
-        # Откат (true → false) возвращает payment к базовому 0.
+        # Откат (true → false) возвращает headcount; сумма — та же ставка.
         repository.update_attendance_cell(lesson_id, student_fixture, False)
         reverted = repository.get_lesson_full(lesson_id)
-        assert reverted['payroll']['present_count'] == 0
-        assert reverted['payroll']['payment'] == Decimal('0.00')
+        assert reverted['payroll']['present_count'] == 1
+        assert reverted['payroll']['payment'] == Decimal('500.00')
     finally:
         _delete_lesson(lesson_id)
 
@@ -423,6 +430,7 @@ def test_attendance_toggle_recomputes_payroll(
 @pytest.mark.usefixtures('payment_balance_guard_on')
 def test_attendance_toggle_blocked_when_no_paid_balance(
     group_fixture, teacher_id_fixture, student_fixture,
+    present_classmate,
 ):
     """Ученик без оплаченных уроков (membership без payments) — переключить в
     present:true нельзя, поднимает UnpaidAttendanceBlocked, ничего не меняется.
@@ -442,7 +450,8 @@ def test_attendance_toggle_blocked_when_no_paid_balance(
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
-        'attendance': [{'student_id': student_fixture, 'present': False}],
+        'attendance': present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -462,6 +471,7 @@ def test_attendance_toggle_blocked_when_no_paid_balance(
 
 def test_attendance_cell_blocked_for_locked_transferred_student(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture,
+    present_classmate,
 ):
     """Ученик переведён с B=5 отработанными; урок с lesson_number=3 (<=5) блокирован."""
     # Вторая группа того же направления — источник, откуда «переведён» ученик.
@@ -488,6 +498,7 @@ def test_attendance_cell_blocked_for_locked_transferred_student(
     result = services.create_lesson_full({
         'lesson_date': '2026-03-08', 'group_id': group_fixture, 'teacher_id': teacher_id_fixture,
         'lesson_number': 3, 'lesson_duration_minutes': 60,
+        'attendance': present_classmate([], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -508,6 +519,7 @@ def test_attendance_cell_blocked_for_locked_transferred_student(
 
 def test_attendance_cell_allowed_once_group_catches_up(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture,
+    present_classmate,
 ):
     """B=5; урок с lesson_number=6 (>5) — разрешён."""
     with connection.cursor() as cur:
@@ -533,6 +545,7 @@ def test_attendance_cell_allowed_once_group_catches_up(
     result = services.create_lesson_full({
         'lesson_date': '2026-03-08', 'group_id': group_fixture, 'teacher_id': teacher_id_fixture,
         'lesson_number': 6, 'lesson_duration_minutes': 60,
+        'attendance': present_classmate([], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -548,6 +561,7 @@ def test_attendance_cell_allowed_once_group_catches_up(
             cur.execute('DELETE FROM groups WHERE id = %s', [src_group_id])
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_attendance_cell_set_free_postfactum_frees_student_not_payroll(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture,
     membership_fixture, lessons_done,
@@ -585,8 +599,8 @@ def test_attendance_cell_set_free_postfactum_frees_student_not_payroll(
             lesson_id, student_fixture, present=True, is_free=True) is True
 
         full = services.get_lesson_full(lesson_id)
-        # Free оплачивается преподавателю как обычное присутствие (решение
-        # 2026-09-28): total=2, present=2 → 500, как было до правки.
+        # Free для headcount — обычное присутствие (решение 2026-09-28):
+        # total=2, present=2; сумма — ставка группового урока, как до правки.
         assert full['payroll']['total_students'] == 2
         assert full['payroll']['present_count'] == 2
         assert full['payroll']['payment'] == 500
@@ -612,6 +626,7 @@ def test_attendance_cell_set_free_postfactum_frees_student_not_payroll(
 @pytest.mark.usefixtures('payment_balance_guard_on')
 def test_attendance_cell_free_needs_no_balance_but_unfree_does(
     group_fixture, teacher_id_fixture, direction_fixture,
+    present_classmate,
 ):
     """Ученик с НУЛЕВЫМ балансом: «бесплатно» ставится без ошибки (баланс не нужен),
     а возврат в платный present (is_free=false) блокируется UnpaidAttendanceBlocked."""
@@ -625,7 +640,7 @@ def test_attendance_cell_free_needs_no_balance_but_unfree_does(
     result = services.create_lesson_full({
         'lesson_date': '2026-03-21', 'group_id': group_fixture, 'teacher_id': teacher_id_fixture,
         'lesson_number': 1, 'lesson_duration_minutes': 60,
-        'attendance': [{'student_id': s, 'present': False}],
+        'attendance': present_classmate([{'student_id': s, 'present': False}], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -649,13 +664,14 @@ def test_attendance_cell_free_needs_no_balance_but_unfree_does(
 # list_lessons
 # ---------------------------------------------------------------------------
 
-def test_list_lessons_envelope_and_filter(group_fixture, teacher_id_fixture):
+def test_list_lessons_envelope_and_filter(group_fixture, teacher_id_fixture, present_classmate):
     result = services.create_lesson_full({
         'lesson_date': '2026-03-09',
         'group_id': group_fixture,
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
+        'attendance': present_classmate([], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -669,7 +685,7 @@ def test_list_lessons_envelope_and_filter(group_fixture, teacher_id_fixture):
         _delete_lesson(lesson_id)
 
 
-def test_list_lessons_invalid_sort_by_falls_back(group_fixture, teacher_id_fixture):
+def test_list_lessons_invalid_sort_by_falls_back(group_fixture, teacher_id_fixture, present_classmate):
     # Невалидный sort_by → тихий fallback (как Express paginate), без ошибки.
     result = services.create_lesson_full({
         'lesson_date': '2026-03-10',
@@ -677,6 +693,7 @@ def test_list_lessons_invalid_sort_by_falls_back(group_fixture, teacher_id_fixtu
         'teacher_id': teacher_id_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
+        'attendance': present_classmate([], group_fixture),
     })
     lesson_id = result['lesson_id']
     try:
@@ -689,16 +706,15 @@ def test_list_lessons_invalid_sort_by_falls_back(group_fixture, teacher_id_fixtu
         _delete_lesson(lesson_id)
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_record_lesson_payroll_excludes_locked_student_across_rate_bracket(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture,
 ):
-    """Зарплата считается по составу БЕЗ переведённого ученика — проверка на границе тарифа.
+    """Headcount начисления — по составу БЕЗ переведённого ученика.
 
     В группе 3 ученика, один (student_fixture, B=5) заблокирован переводом на уроке №3.
-    Правильно: total=2, present=2 → малая группа, все пришли → 500₽.
-    Если бы заблокированный протёк в расчёт: total=3, present=3 → 200×3 = 600₽.
-    Двух учеников для этой проверки НЕ хватает (1 из 1 и 2 из 2 дают одинаковые 500₽) —
-    поэтому именно три.
+    Правильно: total=2, present=2. Сумма — фикс ставки группового урока (500) и от
+    состава не зависит; headcount важен штрафу «за каждого присутствовавшего».
     """
     extra_students: list[int] = []
     with connection.cursor() as cur:
@@ -740,7 +756,6 @@ def test_record_lesson_payroll_excludes_locked_student_across_rate_bracket(
         lesson_date='2026-03-09', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=3, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='test',
-        submit_date='2026-03-09',
         attendance=[
             {'student_id': student_fixture, 'present': True},
             {'student_id': extra_students[0], 'present': True},
@@ -769,6 +784,7 @@ def test_record_lesson_payroll_excludes_locked_student_across_rate_bracket(
                 cur.execute('DELETE FROM students WHERE id = %s', [sid])
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_record_lesson_free_outcome_no_money_but_progress_and_renewal(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture, lessons_done,
 ):
@@ -777,8 +793,8 @@ def test_record_lesson_free_outcome_no_money_but_progress_and_renewal(
     продление двигается (present=true).
 
     student_fixture (free, баланс 8) + student2 (платно, баланс 8), оба present, 60 мин.
-    Ожидаем: payroll total=2/present=2/payment=500 (free оплачивается преподавателю
-    как обычное присутствие); баланс free = 8 (не списан), баланс student2 = 7;
+    Ожидаем: payroll total=2/present=2 (free — обычное присутствие для headcount),
+    payment=500 (ставка группового урока); баланс free = 8 (не списан), баланс student2 = 7;
     lessons_done обоих = 1; attended_units_total free = 1 (для продления);
     строка free present=true, is_free=true.
     """
@@ -802,7 +818,6 @@ def test_record_lesson_free_outcome_no_money_but_progress_and_renewal(
         lesson_date='2026-03-10', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='test',
-        submit_date='2026-03-10',
         attendance=[
             {'student_id': student_fixture, 'present': True, 'is_free': True},
             {'student_id': student2_id, 'present': True},
@@ -811,8 +826,8 @@ def test_record_lesson_free_outcome_no_money_but_progress_and_renewal(
     lesson_id = result['lesson_id']
     try:
         full = services.get_lesson_full(lesson_id)
-        # Free оплачивается преподавателю как обычное присутствие (решение
-        # 2026-09-28): total=2, present=2 → 500, «малая группа, все пришли».
+        # Free для headcount — обычное присутствие (решение 2026-09-28):
+        # total=2, present=2; сумма — ставка группового урока (payroll_rates).
         assert full['payroll']['total_students'] == 2
         assert full['payroll']['present_count'] == 2
         assert full['payroll']['payment'] == 500
@@ -842,18 +857,18 @@ def test_record_lesson_free_outcome_no_money_but_progress_and_renewal(
             cur.execute('DELETE FROM students WHERE id = %s', [student2_id])
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_record_lesson_solo_free_student_teacher_paid_no_charge(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture, lessons_done,
 ):
     """Один ученик в группе, бесплатное занятие → преподавателю платят как обычно
-    (total=1, present=1 → 500). Баланс УЧЕНИКА не списан, прогресс +1 (present=true)."""
+    (total=1, present=1, ставка группового урока 500). Баланс УЧЕНИКА не списан, прогресс +1 (present=true)."""
     from apps.finances.repository import balance_for_student
 
     result = services.record_lesson(
         lesson_date='2026-03-11', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='test',
-        submit_date='2026-03-11',
         attendance=[{'student_id': student_fixture, 'present': True, 'is_free': True}],
     )
     lesson_id = result['lesson_id']
@@ -872,6 +887,7 @@ def test_record_lesson_solo_free_student_teacher_paid_no_charge(
             cur.execute('DELETE FROM lessons WHERE id = %s', [lesson_id])
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_record_lesson_unpaid_skip_excluded_and_no_pending(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture,
 ):
@@ -892,7 +908,7 @@ def test_record_lesson_unpaid_skip_excluded_and_no_pending(
     result = services.record_lesson(
         lesson_date='2026-03-12', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
-        lesson_type='regular', record_url=None, submitted_by_token='test', submit_date='2026-03-12',
+        lesson_type='regular', record_url=None, submitted_by_token='test', 
         attendance=[
             {'student_id': student_fixture, 'present': False, 'unpaid_skip': True},
             {'student_id': s2, 'present': True},
@@ -921,17 +937,18 @@ def test_record_lesson_unpaid_skip_excluded_and_no_pending(
             cur.execute('DELETE FROM students WHERE id = %s', [s2])
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_set_unpaid_skip_on_recorded_lesson_for_newly_added_student(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture,
 ):
-    """Ключевой сценарий: урок УЖЕ проведён (1 ученик, 500₽). Потом в группу добавлен
+    """Ключевой сценарий: урок УЖЕ проведён (1 ученик, ставка 500₽). Потом в группу добавлен
     новый ученик (перевод/начал не с 1-го). Ему ставят «неоплачиваемый пропуск» на
     этот прошлый урок — строка создаётся задним числом, из зарплаты он исключён
     (payroll не меняется), pending нет. Снятие удаляет строку."""
     result = services.record_lesson(
         lesson_date='2026-03-13', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
-        lesson_type='regular', record_url=None, submitted_by_token='test', submit_date='2026-03-13',
+        lesson_type='regular', record_url=None, submitted_by_token='test', 
         attendance=[{'student_id': student_fixture, 'present': True}],
     )
     lid = result['lesson_id']
@@ -971,6 +988,7 @@ def test_set_unpaid_skip_missing_lesson_returns_false():
     assert services.set_unpaid_skip(999_999_999, 1, True) is False
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_lesson_skip_on_future_slot_then_recorded_excludes_student(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture,
 ):
@@ -997,7 +1015,7 @@ def test_lesson_skip_on_future_slot_then_recorded_excludes_student(
     result = services.record_lesson(
         lesson_date='2026-03-14', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
-        lesson_type='regular', record_url=None, submitted_by_token='test', submit_date='2026-03-14',
+        lesson_type='regular', record_url=None, submitted_by_token='test', 
         attendance=[
             {'student_id': student_fixture, 'present': True},
             {'student_id': s2, 'present': True},
@@ -1025,6 +1043,7 @@ def test_lesson_skip_on_future_slot_then_recorded_excludes_student(
             cur.execute('DELETE FROM students WHERE id = %s', [s2])
 
 
+@pytest.mark.usefixtures('payroll_rates')
 def test_lesson_skip_on_recorded_slot_materializes_and_unset(
     group_fixture, teacher_id_fixture, student_fixture, direction_fixture, membership_fixture,
 ):
@@ -1034,7 +1053,7 @@ def test_lesson_skip_on_recorded_slot_materializes_and_unset(
     result = services.record_lesson(
         lesson_date='2026-03-15', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=1, lesson_duration_minutes=60,
-        lesson_type='regular', record_url=None, submitted_by_token='test', submit_date='2026-03-15',
+        lesson_type='regular', record_url=None, submitted_by_token='test', 
         attendance=[{'student_id': student_fixture, 'present': True}],
     )
     lid = result['lesson_id']
@@ -1116,7 +1135,6 @@ def test_record_lesson_silently_excludes_locked_students(
         lesson_date='2026-03-08', teacher_id=teacher_id_fixture, group_id=group_fixture,
         original_teacher_id=None, lesson_number=3, lesson_duration_minutes=60,
         lesson_type='regular', record_url=None, submitted_by_token='test',
-        submit_date='2026-03-08',
         attendance=[
             {'student_id': student_fixture, 'present': True},
             {'student_id': student2_id, 'present': True},

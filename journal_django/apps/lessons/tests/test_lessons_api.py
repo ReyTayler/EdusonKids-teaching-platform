@@ -178,10 +178,10 @@ def test_post_creates_lesson(group_fixture, teacher_id_fixture, student_fixture,
 
 
 def test_post_free_outcome_pays_teacher_not_student(
-    group_fixture, teacher_id_fixture, student_fixture, membership_fixture,
+    group_fixture, teacher_id_fixture, student_fixture, membership_fixture, payroll_rates,
 ):
     """POST с is_free=true (бесплатное занятие, один ученик) → урок создаётся,
-    преподавателю платят как обычно (total=1, present=1 → 500). Строка
+    преподавателю платят как обычно (total=1, present=1, ставка группового урока 500). Строка
     lesson_attendance.is_free=true (баланс УЧЕНИКА не спишется — это проверяет
     finances). Сквозная проверка сериализатор→сервис→БД."""
     payload = {

@@ -658,14 +658,14 @@ def _cleanup_burn(missed_lesson_id, fact_id):
 
 
 def test_burn_endpoint_burns_pending(
-    admin_client, missed_lesson_fixture, student_fixture, cleanup_resolutions,
+    admin_client, missed_lesson_fixture, student_fixture, cleanup_resolutions, payroll_rates,
 ):
     rid = _pending_rid(admin_client, missed_lesson_fixture, student_fixture)
     fact_id = None
     try:
         resp = admin_client.post(f'{ADMIN_URL}/{rid}/burn')
         assert resp.status_code == 200
-        assert resp.data['payment'] == 200
+        assert resp.data['payment'] == 0  # сгорание не оплачивается (§1.10)
         detail = admin_client.get(f'{ADMIN_URL}/{rid}')
         assert detail.data['status'] == 'burned'
         fact_id = detail.data['fact_lesson_id']

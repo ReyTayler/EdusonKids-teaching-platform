@@ -56,6 +56,7 @@ def _lessons_done(group_id, student_id) -> Decimal:
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures('payroll_rates')
 def test_create_lesson_full_increments_present_full_lesson():
     d, t, g, s1, s2 = _seed(duration=90)
     _seed_payment(s1.id, d.id)
@@ -78,8 +79,10 @@ def test_create_lesson_full_increments_present_full_lesson():
     assert full['teacher_name'] == t.name
     assert len(full['attendance']) == 2
     assert full['payroll']['present_count'] == 1
-    # total_students=2, present=1 → малая группа, не все пришли → smallPartial = 300
-    assert full['payroll']['payment'] == Decimal('300.00')
+    # Ставка — фикс по формату группы (payroll_rates: групповой 500), сколько бы
+    # ни пришло: total_students=2, present=1 → всё равно 500.
+    assert full['payroll']['total_students'] == 2
+    assert full['payroll']['payment'] == Decimal('500.00')
 
 
 @pytest.mark.django_db
@@ -118,7 +121,9 @@ def test_update_attendance_cell_toggles_delta():
     result = services.create_lesson_full({
         'lesson_date': '2026-01-13', 'teacher_id': t.id, 'group_id': g.id,
         'lesson_number': 1, 'lesson_duration_minutes': 90,
-        'attendance': [{'student_id': s1.id, 'present': False}],
+        # s2 пришёл: урок без присутствующих не записывается (§1.2 спеки 2026-10-20).
+        'attendance': [{'student_id': s1.id, 'present': False},
+                       {'student_id': s2.id, 'present': True}],
     })
     lid = result['lesson_id']
     assert _lessons_done(g.id, s1.id) == Decimal('0.0')

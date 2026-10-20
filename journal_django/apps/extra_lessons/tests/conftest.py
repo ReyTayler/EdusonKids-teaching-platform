@@ -105,7 +105,7 @@ def membership_fixture(group_fixture, student_fixture, direction_fixture):
 
 
 @pytest.fixture
-def missed_lesson_fixture(group_fixture, teacher_fixture, student_fixture, membership_fixture):
+def missed_lesson_fixture(group_fixture, teacher_fixture, student_fixture, membership_fixture, present_classmate):
     """Уже проведённый урок группы, на котором student_fixture отсутствовал."""
     from apps.lessons import services as lessons_services
 
@@ -115,7 +115,8 @@ def missed_lesson_fixture(group_fixture, teacher_fixture, student_fixture, membe
         'teacher_id': teacher_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
-        'attendance': [{'student_id': student_fixture, 'present': False}],
+        'attendance': present_classmate(
+            [{'student_id': student_fixture, 'present': False}], group_fixture),
     })
     lesson_id = result['lesson_id']
     yield lesson_id
@@ -166,6 +167,7 @@ def unpaid_membership_fixture(group_fixture, unpaid_student_fixture):
 @pytest.fixture
 def missed_lesson_unpaid_fixture(
     group_fixture, teacher_fixture, unpaid_student_fixture, unpaid_membership_fixture,
+    present_classmate,
 ):
     """Уже проведённый урок группы, на котором unpaid_student_fixture (без
     оплаты) отсутствовал — источник для тестов UnpaidAttendanceBlocked."""
@@ -177,7 +179,8 @@ def missed_lesson_unpaid_fixture(
         'teacher_id': teacher_fixture,
         'lesson_number': 1,
         'lesson_duration_minutes': 60,
-        'attendance': [{'student_id': unpaid_student_fixture, 'present': False}],
+        'attendance': present_classmate(
+            [{'student_id': unpaid_student_fixture, 'present': False}], group_fixture),
     })
     lesson_id = result['lesson_id']
     yield lesson_id

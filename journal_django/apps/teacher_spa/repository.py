@@ -6,7 +6,7 @@ ORM-порт services/teacher-repo.js (раздел 09):
     (data[teacher][group]) по своим группам, своим + назначенным, одной группе
   - resolve_ids / resolve_students — разрешение id перед записью урока
 
-Запись самого урока (insert_lesson/insert_attendance/insert_payroll/
+Запись самого урока (insert_lesson/insert_attendance/recalculate_payroll/
 increment_counters) вынесена в apps.lessons.repository — вызывается через
 apps.lessons.services.record_lesson (единое ядро, см.
 docs/superpowers/specs/2026-07-14-unify-lesson-recording-design.md).

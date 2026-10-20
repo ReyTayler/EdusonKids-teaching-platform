@@ -32,8 +32,8 @@ from apps.lessons import services
 from apps.lessons.exceptions import (
     AttendanceCompensatedElsewhere, AttendanceHasScheduledMakeup, AttendanceLockedByTransfer,
     CoursePositionVanished,
-    LessonAlreadyRecorded, LessonHasMakeupResolutions, SystemLessonProtected,
-    UnpaidAttendanceBlocked,
+    LessonAlreadyRecorded, LessonHasMakeupResolutions, LessonWithoutPresentStudents,
+    SystemLessonProtected, UnpaidAttendanceBlocked,
 )
 from apps.lessons.serializers import (
     AttendanceUpdateSerializer,
@@ -170,6 +170,10 @@ class LessonListCreateView(APIView):
 
         try:
             result = services.create_lesson_full(serializer.validated_data)
+        except LessonWithoutPresentStudents as e:
+            # Урок без присутствующих — перенос/отмена, а не занятие (спека
+            # 2026-10-20-eduson-motivation-payroll-design §1.2): ошибка ввода.
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except UnpaidAttendanceBlocked as e:
             # code — чтобы суперадмин увидел модалку «записать в долг», а не
             # красную ошибку; остальным ролям фронт покажет обычный отказ.
@@ -254,6 +258,9 @@ class AttendanceCellView(APIView):
         except UnpaidAttendanceBlocked as e:
             return Response({'error': str(e), 'code': UNPAID_ATTENDANCE_BLOCKED},
                             status=status.HTTP_400_BAD_REQUEST)
+        except LessonWithoutPresentStudents as e:
+            # Снятие последнего пришедшего (§1.2 спеки 2026-10-20) — ошибка ввода.
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except (SystemLessonProtected, AttendanceCompensatedElsewhere,
                 AttendanceHasScheduledMakeup, AttendanceLockedByTransfer) as e:
             return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
@@ -277,6 +284,8 @@ class AttendanceUnpaidSkipView(APIView):
         try:
             ok = services.set_unpaid_skip(
                 lesson_id, student_id, serializer.validated_data['value'])
+        except LessonWithoutPresentStudents as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except SystemLessonProtected as e:
             return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
         if not ok:

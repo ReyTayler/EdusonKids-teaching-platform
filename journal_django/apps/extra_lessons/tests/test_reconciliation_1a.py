@@ -14,7 +14,9 @@ end-to-end сценарии makeup'а и доказывает, что новый
   • Оплата: lessons_count=8, total_amount=8000 ₽ (kind='purchase', paid_at
     2026-06-01) → цена урока партии = 8000 / 8 = 1000 ₽.
   • Пропущенный урок: групповое занятие 60 минут 2026-04-01, ученик
-    отмечен present=false (ничего пока не потреблено).
+    отмечен present=false (ничего пока не потреблено); на уроке был
+    одноклассник — урок без присутствующих не записывается.
+  • Ставки школы (payroll_rates): групповой урок 500 ₽, штраф выключен.
 
 БАЗА (до makeup'а):
   • balance_for_student = purchased(8) − attended(0) = 8.
@@ -25,9 +27,10 @@ end-to-end сценарии makeup'а и доказывает, что новый
   • create_assignment: makeup ученику против пропущенного урока,
     teacher=teacher_fixture, 2026-04-05 15:00, длительность 45 мин.
   • record(present=True): доп.урок проведён.
-    payment = 200 ₽ (calculate_extra_lesson_payment: 200 × 1 present,
-                      плоско, не зависит от длительности/размера группы);
-    penalty = 0 (scheduled_date == submit_date == 2026-04-05).
+    payment = 500 ₽ (движок зарплат: доп.урок — обычный урок формата группы,
+                      ставка группового урока, не зависит от длительности);
+    penalty = 0 (штраф выключен; к тому же факт доп.урока не несёт токен
+                 кабинета 'acct:', штрафуются только такие уроки).
 
 ПОСЛЕ makeup'а — потребление считается ОДИН раз, на ИСХОДНОМ 60-мин уроке:
   • record() ретроактивно ставит present=true на исходном 60-мин уроке
@@ -44,8 +47,8 @@ end-to-end сценарии makeup'а и доказывает, что новый
       attended_lessons = 1 (посещено в апреле),
       worked_off_month = 1000.00 ₽ (1 урок × 1000 ₽),
       balance = 7, remaining_value = 7 × 1000 = 7000.00 ₽.
-  • Зарплата teacher_fixture SUM = 200: пропущенный урок дал payroll 0 ₽
-    (present_count=0 → calculate_payment=0), доп.урок — 200 ₽ → 0 + 200.
+  • Зарплата teacher_fixture SUM растёт ровно на 500 ₽ — начисление за
+    доп.урок; пропущенный урок (с одноклассником) оплачен ещё при записи.
 
 Если любое вычисленное значение разойдётся с этим ручным расчётом — это
 сигнал реальной денежной регрессии, а не повод молча подогнать ожидание.
@@ -104,7 +107,7 @@ def _report_rows(month: str, student_id: int):
 
 def test_makeup_money_reconciliation_1a(
     group_fixture, teacher_fixture, student_fixture,
-    membership_fixture, missed_lesson_fixture,
+    membership_fixture, payroll_rates, missed_lesson_fixture,
 ):
     """End-to-end сверка денег/потребления/продлений для одного makeup'а."""
     # --- БАЗА: до makeup'а ничего не потреблено -----------------------------
@@ -112,8 +115,9 @@ def test_makeup_money_reconciliation_1a(
     assert baseline_balance == 8
     assert fin_repo.attended_units_total(student_fixture) == Decimal('0')
     assert _attended_total(student_fixture) == 0.0
-    # Зарплата за пропущенный урок (0 присутствующих) = 0 ₽.
-    assert _payroll_sum(teacher_fixture) == 0
+    # Пропущенный урок проведён (пришёл одноклассник) — ставка группового урока.
+    baseline_payroll = _payroll_sum(teacher_fixture)
+    assert baseline_payroll == 500
 
     # --- Назначаем и проводим доп.урок --------------------------------------
     created = services.create_assignment(
@@ -135,12 +139,10 @@ def test_makeup_money_reconciliation_1a(
         teacher_id=teacher_fixture,
         present=True,
         record_url=None,
-        submitted_by_token='acct:1',
-        submit_date='2026-04-05',
         request=_FakeRequest(),
     )
     try:
-        assert result['payment'] == 200
+        assert result['payment'] == 500
         assert result['penalty'] == 0
 
         # --- ПОСЛЕ makeup'а: потребление один раз, на исходном 60-мин уроке ---
@@ -166,8 +168,8 @@ def test_makeup_money_reconciliation_1a(
             row.revenue_total + row.refunded + row.advance
         )
 
-        # --- Зарплата преподавателя: 0 (пропуск) + 200 (доп.урок) = 200 ------
-        assert _payroll_sum(teacher_fixture) == 200
+        # --- Зарплата преподавателя: урок с пропуском + доп.урок = 500 + 500 ---
+        assert _payroll_sum(teacher_fixture) == baseline_payroll + 500
     finally:
         # Резолюцию (fact_lesson FK) сносим ДО факт-урока, иначе DB-level FK.
         _delete_resolutions(missed_lesson_fixture)

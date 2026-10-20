@@ -67,6 +67,16 @@ class LessonCreateSerializer(serializers.Serializer):
     # ПЛАТНЫМ: спишется с баланса — это не is_free.
     allow_debt = serializers.BooleanField(required=False, default=False)
 
+    def validate_submitted_by_token(self, value: str) -> str:
+        # 'acct:<id>' — признак записи преподавателем из кабинета: только такие
+        # уроки штрафуются за поздний отчёт (движок зарплат, спека 2026-10-20 §1.4).
+        # Админская запись выдавать себя за кабинетную не должна — иначе штраф
+        # получил бы урок, который преподаватель не отправлял.
+        if value.startswith('acct:'):
+            raise serializers.ValidationError(
+                'Токен вида «acct:…» ставит только кабинет преподавателя.')
+        return value
+
 
 class LessonUpdateSerializer(serializers.Serializer):
     """

@@ -66,7 +66,7 @@ def test_record_refused_when_student_was_present(pending_resolution, teacher_fix
     with pytest.raises(StudentNotAbsent):
         services.record(
             pending_resolution.id, teacher_id=teacher_fixture, present=True,
-            record_url=None, submitted_by_token='t', submit_date='2026-04-05',
+            record_url=None, 
             request=_FakeRequest())
     pending_resolution.refresh_from_db()
     assert pending_resolution.status == MAKEUP_SCHEDULED

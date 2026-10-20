@@ -33,6 +33,7 @@ from decimal import Decimal
 from django.utils import timezone
 
 from apps.eduson_import.context import EDUSON_LESSON_MINUTES, ImportContext, ImportDataError
+from apps.eduson_import.links import Kind, load_links
 from apps.eduson_import.identity import REASON_AMBIGUOUS, ResolvedStudent, resolve_students
 from apps.eduson_import.normalize import norm_email, norm_name, norm_phone, norm_tg
 from apps.eduson_import.sqlite_source import EdusonSource
@@ -129,32 +130,39 @@ def import_groups(src: EdusonSource, ctx: ImportContext) -> None:
     groups = {g['id']: g for g in src.rows('student_groups')}
     _import_group_rows(groups, ctx, now)
     members = _import_students(src, groups, ctx, now)
-    _import_memberships(src, groups, members, ctx)
+    import_memberships(src, groups, members, ctx)
 
 
 # ── группы и слоты ──────────────────────────────────────────────────────────
 
+def _group_fields(gid: int, g: dict, ctx: ImportContext) -> tuple[dict, list[tuple[int, datetime.time]]]:
+    """Проверки группы Eduson и (поля Group без created_at, слоты). Общая для импорта и
+    мягкого обновления."""
+    code = _text(g['code'])
+    if g['format'] not in FORMATS:
+        raise ImportDataError(f'группа {code}: неизвестный формат {g["format"]!r}')
+    if g['teacher_id'] not in ctx.teacher_by_eduson:
+        raise ImportDataError(f'группа {code}: нет преподавателя (в KOTOKOD он обязателен)')
+    slots = _slots(g, ctx)
+    if not slots:
+        ctx.report.append(f'группа {code}: нет расписания (слотов) — план строится по урокам Eduson')
+    if len(slots) > 7:
+        raise ImportDataError(f'группа {code}: {len(slots)} занятий в неделю, в KOTOKOD не больше 7')
+    fields = {
+        'name': code, 'direction_id': ctx.direction_by_course[ctx.course_by_group[gid]],
+        'teacher_id': ctx.teacher_by_eduson[g['teacher_id']], 'is_individual': FORMATS[g['format']],
+        'lesson_duration_minutes': GROUP_DURATION_MINUTES, 'lessons_per_week': max(1, len(slots)),
+        # lessons_total не заполняется: длина курса — из направления (см. _report_packages).
+        'group_start_date': _date(g['start_date'], code), 'lessons_total': None,
+        'lesson_number_offset': ctx.pre_system.get(gid, Decimal(0)), 'active': bool(g['active']),
+    }
+    return fields, slots
+
+
 def _import_group_rows(groups: dict[int, dict], ctx: ImportContext, now) -> None:
     for gid, g in groups.items():
-        code = _text(g['code'])
-        if g['format'] not in FORMATS:
-            raise ImportDataError(f'группа {code}: неизвестный формат {g["format"]!r}')
-        if g['teacher_id'] not in ctx.teacher_by_eduson:
-            raise ImportDataError(f'группа {code}: нет преподавателя (в KOTOKOD он обязателен)')
-        slots = _slots(g, ctx)
-        if not slots:
-            ctx.report.append(f'группа {code}: нет расписания (слотов) — план строится по урокам Eduson')
-        if len(slots) > 7:
-            raise ImportDataError(f'группа {code}: {len(slots)} занятий в неделю, в KOTOKOD не больше 7')
-        n = ctx.pre_system.get(gid, Decimal(0))
-        group = Group.objects.create(
-            name=code, direction_id=ctx.direction_by_course[ctx.course_by_group[gid]],
-            teacher_id=ctx.teacher_by_eduson[g['teacher_id']], is_individual=FORMATS[g['format']],
-            lesson_duration_minutes=GROUP_DURATION_MINUTES, lessons_per_week=max(1, len(slots)),
-            # lessons_total не заполняется: длина курса — из направления (см. _report_packages).
-            group_start_date=_date(g['start_date'], code), lessons_total=None,
-            lesson_number_offset=n, active=bool(g['active']), created_at=_created_at(g['created_at'], now),
-        )
+        fields, slots = _group_fields(gid, g, ctx)
+        group = Group.objects.create(**fields, created_at=_created_at(g['created_at'], now))
         ctx.group_by_eduson[gid] = group.id
         GroupScheduleSlot.objects.bulk_create(
             [GroupScheduleSlot(group=group, day_of_week=d, start_time=t) for d, t in slots])
@@ -185,6 +193,19 @@ def _first(rows: list[dict], column: str) -> str | None:
 def _import_students(src: EdusonSource, groups: dict[int, dict], ctx: ImportContext,
                      now) -> dict[int, list[tuple[int, ResolvedStudent]]]:
     """Ученики + комментарии; → group_id Eduson → [(Student.id, ученик)] в порядке участников."""
+    resolution, code_of = _resolve(src, groups, ctx)
+    members: dict[int, list[tuple[int, ResolvedStudent]]] = defaultdict(list)
+    for rs in resolution.students:
+        values, _ = _student_values(rs, code_of, ctx)
+        student = Student.objects.create(**values, created_at=now)
+        _bind(student.id, rs, members, ctx)
+        _student_comments(student, rs.rows, code_of, ctx)
+    return members
+
+
+def _resolve(src: EdusonSource, groups: dict[int, dict], ctx: ImportContext):
+    """Склейка участников в учеников + отчёт о пропусках и спорных склейках →
+    (resolution, код группы по id Eduson)."""
     participants = src.rows('participants')
     for p in participants:
         if p['group_id'] not in groups:
@@ -203,30 +224,32 @@ def _import_students(src: EdusonSource, groups: dict[int, dict], ctx: ImportCont
         else:
             what = f'совпали имя ребёнка и телефон родителя, но расходится {item.reason} — заведены разными учениками'
         ctx.manual_review.append(f'участники {_ids(item.participant_ids)}: {what}')
+    return resolution, code_of
 
-    members: dict[int, list[tuple[int, ResolvedStudent]]] = defaultdict(list)
-    for rs in resolution.students:
-        rows = rs.rows
+
+def _student_values(rs: ResolvedStudent, code_of: dict[int, str], ctx: ImportContext) -> tuple[dict, bool]:
+    """Поля Student склеенного ученика → (поля, есть ли имя в Eduson)."""
+    rows = rs.rows
+    name = _first(rows, 'child_name')
+    has_name = name is not None
+    if not has_name:
+        # full_name обязателен, а строка Eduson без имени (только возраст/контакт) —
+        # всё же ребёнок группы. Код группы в заглушке отличает таких учеников в
+        # списках друг от друга и ведёт к карточке, где имя надо дописать.
         codes = list(dict.fromkeys(code_of[r['group_id']] for r in rows))
-        name = _first(rows, 'child_name')
-        if name is None:
-            # full_name обязателен, а строка Eduson без имени (только возраст/контакт) —
-            # всё же ребёнок группы. Код группы в заглушке отличает таких учеников в
-            # списках друг от друга и ведёт к карточке, где имя надо дописать.
-            name = 'Без имени · ' + ', '.join(codes)
-            ctx.manual_review.append(f'участники {_ids(rs.participant_ids)}: нет имени ребёнка — '
-                                     'ученик заведён с именем-заглушкой, впишите имя')
-        _report_conflicts(rs, ctx)
-        student = Student.objects.create(
-            full_name=name, created_at=now,
-            **{field: _first(rows, column) for field, column, _ in _STUDENT_FIELDS},
-        )
-        for pid in rs.participant_ids:
-            ctx.student_by_participant[pid] = student.id
-        for r in rows:
-            members[r['group_id']].append((student.id, rs))
-        _student_comments(student, rows, code_of, ctx)
-    return members
+        name = 'Без имени · ' + ', '.join(codes)
+        ctx.manual_review.append(f'участники {_ids(rs.participant_ids)}: нет имени ребёнка — '
+                                 'ученик заведён с именем-заглушкой, впишите имя')
+    _report_conflicts(rs, ctx)
+    values = {'full_name': name, **{field: _first(rows, column) for field, column, _ in _STUDENT_FIELDS}}
+    return values, has_name
+
+
+def _bind(student_id: int, rs: ResolvedStudent, members: dict, ctx: ImportContext) -> None:
+    for pid in rs.participant_ids:
+        ctx.student_by_participant[pid] = student_id
+    for r in rs.rows:
+        members[r['group_id']].append((student_id, rs))
 
 
 def _report_conflicts(rs: ResolvedStudent, ctx: ImportContext) -> None:
@@ -253,7 +276,7 @@ def _student_comments(student: Student, rows: list[dict], code_of: dict[int, str
 
 # ── членства и заметки групп ────────────────────────────────────────────────
 
-def _import_memberships(src: EdusonSource, groups: dict[int, dict],
+def import_memberships(src: EdusonSource, groups: dict[int, dict],
                         members: dict[int, list[tuple[int, ResolvedStudent]]], ctx: ImportContext) -> None:
     held_weight: dict[int, Decimal] = defaultdict(Decimal)
     for s in src.rows('sessions'):
@@ -286,3 +309,98 @@ def _import_memberships(src: EdusonSource, groups: dict[int, dict],
                 StudentComment(student_id=sid, body=f'[{code}] Заметка группы: {_text(g["notes"])}')
                 for sid in student_ids
             ])
+
+
+# ── мягкое обновление (sync_eduson) ─────────────────────────────────────────
+
+def sync_groups(src: EdusonSource, ctx: ImportContext) -> dict[int, list[tuple[int, ResolvedStudent]]]:
+    """Мягкое обновление групп и учеников по связям EdusonLink: id в платформе не
+    меняются (на них ссылаются сделки продлений и задачи). Членства не пишет — их
+    вместе с уроками заменяет команда (sync_eduson) после удаления старых фактов;
+    → то же соответствие «группа → ученики», что _import_students."""
+    require_atomic('группы')
+    now = timezone.now()
+    groups = {g['id']: g for g in src.rows('student_groups')}
+    _sync_group_rows(groups, load_links(Kind.GROUP), ctx, now)
+    return _sync_students(src, groups, load_links(Kind.PARTICIPANT), ctx, now)
+
+
+# Не перезаписываются у существующей группы: длина курса — настройка платформы
+# (у импорта она пустая, «как в направлении»), а ручное значение — решение человека.
+_GROUP_KEEP = frozenset({'lessons_total'})
+
+
+def _sync_group_rows(groups: dict[int, dict], linked: dict[str, int], ctx: ImportContext, now) -> None:
+    existing = Group.objects.in_bulk(list(linked.values()))
+    slots_now: dict[int, set] = defaultdict(set)
+    for group_id, day, start in GroupScheduleSlot.objects.filter(group_id__in=existing).values_list(
+            'group_id', 'day_of_week', 'start_time'):
+        slots_now[group_id].add((day, start))
+    created = updated = reslotted = 0
+    for gid, g in groups.items():
+        fields, slots = _group_fields(gid, g, ctx)
+        group = existing.get(linked.get(str(gid)))
+        if group is None:
+            group = Group.objects.create(**fields, created_at=_created_at(g['created_at'], now))
+            GroupScheduleSlot.objects.bulk_create(
+                [GroupScheduleSlot(group=group, day_of_week=d, start_time=t) for d, t in slots])
+            created += 1
+        else:
+            changed = [k for k, v in fields.items() if k not in _GROUP_KEEP and getattr(group, k) != v]
+            if changed:
+                for k in changed:
+                    setattr(group, k, fields[k])
+                group.save(update_fields=changed)
+                updated += 1
+            if slots_now[group.id] != set(slots):
+                GroupScheduleSlot.objects.filter(group=group).delete()
+                GroupScheduleSlot.objects.bulk_create(
+                    [GroupScheduleSlot(group=group, day_of_week=d, start_time=t) for d, t in slots])
+                reslotted += 1
+        ctx.group_by_eduson[gid] = group.id
+    # Группа, которой больше нет в старой системе: в архив. Её уроки, план, членства и
+    # отзывы команда удалит вместе с фактами остальных групп — в источнике их нет.
+    vanished = sorted(pk for source, pk in linked.items() if int(source) not in groups and pk in existing)
+    ctx.vanished_groups = vanished
+    archived = Group.objects.filter(id__in=vanished, active=True).update(active=False)
+    ctx.report.append(f'группы: новых {created}, обновлено {updated}, сменили расписание {reslotted}'
+                      + (f', исчезли из старой системы {len(vanished)} (в архив {archived})' if vanished else ''))
+    _report_packages(groups, ctx)
+
+
+def _sync_students(src: EdusonSource, groups: dict[int, dict], linked: dict[str, int], ctx: ImportContext,
+                   now) -> dict[int, list[tuple[int, ResolvedStudent]]]:
+    """Ученик склейки — по связям его участников. Нет связи — новый ученик (с
+    комментариями, как в импорте). Значения Eduson перезаписывают поля, пустые — нет:
+    вписанное в платформе (имя вместо заглушки, контакт) пустым из Eduson не стирается.
+    Ученик, которого в старой системе больше нет, не удаляется — после замены членств
+    он просто без групп (на нём могут висеть сделки продлений)."""
+    resolution, code_of = _resolve(src, groups, ctx)
+    existing = Student.objects.in_bulk(set(linked.values()))
+    members: dict[int, list[tuple[int, ResolvedStudent]]] = defaultdict(list)
+    created = updated = 0
+    for rs in resolution.students:
+        values, has_name = _student_values(rs, code_of, ctx)
+        ids = sorted({linked[str(p)] for p in rs.participant_ids if linked.get(str(p)) in existing})
+        if not ids:
+            student = Student.objects.create(**values, created_at=now)
+            _student_comments(student, rs.rows, code_of, ctx)
+            created += 1
+        else:
+            student = existing[ids[0]]
+            if len(ids) > 1:
+                ctx.manual_review.append(
+                    f'участники {_ids(rs.participant_ids)}: теперь склеиваются в одного ученика, а в платформе '
+                    f'это ученики id {", ".join(map(str, ids))} — записи отнесены к id {ids[0]}, '
+                    'остальные оставлены без групп, проверьте')
+            if not has_name:
+                values.pop('full_name')
+            changed = [k for k, v in values.items() if v is not None and getattr(student, k) != v]
+            if changed:
+                for k in changed:
+                    setattr(student, k, values[k])
+                student.save(update_fields=changed)
+                updated += 1
+        _bind(student.id, rs, members, ctx)
+    ctx.report.append(f'ученики: новых {created}, обновлено {updated}')
+    return members

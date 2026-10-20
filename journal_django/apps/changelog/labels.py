@@ -132,6 +132,9 @@ RULES: list[tuple[str, re.Pattern, str]] = [
     # Разовый перенос Eduson (manage.py import_eduson). Операцию команда ставит в
     # metadata сама; правило нужно фильтру ленты — он ищет операцию по method+url.
     ('COMMAND', re.compile(r'^manual/import-eduson$'), 'eduson.import'),
+    # Мягкое обновление с прода (manage.py sync_eduson): группы и ученики — с журналом,
+    # замена уроков — без (apps.eduson_import.sync).
+    ('COMMAND', re.compile(r'^manual/sync-eduson$'), 'eduson.sync'),
 ]
 
 FALLBACK = 'other'

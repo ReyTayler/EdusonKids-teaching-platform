@@ -1,6 +1,6 @@
 """Сверка импорта Eduson: «было в SQLite → стало в PostgreSQL» (спека §5.4, вместо §5.3).
 
-reconcile(src, ctx) → (lines, errors, warnings):
+reconcile(src, ctx, scope='import') → (lines, errors, warnings):
   lines    — таблица для печати (сущность, Eduson, KOTOKOD, пояснение);
   errors   — расхождения без объяснимой причины: команда откатывает импорт;
   warnings — ожидаемые особенности данных, печатаются справочно.
@@ -17,6 +17,13 @@ GroupMembership.lessons_done каждого ученика, и с Group.lesson_n
 уроков и прогресс курса. Расхождение с «проведено» самого Eduson (lessons_done +
 held) — справочно: Eduson считал двойным счётом, фиктивные held и отработку целым
 уроком (спека §5.4).
+
+МЯГКОЕ ОБНОВЛЕНИЕ (scope='sync', команда sync_eduson). В базе живут и записи
+платформы (учётки, ученики без групп, группы, заведённые в платформе), поэтому
+общие счётчики (учётки, суперадмины, преподаватели, ученики, продления) не
+сверяются. Уроки, план, отзывы, посещения, «проведено» и здоровье плана и в
+импорте, и в обновлении считаются только по группам прогона (ctx.group_by_eduson):
+при полном импорте других групп в базе нет — результат тот же.
 
 ЗДОРОВЬЕ ПЛАНА — штатная apps.scheduling.health.check_all (все семь проверок) по
 всем группам, включая архивные (include_inactive=True; интерфейс смотрит только
@@ -65,7 +72,8 @@ def _num(value: Decimal | int) -> str:
     return f'{Decimal(value).normalize():f}'
 
 
-def reconcile(src: EdusonSource, ctx: ImportContext) -> tuple[list[str], list[str], list[str]]:
+def reconcile(src: EdusonSource, ctx: ImportContext,
+              scope: str = 'import') -> tuple[list[str], list[str], list[str]]:
     lines: list[str] = [f'{"":<{_LABEL_WIDTH}}{"Eduson":>8}{"KOTOKOD":>9}']
     errors: list[str] = []
     warnings: list[str] = []
@@ -84,50 +92,58 @@ def reconcile(src: EdusonSource, ctx: ImportContext) -> tuple[list[str], list[st
     merged = len(ctx.student_by_participant) - students
     submitted = sum(1 for r in src.rows('lesson_reports') if r['status'] == 'submitted')
     renewals = src.count('renewals')
+    group_ids = list(ctx.group_by_eduson.values())
+    lessons = Lesson.objects.filter(group_id__in=group_ids)
+    full = scope == 'import'
 
-    row('группы', src.count('student_groups'), Group.objects.count(), src.count('student_groups'))
-    row('учётки', src.count('users'), Account.objects.count(), src.count('users'))
-    superadmins = Account.objects.filter(role=Account.Role.SUPERADMIN, is_active=True).count()
-    row('суперадмины', len(ctx.superadmin_emails), superadmins, len(ctx.superadmin_emails),
-        'в Eduson роли нет: колонка Eduson — сколько назначено --superadmin')
-    if not superadmins:
-        warnings.append('нет суперадмина — управлять учётками будет некому (учётки, 2FA, зарплата, '
-                        'Синхро доступны только superadmin); укажите --superadmin EMAIL')
-    row('преподаватели', src.count('teachers'), Teacher.objects.count(), len(set(ctx.teacher_by_eduson.values())),
-        'администраторы без групп, уроков и отзывов — только учётка')
-    row('ученики', participants, Student.objects.count(), students,
-        f'склеено записей {merged}, пропущено пустых {len(ctx.skipped_participants)}, '
-        f'на проверку {ctx.review_participants}')
+    if full:
+        row('группы', src.count('student_groups'), Group.objects.count(), src.count('student_groups'))
+        row('учётки', src.count('users'), Account.objects.count(), src.count('users'))
+        superadmins = Account.objects.filter(role=Account.Role.SUPERADMIN, is_active=True).count()
+        row('суперадмины', len(ctx.superadmin_emails), superadmins, len(ctx.superadmin_emails),
+            'в Eduson роли нет: колонка Eduson — сколько назначено --superadmin')
+        if not superadmins:
+            warnings.append('нет суперадмина — управлять учётками будет некому (учётки, 2FA, зарплата, '
+                            'Синхро доступны только superadmin); укажите --superadmin EMAIL')
+        row('преподаватели', src.count('teachers'), Teacher.objects.count(),
+            len(set(ctx.teacher_by_eduson.values())), 'администраторы без групп, уроков и отзывов — только учётка')
+        row('ученики', participants, Student.objects.count(), students,
+            f'склеено записей {merged}, пропущено пустых {len(ctx.skipped_participants)}, '
+            f'на проверку {ctx.review_participants}')
+    else:
+        row('группы', src.count('student_groups'), len(group_ids), src.count('student_groups'),
+            'мягкое обновление: учётки, ученики и продления не сверяются')
     backfill = ctx.sheet_backfill or {}
     sheet_lessons = sum(len(b.lessons) for b in backfill.values())
     # Отметка в день незаполненной сессии проводит её — новой позиции не даёт.
     sheet_positions = sheet_lessons - sum(len(b.fills) for b in backfill.values())
     held_note = (f'held = уроки; фиктивных held (год не исправить) {fake} — в «пройдено до учёта»' if fake
                  else 'held = уроки')
-    row('проведённые уроки', len(held_all), Lesson.objects.count(), len(real_held) + sheet_lessons,
+    row('проведённые уроки', len(held_all), lessons.count(), len(real_held) + sheet_lessons,
         held_note + (f'; + {sheet_lessons} из таблиц' if sheet_lessons else ''))
     row('из них год исправлен', len(ctx.year_fixed),
-        Lesson.objects.filter(submitted_by_token=SUBMITTED_BY_YEAR_FIXED).count(), len(ctx.year_fixed),
+        lessons.filter(submitted_by_token=SUBMITTED_BY_YEAR_FIXED).count(), len(ctx.year_fixed),
         'таблицы Eduson, вкладка «Июнь 2027» → уроки 2026 года')
     if ctx.sheet_backfill is not None:
         more = sum(1 for b in backfill.values() if b.candidates > b.n_before)
         less = sum(1 for b in backfill.values() if b.candidates < b.n_before)
         groups_with = sum(1 for b in backfill.values() if b.lessons)
         # Колонка Eduson — 0: в базе старой системы этих уроков нет.
-        row('из таблиц (до запуска)', 0, Lesson.objects.filter(submitted_by_token=SUBMITTED_BY_SHEETS).count(),
+        row('из таблиц (до запуска)', 0, lessons.filter(submitted_by_token=SUBMITTED_BY_SHEETS).count(),
             sheet_lessons, f'групп {groups_with} из {len(backfill)} с N > 0; отметок больше N — {more}, '
                            f'меньше N — {less}')
-    row('позиции плана', len(sessions), PlannedLesson.objects.count(), len(sessions) - fake + sheet_positions,
+    row('позиции плана', len(sessions), PlannedLesson.objects.filter(group_id__in=group_ids).count(), len(sessions) - fake + sheet_positions,
         ('сессии без фиктивных held' if fake else 'все сессии')
         + (f' + {sheet_positions} из таблиц' if sheet_positions else ''))
-    row('отзывы (submitted)', submitted, LessonFeedback.objects.count(), submitted - len(ctx.feedback_not_moved),
+    row('отзывы (submitted)', submitted, LessonFeedback.objects.filter(group_id__in=group_ids).count(), submitted - len(ctx.feedback_not_moved),
         f'на проверку {len(ctx.feedback_not_moved)}')
-    row('продления (группы)', renewals, ctx.renewals_applied, None,
-        f'статус Eduson встал всем ученикам группы; сделок после пересборки {RenewalDeal.objects.count()}')
+    if full:
+        row('продления (группы)', renewals, ctx.renewals_applied, None,
+            f'статус Eduson встал всем ученикам группы; сделок после пересборки {RenewalDeal.objects.count()}')
 
     _check_groups(src, ctx, real_held, sessions, row, errors, warnings)
-    _check_health(warnings, errors)
-    _check_overdue(ctx, warnings)
+    _check_health(set(group_ids), warnings, errors)
+    _check_overdue(ctx, group_ids, warnings)
     return lines, errors, warnings
 
 
@@ -146,17 +162,19 @@ def _check_groups(src, ctx, real_held, sessions, row, errors, warnings) -> None:
 
     lesson_weight_by: dict[int, Decimal] = defaultdict(Decimal)
     lesson_count: Counter[int] = Counter()
-    for gid, minutes in Lesson.objects.values_list('group_id', 'lesson_duration_minutes'):
+    group_ids = list(ctx.group_by_eduson.values())
+    for gid, minutes in (Lesson.objects.filter(group_id__in=group_ids)
+                         .values_list('group_id', 'lesson_duration_minutes')):
         lesson_weight_by[gid] += lesson_weight(minutes)
         lesson_count[gid] += 1
-    positions = dict(PlannedLesson.objects.values('group_id').annotate(n=Count('id')).values_list('group_id', 'n'))
-    offsets = dict(Group.objects.values_list('id', 'lesson_number_offset'))
+    positions = dict(PlannedLesson.objects.filter(group_id__in=group_ids).values('group_id').annotate(n=Count('id')).values_list('group_id', 'n'))
+    offsets = dict(Group.objects.filter(id__in=group_ids).values_list('id', 'lesson_number_offset'))
     members: dict[int, list[Decimal]] = defaultdict(list)
-    for gid, done in GroupMembership.objects.values_list('group_id', 'lessons_done'):
+    for gid, done in GroupMembership.objects.filter(group_id__in=group_ids).values_list('group_id', 'lessons_done'):
         members[gid].append(Decimal(done))
 
     attendance_expected = sum(lesson_count[gid] * len(members[gid]) for gid in lesson_count)
-    row('посещения (был)', attendance_expected, LessonAttendance.objects.filter(present=True).count(),
+    row('посещения (был)', attendance_expected, LessonAttendance.objects.filter(present=True, lesson__group_id__in=group_ids).count(),
         attendance_expected, 'в Eduson посещаемости нет: урок × ученики группы')
 
     differ_eduson = 0
@@ -193,10 +211,12 @@ def _check_groups(src, ctx, real_held, sessions, row, errors, warnings) -> None:
                         'lessons_done двойным счётом и отработку 45 мин целым уроком (спека §5.4)')
 
 
-def _check_health(warnings: list[str], errors: list[str]) -> None:
+def _check_health(group_ids: set[int], warnings: list[str], errors: list[str]) -> None:
     # Все группы, не только активные: импорт пишет и архивные, а поломка плана в
-    # архиве так же откатывает импорт.
+    # архиве так же откатывает импорт. Только группы прогона: план группы, заведённой
+    # в платформе, мягкое обновление не трогает и за его поломку не отвечает.
     result = health.check_all(include_inactive=True)
+    result['groups'] = [g for g in result['groups'] if g['group_id'] in group_ids]
     totals: dict[str, int] = Counter()
     names: dict[str, list[str]] = defaultdict(list)
     for g in result['groups']:
@@ -212,9 +232,10 @@ def _check_health(warnings: list[str], errors: list[str]) -> None:
     warnings.append(f'здоровье плана: проверено групп {result["checked"]} (включая архивные)')
 
 
-def _check_overdue(ctx: ImportContext, warnings: list[str]) -> None:
+def _check_overdue(ctx: ImportContext, group_ids: list[int], warnings: list[str]) -> None:
     overdue = list(PlannedLesson.objects
-                   .filter(status=PENDING, seq__isnull=False, scheduled_date__lt=ctx.as_of)
+                   .filter(group_id__in=group_ids, status=PENDING, seq__isnull=False,
+                           scheduled_date__lt=ctx.as_of)
                    .values_list('group__name', flat=True))
     if overdue:
         groups = sorted(set(overdue))

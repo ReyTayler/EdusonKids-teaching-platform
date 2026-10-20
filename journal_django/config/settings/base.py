@@ -343,6 +343,22 @@ PUBLIC_URL: str = env('PUBLIC_URL')
 PAYMENT_BALANCE_GUARD: bool = env('PAYMENT_BALANCE_GUARD')
 
 # ---------------------------------------------------------------------------
+# Кнопка «Обновить данные с прода» в «Синхро» (apps.sync.prod_refresh)
+# ---------------------------------------------------------------------------
+# Запускает scripts/refresh_from_prod.sh --soft — мягкое обновление учебных данных из
+# старой системы Eduson. Только для локальной работы, пока источник правды — старая
+# система: по умолчанию выключено, на проде платформы флага нет (кнопка стёрла бы
+# живые уроки). Путь к bash — Git Bash (в Windows «bash» из PATH бывает WSL);
+# пусто — стандартный путь Git for Windows, иначе bash из PATH.
+EDUSON_PROD_REFRESH_BUTTON: bool = env.bool('EDUSON_PROD_REFRESH_BUTTON', default=False)
+EDUSON_REFRESH_BASH: str = env('EDUSON_REFRESH_BASH', default='')
+EDUSON_REFRESH_SCRIPT: Path = REPO_ROOT / 'scripts' / 'refresh_from_prod.sh'
+# Каталог снимков, лога и лока скрипта — тот же, что у самого скрипта (EDUSON_SNAPSHOT_DIR,
+# относительный путь — от platform/). Снимки — ПДн, каталог вне репозитория.
+_snapshot_dir = Path(env('EDUSON_SNAPSHOT_DIR', default='../data/prod-snapshots'))
+EDUSON_SNAPSHOT_DIR: Path = (_snapshot_dir if _snapshot_dir.is_absolute() else REPO_ROOT / _snapshot_dir).resolve()
+
+# ---------------------------------------------------------------------------
 # База знаний (apps.knowledge) — хранилище картинок
 # ---------------------------------------------------------------------------
 # Корень файлового хранилища. Локально — journal_django/media (в .gitignore),

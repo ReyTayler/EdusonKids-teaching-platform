@@ -155,6 +155,7 @@ export const CHANGELOG_OPERATION_LABELS:Record<string, string> = {
   'plan.resync':                   'Починка плана',
   'changelog.revert':              'Откат',
   'eduson.import':                 'Импорт Eduson',
+  'eduson.sync':                   'Обновление с прода',
   other:                           'Другое действие',
 };
 

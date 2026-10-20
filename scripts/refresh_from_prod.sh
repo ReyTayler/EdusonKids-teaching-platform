@@ -3,7 +3,15 @@
 # старой системы (Express + node:sqlite в Docker). Прод — источник правды на время
 # переработки платформы; локальная база целиком пересобирается импортом.
 #
-#   bash scripts/refresh_from_prod.sh          # из platform/ или откуда угодно
+#   bash scripts/refresh_from_prod.sh          # полная пересборка (задача 06:30), из platform/ или откуда угодно
+#   bash scripts/refresh_from_prod.sh --soft   # мягкое обновление: без подмены базы (кнопка в «Синхро»)
+#
+# МЯГКИЙ РЕЖИМ (--soft, решение владельца 2026-10-20). Снимок и таблицы — те же, но
+# вместо сборки <имя>_next и подмены — manage.py sync_eduson против рабочей базы в
+# одной транзакции: обновляются только ученики, группы, уроки, отзывы и связанное с
+# уроками; учётки, продления, настройки остаются. Соединения не рвутся. Ошибка — откат,
+# база как была. Нужны связи со старой системой (таблица eduson_links), их пишет полная
+# пересборка.
 #
 # Подробно: docs/eduson/refresh-from-prod.md. Конфиг — окружение или platform/.env
 # (образец — .env.example, раздел «Обновление из прода»).
@@ -24,6 +32,16 @@
 # ВЫВОД И ЛОГ — без ПДн и секретов: ни адреса сервера, ни DATABASE_URL, ни почт
 # --superadmin, ни ID таблиц. Отчёт импорта сам по себе без ПДн (только id Eduson, коды групп, числа).
 set -Eeuo pipefail
+
+MODE=full
+case "${1:-}" in
+  '') ;;
+  --soft) MODE=soft ;;
+  *) echo "использование: bash scripts/refresh_from_prod.sh [--soft]" >&2; exit 2 ;;
+esac
+[ "$#" -le 1 ] || { echo "использование: bash scripts/refresh_from_prod.sh [--soft]" >&2; exit 2; }
+# Шагов: полная — снимок, скачивание, таблицы, migrate, импорт, подмена; мягкая — первые три + синк.
+if [ "$MODE" = soft ]; then STEPS=4; else STEPS=6; fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # platform/
 ENV_FILE="$ROOT/.env"
@@ -202,7 +220,8 @@ echo $$ >"$LOCK_DIR/pid"
 STAMP="$(date -u -d '+3 hours' '+%Y%m%d-%H%M')"
 TODAY_MSK="$(date -u -d '+3 hours' '+%F')"
 started=$SECONDS
-log "=== обновление $DB_NAME из прода Eduson ($STAMP МСК) ==="
+if [ "$MODE" = soft ]; then TITLE="мягкое обновление"; else TITLE="обновление"; fi
+log "=== $TITLE $DB_NAME из прода Eduson ($STAMP МСК) ==="
 
 # ── 1. снимок на проде (только чтение) ──────────────────────────────────────
 
@@ -222,13 +241,13 @@ docker cp $CONTAINER:$REMOTE_TMP $REMOTE_TMP
 chmod 600 $REMOTE_TMP
 sha256sum $REMOTE_TMP"
 
-log "1/6 снимок на проде (readOnly + VACUUM INTO)"
+log "1/$STEPS снимок на проде (readOnly + VACUUM INTO)"
 REMOTE_PENDING=1
 out="$(retry_ssh "$SNAPSHOT_CMD")" || die "снимок на проде не снят"
 REMOTE_SHA="$(printf '%s\n' "$out" | awk 'END { print $1 }')"
 [[ "$REMOTE_SHA" =~ ^[0-9a-f]{64}$ ]] || die "сервер не вернул sha256 снимка"
 
-log "2/6 скачивание"
+log "2/$STEPS скачивание"
 LOCAL_PART="$SNAP_DIR/.okk-$STAMP.db.part"
 retry_scp "$REMOTE_TMP" "$LOCAL_PART" || die "снимок не скачан"
 retry_ssh "rm -f $REMOTE_TMP" || die "не удалось удалить временный снимок на сервере"
@@ -328,7 +347,7 @@ fetch_sheets() {
   SHEETS_PART=""
 }
 
-log "3/6 таблицы Eduson (вкладки «Июнь 2026», «Июнь 2027»)"
+log "3/$STEPS таблицы Eduson (вкладки «Июнь 2026», «Июнь 2027»)"
 if fetch_sheets; then
   log "  таблицы: $(basename "$SHEETS_DIR") (${#SHEET_COURSES[@]} × ${#SHEET_TABS[@]} вкладок)"
 else
@@ -341,16 +360,46 @@ mapfile -t old < <(find "$SNAP_DIR" -maxdepth 1 -type d -name 'sheets-*' -printf
 for f in "${old[@]}"; do rm -rf "${SNAP_DIR:?}/$f"; done
 [ "${#old[@]}" -eq 0 ] || log "  удалено старых каталогов таблиц: ${#old[@]} (храним $KEEP)"
 
+# ── 2м. мягкий режим: синк в рабочую базу, без подмены ──────────────────────
+
+if [ "$MODE" = soft ]; then
+  log "4/$STEPS мягкое обновление $DB_NAME (sync_eduson --as-of $TODAY_MSK)"
+  cd "$ROOT/journal_django"
+  export PYTHONUTF8=1
+  sync_args=("$(native_path "$SNAPSHOT")" --as-of "$TODAY_MSK")
+  if [ -n "$SHEETS_DIR" ]; then sync_args+=(--sheets-dir "$(native_path "$SHEETS_DIR")"); fi
+  IMPORT_OUT="$(mktemp)"
+  rc=0
+  DATABASE_URL="$DBURL" "$PY" manage.py sync_eduson "${sync_args[@]}" >"$IMPORT_OUT" 2>&1 || rc=$?
+  cat "$IMPORT_OUT" >>"$LOG_FILE"
+  if [ "$rc" -ne 0 ]; then
+    tail -n 30 "$IMPORT_OUT" >&2
+    rm -f "$IMPORT_OUT"; IMPORT_OUT=""
+    die "мягкое обновление не прошло — транзакция откатана, база как была (вывод — в $LOG_FILE)"
+  fi
+  elapsed=$((SECONDS - started))
+  {
+    echo
+    echo "Готово за $((elapsed / 60)) мин $((elapsed % 60)) с: $DB_NAME обновлена из снимка прода (мягко, без подмены)."
+    echo "  снимок:  $SNAPSHOT ($SIZE_MB МБ)"
+    if [ -n "$SHEETS_DIR" ]; then echo "  таблицы: $SHEETS_DIR"; else echo "  таблицы: не использованы (см. лог)"; fi
+    grep -E "преподаватели:|учётки:|группы:|ученики:" "$IMPORT_OUT" || true
+  } | tee -a "$LOG_FILE"
+  rm -f "$IMPORT_OUT"; IMPORT_OUT=""
+  log "=== мягкое обновление завершено за ${elapsed} с ==="
+  exit 0
+fi
+
 # ── 2. сборка новой базы рядом с рабочей ────────────────────────────────────
 
-log "4/6 сборка $NEXT_DB: migrate"
+log "4/$STEPS сборка $NEXT_DB: migrate"
 pg -c "DROP DATABASE IF EXISTS $NEXT_DB WITH (FORCE)" -c "CREATE DATABASE $NEXT_DB"
 cd "$ROOT/journal_django"
 export PYTHONUTF8=1
 DATABASE_URL="$NEXT_URL" "$PY" manage.py migrate --noinput 2>&1 | tee -a "$LOG_FILE" >/dev/null \
   || die "migrate в $NEXT_DB упал — рабочая база не тронута"
 
-log "5/6 импорт снимка (--as-of $TODAY_MSK)"
+log "5/$STEPS импорт снимка (--as-of $TODAY_MSK)"
 import_args=("$(native_path "$SNAPSHOT")" --as-of "$TODAY_MSK")
 IFS=',' read -r -a admins <<<"$SUPERADMINS"
 for a in "${admins[@]}"; do
@@ -380,7 +429,7 @@ swap_recover() {
   set -e
 }
 
-log "6/6 подмена: $DB_NAME → $PREV_DB, $NEXT_DB → $DB_NAME"
+log "6/$STEPS подмена: $DB_NAME → $PREV_DB, $NEXT_DB → $DB_NAME"
 if db_exists "$DB_NAME"; then
   SWAPPING=1
   # Сначала закрываем вход, потом рвём соединения (runserver, Celery переподключились бы

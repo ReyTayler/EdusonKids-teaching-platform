@@ -18,6 +18,7 @@ from apps.accounts.hashers import wrap_eduson_bcrypt
 from apps.accounts.models import Account
 from apps.directions.models import Direction
 from apps.eduson_import.context import ImportContext, ImportDataError
+from apps.eduson_import.links import Kind, load_links
 from apps.eduson_import.normalize import norm_email, norm_name
 from apps.eduson_import.sqlite_source import EdusonSource
 from apps.eduson_import.steps import require_atomic
@@ -76,18 +77,29 @@ def import_people(src: EdusonSource, ctx: ImportContext) -> None:
         raise ImportDataError('ссылки на несуществующих преподавателей: '
                               + ', '.join(f'#{i}' for i in missing))
 
-    # Teacher нужен всем, на кого ссылаются данные, всем с ролью teacher и всем, к кому
-    # привязана учётка преподавателя; администратор без ссылок — только учётка (§5.4).
-    needed = referenced | {i for i, t in teachers.items() if t['role'] == 'teacher'}
-    needed |= {u['teacher_id'] for u in users if u['role'] == 'teacher' and u['teacher_id'] in teachers}
+    needed = _needed_teachers(teachers, users, referenced)
     _check_unique_names(teachers, needed)
 
     for tid in sorted(needed):
-        t = teachers[tid]
-        ctx.teacher_by_eduson[tid] = Teacher.objects.create(
-            name=t['name'].strip(), email=_text(t['email']), phone=_text(t['phone']),
-            active=bool(t['active']), created_at=now,
-        ).id
+        ctx.teacher_by_eduson[tid] = Teacher.objects.create(**_teacher_fields(teachers[tid]), created_at=now).id
+    _report_teachers(teachers, needed, ctx)
+    _import_accounts(users, referenced, ctx, now)
+
+
+def _needed_teachers(teachers: dict[int, dict], users: list[dict], referenced: set[int]) -> set[int]:
+    """Teacher нужен всем, на кого ссылаются данные, всем с ролью teacher и всем, к кому
+    привязана учётка преподавателя; администратор без ссылок — только учётка (§5.4)."""
+    needed = referenced | {i for i, t in teachers.items() if t['role'] == 'teacher'}
+    needed |= {u['teacher_id'] for u in users if u['role'] == 'teacher' and u['teacher_id'] in teachers}
+    return needed
+
+
+def _teacher_fields(t: dict) -> dict:
+    return {'name': t['name'].strip(), 'email': _text(t['email']), 'phone': _text(t['phone']),
+            'active': bool(t['active'])}
+
+
+def _report_teachers(teachers: dict[int, dict], needed: set[int], ctx: ImportContext) -> None:
     for tid, t in teachers.items():
         extra = [k for k in _TEACHER_EXTRA if _text(t.get(k))]
         if extra:
@@ -97,16 +109,23 @@ def import_people(src: EdusonSource, ctx: ImportContext) -> None:
         elif tid not in needed:
             ctx.report.append(f'преподаватель #{tid}: администратор без ссылок — только учётка')
 
-    _import_accounts(users, referenced, ctx, now)
-
 
 def _import_directions(src: EdusonSource, ctx: ImportContext) -> None:
+    by_letter = _resolve_courses(src, ctx)
+    for course, (name, color) in DIRECTIONS.items():
+        ctx.direction_by_course[course] = Direction.objects.create(
+            name=name, color=color, active=True, total_lessons=COURSE_LESSONS).id
+    _report_courses(by_letter, ctx)
+
+
+def _resolve_courses(src: EdusonSource, ctx: ImportContext) -> dict[str, int]:
+    """Курс-направление каждой группы → ctx.course_by_group; → {курс: групп по букве кода}.
+    Решается до первой записи: ошибка в коде группы не должна оставлять за собой
+    созданные направления (хоть транзакция их и откатит)."""
     groups = src.rows('student_groups')
     unknown = sorted({g['code'] for g in groups if g['course'] not in DIRECTIONS and g['course'] != GROUPS_COURSE})
     if unknown:
         raise ImportDataError('неизвестный курс у групп: ' + ', '.join(unknown))
-    # Курс каждой группы решается до первой записи: ошибка в коде группы не должна
-    # оставлять за собой созданные направления (хоть транзакция их и откатит).
     by_letter: dict[str, int] = {}
     for g in groups:
         course = g['course']
@@ -120,10 +139,10 @@ def _import_directions(src: EdusonSource, ctx: ImportContext) -> None:
                     f'не задаёт направление (ожидается одна из {", ".join(GROUP_CODE_LETTER)})')
             by_letter[course] = by_letter.get(course, 0) + 1
         ctx.course_by_group[g['id']] = course
+    return by_letter
 
-    for course, (name, color) in DIRECTIONS.items():
-        ctx.direction_by_course[course] = Direction.objects.create(
-            name=name, color=color, active=True, total_lessons=COURSE_LESSONS).id
+
+def _report_courses(by_letter: dict[str, int], ctx: ImportContext) -> None:
     if by_letter:
         split = ', '.join(f'{DIRECTIONS[c][0]} {n}' for c, n in sorted(by_letter.items(),
                                                                          key=lambda kv: DIRECTIONS[kv[0]][0]))
@@ -167,6 +186,14 @@ def _check_superadmins(users: list[dict], referenced: set[int], ctx: ImportConte
 
 
 def _import_accounts(users: list[dict], referenced: set[int], ctx: ImportContext, now) -> None:
+    for uid, fields in _account_fields(users, referenced, ctx):
+        ctx.account_by_user[uid] = Account.objects.create(**fields, date_joined=now).id
+
+
+def _account_fields(users: list[dict], referenced: set[int], ctx: ImportContext) -> list[tuple[int, dict]]:
+    """Проверка учёток Eduson и поля Account для каждой → [(users.id, поля)]. Общая для
+    импорта и мягкого обновления: правила роли и связи с преподавателем одни."""
+    out: list[tuple[int, dict]] = []
     seen_email: dict[str, int] = {}
     seen_teacher: dict[int, int] = {}
     for u in users:
@@ -212,10 +239,97 @@ def _import_accounts(users: list[dict], referenced: set[int], ctx: ImportContext
             ctx.report.append(f'учётка #{uid}: назначена суперадмином (--superadmin)')
         else:
             role = Account.Role.ADMIN
-        ctx.account_by_user[uid] = Account.objects.create(
-            email=email, password=password, role=role,
-            teacher_id=ctx.teacher_by_eduson[teacher_eduson] if is_teacher else None,
+        out.append((uid, {
+            'email': email, 'password': password, 'role': role,
+            'teacher_id': ctx.teacher_by_eduson[teacher_eduson] if is_teacher else None,
             # У преподавателя имя берётся из Teacher (как в KOTOKOD), у админа — своё.
-            full_name=None if is_teacher else _text(u['name']),
-            is_active=bool(u['active']), date_joined=now,
-        ).id
+            'full_name': None if is_teacher else _text(u['name']),
+            'is_active': bool(u['active']),
+        }))
+    return out
+
+
+# ── мягкое обновление (sync_eduson) ─────────────────────────────────────────
+
+def sync_people(src: EdusonSource, ctx: ImportContext) -> None:
+    """Мягкое обновление людей: направления и преподаватели — по связям EdusonLink
+    (обновить на месте, новых — завести), учётки — только новые. Существующие учётки
+    не трогаются: пароль, 2FA, роль и активность, изменённые в платформе, важнее.
+    Суперадмин мягким обновлением не назначается (ctx.superadmin_emails пуст)."""
+    require_atomic('люди')
+    now = timezone.now()
+    teachers = {t['id']: t for t in src.rows('teachers')}
+    users = src.rows('users')
+    referenced = referenced_teacher_ids(src, ctx)
+    _sync_directions(src, ctx, load_links(Kind.DIRECTION))
+
+    missing = sorted(referenced - teachers.keys())
+    if missing:
+        raise ImportDataError('ссылки на несуществующих преподавателей: '
+                              + ', '.join(f'#{i}' for i in missing))
+    needed = _needed_teachers(teachers, users, referenced)
+    _check_unique_names(teachers, needed)
+    _sync_teachers(teachers, needed, load_links(Kind.TEACHER), ctx, now)
+    _sync_accounts(users, referenced, load_links(Kind.ACCOUNT), ctx, now)
+
+
+def _sync_directions(src: EdusonSource, ctx: ImportContext, linked: dict[str, int]) -> None:
+    _resolve_courses(src, ctx)
+    existing = set(Direction.objects.filter(id__in=linked.values()).values_list('id', flat=True))
+    for course, (name, color) in DIRECTIONS.items():
+        local = linked.get(course)
+        if local in existing:
+            ctx.direction_by_course[course] = local      # настройки направления — дело платформы
+        else:
+            ctx.direction_by_course[course] = Direction.objects.create(
+                name=name, color=color, active=True, total_lessons=COURSE_LESSONS).id
+            ctx.report.append(f'направление {name}: заведено')
+
+
+def _sync_teachers(teachers: dict[int, dict], needed: set[int], linked: dict[str, int],
+                   ctx: ImportContext, now) -> None:
+    existing = Teacher.objects.in_bulk([linked[str(t)] for t in needed if str(t) in linked])
+    # Имя преподавателя уникально в БД: занято преподавателем вне этого набора (заведён в
+    # платформе или связан с другим id Eduson) — ошибка с адресом, а не IntegrityError.
+    ours = set(existing)
+    taken = {norm_name(name): pk for pk, name in Teacher.objects.exclude(id__in=ours).values_list('id', 'name')}
+    created = updated = 0
+    for tid in sorted(needed):
+        fields = _teacher_fields(teachers[tid])
+        if norm_name(fields['name']) in taken:
+            raise ImportDataError(f'преподаватель #{tid}: имя уже занято преподавателем платформы '
+                                  f'(id {taken[norm_name(fields["name"])]}) — в KOTOKOD имя уникально')
+        teacher = existing.get(linked.get(str(tid)))
+        if teacher is None:
+            teacher = Teacher.objects.create(**fields, created_at=now)
+            created += 1
+        else:
+            changed = [k for k, v in fields.items() if getattr(teacher, k) != v]
+            if changed:
+                for k in changed:
+                    setattr(teacher, k, fields[k])
+                teacher.save(update_fields=changed)
+                updated += 1
+        ctx.teacher_by_eduson[tid] = teacher.id
+    ctx.report.append(f'преподаватели: новых {created}, обновлено {updated}')
+
+
+def _sync_accounts(users: list[dict], referenced: set[int], linked: dict[str, int],
+                   ctx: ImportContext, now) -> None:
+    existing = set(Account.objects.filter(id__in=linked.values()).values_list('id', flat=True))
+    taken_email = {norm_email(e) for e in Account.objects.values_list('email', flat=True)}
+    taken_teacher = set(Account.objects.filter(teacher__isnull=False).values_list('teacher_id', flat=True))
+    created = 0
+    for uid, fields in _account_fields(users, referenced, ctx):
+        local = linked.get(str(uid))
+        if local in existing:
+            ctx.account_by_user[uid] = local
+            continue
+        if fields['email'] in taken_email or fields['teacher_id'] in taken_teacher:
+            # Учётку с этой почтой (или на этого преподавателя) уже завели в платформе —
+            # она главнее; связь не пишется, пароль Eduson не переносится.
+            ctx.report.append(f'учётка #{uid}: почта или преподаватель уже есть у учётки платформы — не перенесена')
+            continue
+        ctx.account_by_user[uid] = Account.objects.create(**fields, date_joined=now).id
+        created += 1
+    ctx.report.append(f'учётки: новых {created} (существующие не меняются)')

@@ -58,6 +58,8 @@ from apps.dashboard.registry_service import invalidate_registry_cache
 from apps.dashboard.services import invalidate_finance_cache
 from apps.directions.models import Direction
 from apps.eduson_import.context import ImportContext, ImportDataError
+from apps.eduson_import.links import save_links
+from apps.eduson_import.plans import fit_plans_to_course
 from apps.eduson_import.normalize import norm_email
 from apps.eduson_import.reconcile import reconcile
 from apps.eduson_import.sheets import load_sheets
@@ -167,7 +169,10 @@ class Command(BaseCommand):
                     # штатным resize_plan уже ПОСЛЕ сверки (она сравнивает план с сессиями),
                     # в том же контексте журнала — импорт остаётся одной операцией.
                     step = 'план под длину курса'
-                    _fit_plans_to_course(ctx)
+                    fit_plans_to_course(ctx)
+                    # Соответствия — для мягкого обновления (sync_eduson).
+                    step = 'связи для мягкого обновления'
+                    save_links(ctx)
             return ctx, lines, errors, warnings
         except ImportDataError as e:
             # Тексты ImportDataError пишутся под консоль: id Eduson, коды групп, без ПДн.
@@ -211,25 +216,3 @@ def _invalidate_caches() -> None:
     """После коммита: сводки дашборда пересчитаются с импортированными уроками."""
     invalidate_finance_cache()
     invalidate_registry_cache()
-
-
-def _fit_plans_to_course(ctx: ImportContext) -> None:
-    """Подогнать план каждой группы под длину курса (resize_plan): дописать недостающие
-    позиции после последнего занятия по слотам, убрать непроведённые сверх курса.
-    Проведённые сверх курса не трогаются — группа в отчёт. Отчёт — только числа."""
-    from apps.scheduling.exceptions import PlanHasRecordedLessons
-    from apps.scheduling.models import PlannedLesson
-    from apps.scheduling.repository import resize_plan
-
-    group_ids = sorted(set(ctx.group_by_eduson.values()))
-    before = PlannedLesson.objects.filter(group_id__in=group_ids, seq__isnull=False).count()
-    touched, refused = 0, 0
-    for gid in group_ids:
-        try:
-            touched += bool(resize_plan(gid))
-        except PlanHasRecordedLessons:
-            refused += 1
-    after = PlannedLesson.objects.filter(group_id__in=group_ids, seq__isnull=False).count()
-    ctx.report.append(f'план подогнан под длину курса: групп изменено {touched}, '
-                      f'позиций было {before}, стало {after}'
-                      + (f'; проведённых сверх курса — групп {refused} (не тронуты)' if refused else ''))

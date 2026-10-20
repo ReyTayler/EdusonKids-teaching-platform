@@ -189,8 +189,7 @@ def last_lesson_date(teacher_id: int) -> str | None:
 # как CASE-выражение ORM: apps.finances.repository._attended_units_case,
 # apps.dashboard.registry_service (два инлайн-Case). SQL-копии как сырой CASE
 # в RunSQL/raw-запросах: apps.students.repository, apps.renewals.rebuild,
-# apps.renewals.management.commands.backfill_renewal_history,
-# apps.sync.backfills.rebuild_counters/rebuild_payroll.
+# apps.renewals.management.commands.backfill_renewal_history.
 #
 # Консолидация в одно место — отдельная задача, сюда не входит: она заденет
 # как минимум finances и dashboard, а те лежат по разные стороны разбиения

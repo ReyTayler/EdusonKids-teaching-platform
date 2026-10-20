@@ -62,6 +62,8 @@ class ImportContext:
     # кода (шаг people); группы берут направление только отсюда.
     course_by_group: dict[int, str] = field(default_factory=dict)
     group_by_eduson: dict[int, int] = field(default_factory=dict)         # student_groups.id → Group.id
+    # Group.id связанных групп, которых больше нет в старой системе (мягкое обновление)
+    vanished_groups: list[int] = field(default_factory=list)
     student_by_participant: dict[int, int] = field(default_factory=dict)  # participants.id → Student.id
     skipped_participants: list[int] = field(default_factory=list)         # пустые строки participants
     lesson_by_session: dict[int, int] = field(default_factory=dict)       # sessions.id → Lesson.id

@@ -147,11 +147,13 @@ def test_plan_error_in_archived_group_fails_reconcile(tmp_path):
 def test_unknown_health_check_is_error(tmp_path):
     from unittest import mock
 
-    fake = {'checked': 1, 'groups': [{'group_id': 1, 'name': 'ПИ1001', 'counts': {'new_check': 2, 'collision': 1}}]}
     db = _db(tmp_path)
     with EdusonSource(db.close()) as src:
         ctx = ImportContext.from_source(src, AS_OF)
         import_people(src, ctx); import_groups(src, ctx); import_lessons(src, ctx)
+        gid = next(iter(ctx.group_by_eduson.values()))
+        fake = {'checked': 1, 'groups': [{'group_id': gid, 'name': 'ПИ1001',
+                                          'counts': {'new_check': 2, 'collision': 1}}]}
         with mock.patch('apps.eduson_import.reconcile.health.check_all', return_value=fake):
             _, errors, warnings = reconcile(src, ctx)
     assert any('new_check' in e for e in errors)

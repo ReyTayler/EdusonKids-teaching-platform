@@ -6,8 +6,8 @@ ORM-порт services/repo/payroll.js (раздел 09).
 Паритет с node-pg:
   • payment/penalty/sum_* (numeric) → Decimal → строка с масштабом (renderer).
   • lessons_count = COUNT(*) → строка (node-pg bigint = строка; в оригинале ::text).
-  • list — порт paginate(): whitelist sort с тихим fallback, secondarySort p.id DESC,
-    контракт { rows, total, page, page_size }.
+  • список — payroll_entries: уроки + отмены одним UNION ALL; пагинирует вьюха
+    (StandardPagination), sort_by проверяет она же по SORTABLE (мусор → 400).
 """
 from __future__ import annotations
 
@@ -15,70 +15,141 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from django.db import connection, transaction
-from django.db.models import Count, DecimalField, F, Sum, Value
+from django.db.models import (
+    Count, DecimalField, F, IntegerField, Sum, TextField, TimeField, Value,
+)
 from django.db.models.functions import Coalesce
 
 from apps.core.utils.orm import dictrow, dictrows
 
-from .models import Payroll
+from .models import CancellationPay, Payroll
 
 
 # Поля строки payroll (p.* / RETURNING *), в порядке схемы.
 _PAYROLL_FIELDS = (
     'id', 'lesson_id', 'teacher_id', 'total_students', 'present_count',
-    'payment', 'penalty',
+    'payment', 'penalty', 'is_manual', 'calc_payment', 'calc_penalty', 'rule_note',
 )
 
-# Whitelist sort_by → ORM-поле (алиасы entry_* — см. _base_entries).
-# p.id DESC — вторичная сортировка.
-_SORTABLE: dict[str, str] = {
-    'lesson_date':   'entry_date',
-    'lesson_number': 'lesson_number',
-    'group_name':    'group_name',
-    'teacher_name':  'teacher_name',
-    'payment':       'entry_payment',
-    'penalty':       'entry_penalty',
+class CancellationPayConflict(Exception):
+    """Привязка отмены к маркеру сменилась во время операции — 409."""
+
+
+# Поля строки начисления за отмену в ответах PATCH/reset.
+_CANCEL_FIELDS = (
+    'id', 'planned_lesson_id', 'teacher_id', 'group_id', 'lesson_date', 'scheduled_time',
+    'payment', 'calc_payment', 'is_manual', 'rule_note',
+)
+
+# Whitelist sort_by → колонка объединённой выборки (алиасы e_* — см. _entry_columns).
+# Мусор в sort_by отсекает вьюха (400); тай-брейк — (вид, id): id уникален
+# только внутри вида строки.
+SORTABLE: dict[str, str] = {
+    'lesson_date':   'e_date',
+    'lesson_number': 'e_number',
+    'group_name':    'e_group_name',
+    'teacher_name':  'e_teacher_name',
+    'payment':       'e_payment',
+    'penalty':       'e_penalty',
+    'kind':          'e_kind',
 }
 
-_DEFAULT_SORT_BY = 'lesson_date'
-_DEFAULT_SORT_DIR = 'desc'
+DEFAULT_SORT_BY = 'lesson_date'
+DEFAULT_SORT_DIR = 'desc'
+
+KIND_LESSON = 'lesson'
+KIND_CANCELLATION = 'cancellation'
 
 _ZERO = Value(Decimal('0'), output_field=DecimalField(max_digits=20, decimal_places=2))
-
-# Колонки выборки строки payroll (алиасы entry_* сохранены для стабильности
-# сортировки/переименования в list_payroll).
-_ENTRY_VALUES = (
-    'id', 'lesson_id', 'teacher_id', 'total_students', 'present_count',
-    'entry_payment', 'entry_penalty', 'entry_date',
-    'lesson_number', 'group_id', 'group_name', 'teacher_name',
-)
+_MONEY = DecimalField(max_digits=10, decimal_places=2)
 
 
-def _apply_common_filters(qs, filters: dict[str, Any]):
-    """teacher_id/group_id/group_name/teacher_name — общие для базовой и надбавочной
-    выборки (диапазон дат — отдельно, см. _apply_date_range, у надбавки своя дата)."""
+def _null(field):
+    return Value(None, output_field=field)
+
+
+def _entry_columns(kind: str) -> dict:
+    """
+    Колонки строки списка для обеих половин UNION ALL — одни имена в одном
+    порядке: UNION сопоставляет колонки по позиции. Все колонки — аннотации
+    (e_*), не поля моделей: Django ставит поля модели в SELECT раньше аннотаций,
+    и смешанный набор разъехался бы между половинами.
+    """
+    if kind == KIND_LESSON:
+        return {
+            'e_kind': Value(KIND_LESSON, output_field=TextField()),
+            'e_id': F('id'),
+            'e_lesson_id': F('lesson_id'),
+            'e_teacher_id': F('teacher_id'),
+            'e_total': F('total_students'),
+            'e_present': F('present_count'),
+            'e_payment': F('payment'),
+            'e_penalty': F('penalty'),
+            'e_date': F('lesson__lesson_date'),
+            'e_time': _null(TimeField()),
+            'e_number': F('lesson__lesson_number'),
+            'e_group_id': F('lesson__group_id'),
+            'e_group_name': F('lesson__group__name'),
+            'e_teacher_name': F('teacher__name'),
+            'e_is_manual': F('is_manual'),
+            'e_calc_payment': F('calc_payment'),
+            'e_calc_penalty': F('calc_penalty'),
+            'e_rule_note': F('rule_note'),
+        }
+    return {
+        'e_kind': Value(KIND_CANCELLATION, output_field=TextField()),
+        'e_id': F('id'),
+        'e_lesson_id': _null(IntegerField()),
+        'e_teacher_id': F('teacher_id'),
+        'e_total': _null(IntegerField()),
+        'e_present': _null(IntegerField()),
+        'e_payment': F('payment'),
+        # Штрафа у отмены нет (§1.3) — 0, чтобы «к выплате» считалось одинаково.
+        'e_penalty': Value(Decimal('0.00'), output_field=_MONEY),
+        'e_date': F('lesson_date'),
+        'e_time': F('scheduled_time'),
+        'e_number': _null(DecimalField(max_digits=5, decimal_places=1)),
+        'e_group_id': F('group_id'),
+        'e_group_name': F('group__name'),
+        'e_teacher_name': F('teacher__name'),
+        'e_is_manual': F('is_manual'),
+        'e_calc_payment': F('calc_payment'),
+        'e_calc_penalty': _null(_MONEY),
+        'e_rule_note': F('rule_note'),
+    }
+
+
+# e_* → ключ ответа API (контракт строк уроков сохранён: id/lesson_id/... как были).
+_ENTRY_KEYS = {
+    'e_kind': 'kind', 'e_id': 'id', 'e_lesson_id': 'lesson_id', 'e_teacher_id': 'teacher_id',
+    'e_total': 'total_students', 'e_present': 'present_count', 'e_payment': 'payment',
+    'e_penalty': 'penalty', 'e_date': 'lesson_date', 'e_time': 'scheduled_time',
+    'e_number': 'lesson_number', 'e_group_id': 'group_id', 'e_group_name': 'group_name',
+    'e_teacher_name': 'teacher_name', 'e_is_manual': 'is_manual',
+    'e_calc_payment': 'calc_payment', 'e_calc_penalty': 'calc_penalty',
+    'e_rule_note': 'rule_note',
+}
+
+
+def _filter_part(qs, filters: dict[str, Any], *, group_field: str, date_field: str):
+    """Фильтры filter[*] для одной половины объединения (у урока группа и дата —
+    через lesson, у отмены — свои поля)."""
     teacher_id = filters.get('teacher_id')
     if teacher_id not in (None, ''):
         qs = qs.filter(teacher_id=int(teacher_id))
 
     group_id = filters.get('group_id')
     if group_id not in (None, ''):
-        qs = qs.filter(lesson__group_id=int(group_id))
+        qs = qs.filter(**{f'{group_field}_id': int(group_id)})
 
     group_name = filters.get('group_name')
     if group_name not in (None, ''):
-        qs = qs.filter(lesson__group__name__icontains=str(group_name))
+        qs = qs.filter(**{f'{group_field}__name__icontains': str(group_name)})
 
     teacher_name = filters.get('teacher_name')
     if teacher_name not in (None, ''):
         qs = qs.filter(teacher__name__icontains=str(teacher_name))
 
-    return qs
-
-
-def _apply_date_range(qs, filters: dict[str, Any], date_field: str):
-    """date_from/date_to (+ алиасы lesson_date_from/to) — против ПЕРЕДАННОГО поля
-    даты (lesson__lesson_date)."""
     for key in ('date_from', 'lesson_date_from'):
         val = filters.get(key)
         if val not in (None, ''):
@@ -92,64 +163,49 @@ def _apply_date_range(qs, filters: dict[str, Any], date_field: str):
     return qs
 
 
-def _base_entries(filters: dict[str, Any]):
-    """Строка на каждый payroll — дата фильтруется/сортируется по lesson_date,
-    сумма — payment. Для доп.урока/сгорания это отдельный Lesson (extra/burned)
-    в свой месяц, поэтому спец-надбавок больше нет."""
-    qs = _apply_common_filters(Payroll.objects.all(), filters)
-    qs = _apply_date_range(qs, filters, 'lesson__lesson_date')
-    return qs.annotate(
-        entry_date=F('lesson__lesson_date'),
-        entry_payment=F('payment'),
-        entry_penalty=F('penalty'),
-        lesson_number=F('lesson__lesson_number'),
-        group_id=F('lesson__group_id'),
-        group_name=F('lesson__group__name'),
-        teacher_name=F('teacher__name'),
-    ).values(*_ENTRY_VALUES)
-
-
-# ---------------------------------------------------------------------------
-# Repository functions
-# ---------------------------------------------------------------------------
-
-def list_payroll(
-    page: int = 1,
-    page_size: int = 50,
-    sort_by: str = _DEFAULT_SORT_BY,
-    sort_dir: str = _DEFAULT_SORT_DIR,
-    filters: Optional[dict] = None,
-) -> dict:
+def payroll_entries(sort_by: str = DEFAULT_SORT_BY, sort_dir: str = DEFAULT_SORT_DIR,
+                    filters: Optional[dict] = None):
     """
-    Пагинированный список payroll с joined-полями. Контракт {rows,total,page,page_size}.
+    Начисления за уроки и за отмены одним упорядоченным queryset'ом (UNION ALL) —
+    пагинатор (StandardPagination во вьюхе) считает COUNT и режет страницу по
+    объединённому набору в SQL.
 
-    Одна строка на payroll (доп.урок/сгорание — отдельные Lesson в свой месяц,
-    отдельных строк-надбавок больше нет).
+    filter[kind]=lesson|cancellation оставляет одну половину. sort_by — ключ
+    SORTABLE (проверяет вьюха). Строки — словари с ключами e_*, в ответ API их
+    переводит entry_row.
     """
-    if filters is None:
-        filters = {}
+    filters = filters or {}
+    kind = filters.get('kind') or None
 
-    sort_field = _SORTABLE.get(sort_by) or _SORTABLE[_DEFAULT_SORT_BY]
-    order_prefix = '' if sort_dir == 'asc' else '-'
+    parts = []
+    if kind in (None, KIND_LESSON):
+        lessons = _filter_part(Payroll.objects.all(), filters,
+                               group_field='lesson__group', date_field='lesson__lesson_date')
+        cols = _entry_columns(KIND_LESSON)
+        parts.append(lessons.annotate(**cols).values(*cols))
+    if kind in (None, KIND_CANCELLATION):
+        cancels = _filter_part(CancellationPay.objects.all(), filters,
+                               group_field='group', date_field='lesson_date')
+        cols = _entry_columns(KIND_CANCELLATION)
+        parts.append(cancels.annotate(**cols).values(*cols))
+    if not parts:
+        # Неизвестный вид — пустой набор той же формы (вьюха его не пропускает;
+        # защита от тихой выдачи всего).
+        cols = _entry_columns(KIND_LESSON)
+        parts.append(Payroll.objects.none().annotate(**cols).values(*cols))
 
-    entries = _base_entries(filters)
+    combined = parts[0] if len(parts) == 1 else parts[0].union(parts[1], all=True)
+    sort_col = F(SORTABLE.get(sort_by) or SORTABLE[DEFAULT_SORT_BY])
+    # NULLS LAST в обе стороны: у отмены нет номера урока, и при desc PostgreSQL
+    # по умолчанию поднял бы её наверх.
+    primary = (sort_col.asc(nulls_last=True) if sort_dir == 'asc'
+               else sort_col.desc(nulls_last=True))
+    return combined.order_by(primary, 'e_kind', '-e_id')
 
-    total = entries.count()
 
-    offset = max(0, (page - 1) * page_size)
-    ordered = entries.order_by(f'{order_prefix}{sort_field}', '-id')
-    rows = dictrows(ordered[offset:offset + page_size])
-    for r in rows:
-        r['payment'] = r.pop('entry_payment')
-        r['penalty'] = r.pop('entry_penalty')
-        r['lesson_date'] = r.pop('entry_date')
-
-    return {
-        'rows': rows,
-        'total': total,
-        'page': page,
-        'page_size': page_size,
-    }
+def entry_row(row: dict) -> dict:
+    """Строка объединённой выборки → строка ответа API."""
+    return {_ENTRY_KEYS[k]: v for k, v in row.items()}
 
 
 def payroll_summary(
@@ -181,15 +237,47 @@ def payroll_summary(
         )
     )
 
+    # Отмены — второй агрегат по тому же преподавателю и периоду (дата отмены).
+    cancel_qs = CancellationPay.objects.all()
+    if teacher_id:
+        cancel_qs = cancel_qs.filter(teacher_id=teacher_id)
+    if date_from:
+        cancel_qs = cancel_qs.filter(lesson_date__gte=date_from)
+    if date_to:
+        cancel_qs = cancel_qs.filter(lesson_date__lte=date_to)
+    cancel_rows = (
+        cancel_qs.values('teacher_id', teacher_name=F('teacher__name'))
+        .annotate(cancellations_count=Count('id'),
+                  sum_payment=Coalesce(Sum('payment'), _ZERO))
+    )
+
+    zero = Decimal('0.00')
     result_by_teacher: dict[int, dict] = {}
+
+    def _row(tid: int, name: str) -> dict:
+        return result_by_teacher.setdefault(tid, {
+            'teacher_id': tid,
+            'teacher_name': name,
+            'lessons_count': '0',
+            'cancellations_count': '0',
+            'sum_lessons_payment': zero,
+            'sum_cancellations_payment': zero,
+            'sum_payment': zero,
+            'sum_penalty': zero,
+        })
+
     for r in base_rows:
-        result_by_teacher[r['teacher_id']] = {
-            'teacher_id': r['teacher_id'],
-            'teacher_name': r['teacher_name'],
-            'lessons_count': str(r['lessons_count']),   # ::text — bigint строкой
-            'sum_payment': r['sum_payment'],
-            'sum_penalty': r['sum_penalty'],
-        }
+        row = _row(r['teacher_id'], r['teacher_name'])
+        row['lessons_count'] = str(r['lessons_count'])   # ::text — bigint строкой
+        row['sum_lessons_payment'] = r['sum_payment']
+        row['sum_penalty'] = r['sum_penalty']
+    for r in cancel_rows:
+        row = _row(r['teacher_id'], r['teacher_name'])
+        row['cancellations_count'] = str(r['cancellations_count'])
+        row['sum_cancellations_payment'] = r['sum_payment']
+    # sum_payment — к начислению всего (уроки + отмены); штраф — только уроки.
+    for row in result_by_teacher.values():
+        row['sum_payment'] = row['sum_lessons_payment'] + row['sum_cancellations_payment']
 
     return sorted(result_by_teacher.values(), key=lambda r: r['teacher_name'] or '')
 
@@ -300,3 +388,115 @@ def update_payroll(payroll_id: int, fields: dict) -> Optional[dict]:
         if changed:
             obj.save(update_fields=changed)
     return dictrow(Payroll.objects.filter(id=payroll_id).values(*_PAYROLL_FIELDS))
+
+
+def reset_payroll(payroll_id: int) -> Optional[dict]:
+    """
+    Сбросить ручную правку урока к расчёту (§1.9): is_manual=false + пересчёт
+    урока. Возвращает строку начисления + reset + recalculated или None.
+
+    Порядок локов — как у пересчёта: сначала урок, потом его Payroll, иначе
+    встречный пересчёт этого урока (урок → Payroll) встал бы с нами в дедлок.
+    """
+    from apps.lessons.models import Lesson
+    from apps.payroll.recalc import recalculate
+
+    lesson_id = (Payroll.objects.filter(id=payroll_id)
+                 .values_list('lesson_id', flat=True).first())
+    if lesson_id is None:
+        return None
+    with transaction.atomic():
+        list(Lesson.objects.select_for_update().filter(id=lesson_id).values_list('id'))
+        obj = Payroll.objects.select_for_update().filter(id=payroll_id).first()
+        if obj is None:
+            return None
+        was_manual = obj.is_manual
+        if was_manual:
+            obj.is_manual = False
+            obj.save(update_fields=['is_manual'])
+        stats = recalculate(lesson_ids=[obj.lesson_id])
+    row = dictrow(Payroll.objects.filter(id=payroll_id).values(*_PAYROLL_FIELDS))
+    # reset — снят ли флаг ручной правки (сама эта строка в пересчёт не входит:
+    # recalculated считает только изменения движка, а снятый флаг — нет).
+    return {**row, 'reset': was_manual, 'recalculated': stats['changed']}
+
+
+def update_cancellation(cancellation_id: int, payment: Decimal) -> Optional[dict]:
+    """Ручная правка суммы отмены: payment + is_manual (пересчёт её больше не
+    трогает, обновляет только calc_payment). Лок строки — как у update_payroll."""
+    with transaction.atomic():
+        obj = (CancellationPay.objects.select_for_update()
+               .filter(id=cancellation_id).first())
+        if obj is None:
+            return None
+        obj.payment = payment
+        obj.is_manual = True
+        obj.save(update_fields=['payment', 'is_manual'])
+    return dictrow(CancellationPay.objects.filter(id=cancellation_id).values(*_CANCEL_FIELDS))
+
+
+def reset_cancellation(cancellation_id: int) -> Optional[dict]:
+    """
+    Сбросить ручную правку отмены. Привязана к маркеру — пересчёт маркера
+    (recalculate_cancellations). Сирота (маркер удалён, прошлый месяц)
+    пересчитать не из чего — возвращаем последнюю расчётную сумму,
+    recalculated = 0.
+
+    Порядок локов — «план → деньги», как у пересчёта: маркер, затем начисление.
+    Маркер узнаём из начисления до лока, поэтому после лока сверяем: если
+    привязка успела смениться (пересборка плана), пробуем ещё раз; не сошлось
+    и со второй попытки — CancellationPayConflict (409).
+    """
+    from apps.payroll.recalc import recalculate_cancellations
+    from apps.scheduling.models import PlannedLesson
+
+    for _attempt in range(2):
+        found = (CancellationPay.objects.filter(id=cancellation_id)
+                 .values_list('planned_lesson_id', flat=True)[:1])
+        found = list(found)
+        if not found:
+            return None
+        marker_id = found[0]
+        with transaction.atomic():
+            if marker_id is not None:
+                list(PlannedLesson.objects.select_for_update()
+                     .filter(id=marker_id).values_list('id'))
+            obj = (CancellationPay.objects.select_for_update()
+                   .filter(id=cancellation_id).first())
+            if obj is None:
+                return None
+            if obj.planned_lesson_id != marker_id:
+                continue  # транзакция пустая — откатывать нечего
+            was_manual = obj.is_manual
+            obj.is_manual = False
+            obj.payment = obj.calc_payment
+            obj.save(update_fields=['is_manual', 'payment'])
+            changed = 0
+            if marker_id is not None:
+                changed = recalculate_cancellations(marker_ids=[marker_id])['changed']
+        row = dictrow(CancellationPay.objects.filter(id=cancellation_id)
+                      .values(*_CANCEL_FIELDS))
+        if row is None:  # пересчёт удалил будущую сироту — отдаём, что было
+            return {'id': cancellation_id, 'deleted': True, 'reset': was_manual,
+                    'recalculated': changed}
+        return {**row, 'reset': was_manual, 'recalculated': changed}
+    raise CancellationPayConflict(
+        'Отмена изменилась во время сброса (пересобран план) — обновите страницу.')
+
+
+def teacher_month_cancellations(teacher_id: int, date_from: str, date_to: str) -> list[dict]:
+    """Начисления за отмены ОДНОГО преподавателя за период — кабинет. teacher_id
+    из JWT, как в teacher_month_entries; индекс (teacher, lesson_date)."""
+    qs = (
+        CancellationPay.objects
+        .filter(teacher_id=teacher_id, lesson_date__gte=date_from, lesson_date__lte=date_to)
+        .values(
+            'id', 'lesson_date', 'scheduled_time', 'payment', 'calc_payment', 'is_manual',
+            'rule_note',
+            group_name=F('group__name'),
+            direction_name=F('group__direction__name'),
+            direction_color=F('group__direction__color'),
+        )
+        .order_by('-lesson_date', '-scheduled_time', '-id')
+    )
+    return dictrows(qs)

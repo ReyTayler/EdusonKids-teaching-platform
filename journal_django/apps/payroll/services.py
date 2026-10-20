@@ -3,6 +3,7 @@ PayrollService — тонкий слой между views и repository. Ник�
 """
 from __future__ import annotations
 
+import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -18,18 +19,6 @@ _MONTH_LABELS = (
 )
 
 
-def list_payroll(
-    page: int = 1,
-    page_size: int = 50,
-    sort_by: str = 'lesson_date',
-    sort_dir: str = 'desc',
-    filters: Optional[dict] = None,
-) -> dict:
-    return repository.list_payroll(
-        page=page, page_size=page_size, sort_by=sort_by, sort_dir=sort_dir, filters=filters,
-    )
-
-
 def payroll_summary(
     teacher_id: Optional[int] = None,
     date_from: Optional[str] = None,
@@ -42,6 +31,18 @@ def update_payroll(payroll_id: int, fields: dict) -> Optional[dict]:
     return repository.update_payroll(payroll_id, fields)
 
 
+def reset_payroll(payroll_id: int) -> Optional[dict]:
+    return repository.reset_payroll(payroll_id)
+
+
+def update_cancellation(cancellation_id: int, payment: Decimal) -> Optional[dict]:
+    return repository.update_cancellation(cancellation_id, payment)
+
+
+def reset_cancellation(cancellation_id: int) -> Optional[dict]:
+    return repository.reset_cancellation(cancellation_id)
+
+
 # ---------------------------------------------------------------------------
 # Кабинет преподавателя — своя зарплата за месяц
 # ---------------------------------------------------------------------------
@@ -50,6 +51,8 @@ def _money(value: Decimal) -> str:
     """Деньги строкой с масштабом ('800.00') — контракт teacher SPA."""
     return f'{Decimal(value):.2f}'
 
+
+_MIDNIGHT = datetime.time(0, 0)
 
 # Подписи ручной правки: сумма задана администратором, правило движка её не
 # объясняет — говорим как есть, а расчётная сумма идёт рядом (calcPayment).
@@ -122,7 +125,10 @@ def my_payroll_month(teacher_id: int, month: str) -> dict:
 
         rows.append({
             'lessonId': e['lesson_id'],
+            # Единая форма строк с отменами (у урока времени в журнале нет).
+            'cancellationId': None,
             'date': e['lesson_date'],
+            'time': None,
             'group': e['group_name'],
             'direction': e['direction_name'],
             'directionColor': e['direction_color'],
@@ -146,13 +152,54 @@ def my_payroll_month(teacher_id: int, month: str) -> dict:
             'calcPenalty': _money(e['calc_penalty']),
         })
 
+    lessons_count = len(rows)
+
+    # Отмены (§1.3): своя строка с kind='cancellation' — значения kind у уроков
+    # (lesson_type: regular/extra/…) с ним не пересекаются, контракт строк уроков
+    # не меняется. Полей урока (номер, состав, длительность) у отмены нет — null.
+    cancellations = repository.teacher_month_cancellations(teacher_id, date_from, date_to)
+    for c in cancellations:
+        payment = Decimal(c['payment'])
+        sum_payment += payment
+        rows.append({
+            'lessonId': None,
+            'cancellationId': c['id'],
+            'date': c['lesson_date'],
+            'time': c['scheduled_time'],
+            'group': c['group_name'],
+            'direction': c['direction_name'],
+            'directionColor': c['direction_color'],
+            'lessonNumber': None,
+            'kind': 'cancellation',
+            'durationMinutes': None,
+            'totalStudents': None,
+            'presentCount': None,
+            'payment': _money(payment),
+            'penalty': _money(Decimal('0')),
+            'net': _money(payment),
+            'rule': _rule(c, payment),
+            'ruleNote': c['rule_note'],
+            'penaltyNote': None,
+            'excludedNote': None,
+            'adjusted': c['is_manual'],
+            'isManual': c['is_manual'],
+            'calcPayment': _money(c['calc_payment']),
+            'calcPenalty': _money(Decimal('0')),
+        })
+    # Новые сверху по (дата, время); у урока времени нет — в пределах дня он
+    # после отмен со временем. sort стабилен: уроки одного дня сохраняют
+    # прежний порядок (-id).
+    rows.sort(key=lambda r: (r['date'], r['time'] is not None, r['time'] or _MIDNIGHT),
+              reverse=True)
+
     year, month_number = int(month[:4]), int(month[5:7])
 
     return {
         'month': month,
         'monthLabel': f'{_MONTH_LABELS[month_number - 1]} {year}',
         'totals': {
-            'lessons': len(rows),
+            'lessons': lessons_count,
+            'cancellations': len(cancellations),
             'presences': presences,
             'payment': _money(sum_payment),
             'penalty': _money(sum_penalty),

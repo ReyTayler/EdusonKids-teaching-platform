@@ -17,8 +17,23 @@ DateSafeJSONRenderer.
 from __future__ import annotations
 
 import pghistory
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DecimalRangeField, RangeBoundary, RangeOperators
 from django.db import models
 from django.utils import timezone
+
+# Имена ограничений персональных ставок — по ним сервис узнаёт нарушение
+# (apps/payroll/motivation.py) и отвечает 400 с понятным текстом.
+PERSONAL_ALL_LESSONS_UNIQUE = 'payroll_personal_rates_all_lessons_uniq'
+PERSONAL_RANGES_EXCLUDE = 'payroll_personal_rates_ranges_excl'
+PERSONAL_RANGE_CHECK = 'payroll_personal_rates_range_check'
+
+
+class NumRange(models.Func):
+    """numrange(from, to, '[]') — замкнутый диапазон номеров уроков."""
+
+    function = 'NUMRANGE'
+    output_field = DecimalRangeField()
 
 
 @pghistory.track(
@@ -200,9 +215,13 @@ class PersonalRate(models.Model):
 
     lesson_from/lesson_to — диапазон номеров урока курса (numeric 5,1, как
     Lesson.lesson_number: у 45-минутных групп номера дробные); оба NULL — «все
-    уроки группы». Непересечение диапазонов одной пары проверяет сервис под
-    select_for_update: «все уроки» + диапазон пересекаются законно (диапазон
-    точнее и побеждает), а такое правило exclusion-констрейнтом не выразить.
+    уроки группы». Непересечение у пары преподаватель × группа держит БД, а не
+    сервис (гонку двух вставок без строк для лока сервис не закрыл бы):
+      * не больше одной ставки «все уроки» — частичный UNIQUE;
+      * диапазоны не пересекаются — EXCLUDE USING gist по numrange '[]'
+        (только строки с диапазоном). «Все уроки» + диапазон — законно:
+        диапазон точнее и побеждает (§1.6).
+    Сервис переводит нарушение (по имени ограничения) в 400 с текстом.
     Без дат: действует, пока существует.
     """
 
@@ -250,7 +269,7 @@ class PersonalRate(models.Model):
             # «Все уроки» (оба NULL) либо замкнутый диапазон from ≤ to, from ≥ 0.
             # Полуоткрытый диапазон движок трактовал бы произвольно — запрещаем.
             models.CheckConstraint(
-                name='payroll_personal_rates_range_check',
+                name=PERSONAL_RANGE_CHECK,
                 condition=(
                     models.Q(lesson_from__isnull=True, lesson_to__isnull=True)
                     | models.Q(lesson_from__isnull=False, lesson_to__isnull=False,
@@ -264,6 +283,24 @@ class PersonalRate(models.Model):
             models.CheckConstraint(
                 name='payroll_personal_rates_value_check',
                 condition=models.Q(value__gte=0),
+            ),
+            models.UniqueConstraint(
+                fields=['teacher', 'group'],
+                condition=models.Q(lesson_from__isnull=True),
+                name=PERSONAL_ALL_LESSONS_UNIQUE,
+            ),
+            # Равенство по teacher/group в gist-индексе — расширение btree_gist
+            # (миграция 0007, BtreeGistExtension).
+            ExclusionConstraint(
+                name=PERSONAL_RANGES_EXCLUDE,
+                expressions=[
+                    ('teacher', RangeOperators.EQUAL),
+                    ('group', RangeOperators.EQUAL),
+                    (NumRange('lesson_from', 'lesson_to', RangeBoundary(
+                        inclusive_lower=True, inclusive_upper=True)),
+                     RangeOperators.OVERLAPS),
+                ],
+                condition=models.Q(lesson_from__isnull=False),
             ),
         ]
 

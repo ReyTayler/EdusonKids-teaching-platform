@@ -186,7 +186,7 @@ def test_empty_month_returns_zero_totals(client):
 
     assert body['rows'] == []
     assert body['totals'] == {
-        'lessons': 0, 'presences': 0,
+        'lessons': 0, 'cancellations': 0, 'presences': 0,
         'payment': '0.00', 'penalty': '0.00', 'net': '0.00',
     }
 

@@ -88,6 +88,20 @@ RULES: list[tuple[str, re.Pattern, str]] = [
     ('POST', re.compile(r'^/api/extra-lessons/\d+/record$'), 'extra_lesson.record'),
     # payroll
     ('PATCH', re.compile(r'^/api/admin/payroll/\d+$'), 'payroll.update'),
+    ('POST', re.compile(r'^/api/admin/payroll/\d+/reset$'), 'payroll.reset'),
+    ('PATCH', re.compile(r'^/api/admin/payroll/cancellations/\d+$'), 'payroll.cancellation_update'),
+    ('POST', re.compile(r'^/api/admin/payroll/cancellations/\d+/reset$'),
+     'payroll.cancellation_reset'),
+    # «Настройки → Мотивация»: каждая мутация несёт и пересчёт начислений.
+    ('POST', re.compile(r'^/api/admin/payroll/rate-versions$'), 'payroll.rate_version_create'),
+    ('PATCH', re.compile(r'^/api/admin/payroll/rate-versions/\d+$'), 'payroll.rate_version_update'),
+    ('DELETE', re.compile(r'^/api/admin/payroll/rate-versions/\d+$'),
+     'payroll.rate_version_delete'),
+    ('POST', re.compile(r'^/api/admin/payroll/personal-rates$'), 'payroll.personal_rate_create'),
+    ('PATCH', re.compile(r'^/api/admin/payroll/personal-rates/\d+$'),
+     'payroll.personal_rate_update'),
+    ('DELETE', re.compile(r'^/api/admin/payroll/personal-rates/\d+$'),
+     'payroll.personal_rate_delete'),
     # accounts
     ('POST', re.compile(r'^/api/admin/accounts/\d+/reset-password$'), 'account.reset_password'),
     ('POST', re.compile(r'^/api/admin/accounts/\d+/reset-2fa$'), 'account.reset_2fa'),
@@ -135,6 +149,8 @@ RULES: list[tuple[str, re.Pattern, str]] = [
     # Мягкое обновление с прода (manage.py sync_eduson): группы и ученики — с журналом,
     # замена уроков — без (apps.eduson_import.sync).
     ('COMMAND', re.compile(r'^manual/sync-eduson$'), 'eduson.sync'),
+    # Пересчёт зарплат (manage.py recalculate_payroll) — контекст ставит команда.
+    ('COMMAND', re.compile(r'^manual/recalculate-payroll$'), 'payroll.recalculate'),
 ]
 
 FALLBACK = 'other'

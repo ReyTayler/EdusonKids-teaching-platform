@@ -2,8 +2,8 @@
 Integration-тесты repository слоя payroll (реальная БД, managed=False).
 
 Покрытие:
-  - list_payroll: контракт {rows,total,page,page_size}, JOIN-контекст, фильтр teacher_id,
-    тихий fallback невалидного sort_by.
+  - payroll_entries: JOIN-контекст, фильтр teacher_id/group_id, kind='lesson',
+    одна строка на payroll (пагинация и whitelist сортировки — во вьюхе, см. API-тесты).
   - payroll_summary: COUNT/SUM по учителю, lessons_count строкой, sum_* Decimal с масштабом,
     фильтр по диапазону дат.
   - update_payroll: COALESCE-семантика, None для отсутствующего id.
@@ -20,24 +20,31 @@ from apps.payroll import repository
 pytestmark = pytest.mark.django_db
 
 
-def test_list_payroll_envelope_and_context(payroll_fixture, teacher_id_fixture, group_fixture):
+def _entries(**filters):
+    return [repository.entry_row(r) for r in repository.payroll_entries(filters=filters)]
+
+
+def test_payroll_entries_context(payroll_fixture, teacher_id_fixture, group_fixture):
     payroll_id, lesson_id = payroll_fixture
-    result = repository.list_payroll(filters={'teacher_id': teacher_id_fixture, 'group_id': group_fixture})
-    assert set(result.keys()) == {'rows', 'total', 'page', 'page_size'}
-    assert result['total'] == 1
-    row = result['rows'][0]
+    rows = _entries(teacher_id=teacher_id_fixture, group_id=group_fixture)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row['kind'] == 'lesson'
     assert row['id'] == payroll_id
     assert row['lesson_id'] == lesson_id
     assert row['group_name'] == '__pr_group__'
     assert row['payment'] == Decimal('650.00')
     assert row['lesson_number'] == Decimal('1.0')
+    assert row['scheduled_time'] is None
 
 
-def test_list_payroll_invalid_sort_falls_back(payroll_fixture, teacher_id_fixture):
-    result = repository.list_payroll(
-        sort_by='; DROP TABLE payroll; --', filters={'teacher_id': teacher_id_fixture}
-    )
-    assert result['total'] >= 1
+def test_payroll_entries_unknown_sort_key_falls_back_to_default(payroll_fixture,
+                                                               teacher_id_fixture):
+    """Репозиторий не подставляет сырое значение в ORDER BY: неизвестный ключ —
+    сортировка по умолчанию (HTTP-слой отвечает на такой ключ 400)."""
+    qs = repository.payroll_entries(sort_by='; DROP TABLE payroll; --',
+                                    filters={'teacher_id': teacher_id_fixture})
+    assert qs.count() == 1
 
 
 def test_summary_lessons_count_is_string(payroll_fixture, teacher_id_fixture):
@@ -64,12 +71,12 @@ def test_summary_date_range_filter(payroll_fixture, teacher_id_fixture):
     assert outside == []
 
 
-def test_list_payroll_single_row_per_payroll(payroll_fixture, teacher_id_fixture):
+def test_payroll_entries_single_row_per_payroll(payroll_fixture, teacher_id_fixture):
     """Одна строка на payroll (спец-надбавок «сгорания» больше нет — сгорание =
     отдельный burned-Lesson со своим payroll в свой месяц)."""
-    result = repository.list_payroll(filters={'teacher_id': teacher_id_fixture})
-    assert result['total'] == 1
-    assert 'is_surcharge' not in result['rows'][0]
+    rows = _entries(teacher_id=teacher_id_fixture)
+    assert len(rows) == 1
+    assert 'is_surcharge' not in rows[0]
 
 
 def test_update_payroll_coalesce(payroll_fixture):

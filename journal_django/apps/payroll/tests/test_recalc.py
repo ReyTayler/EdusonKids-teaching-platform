@@ -211,19 +211,74 @@ def test_recalculate_orphan_rebinds_to_new_marker_keeping_manual(db_school):
     assert CancellationPay.objects.filter(group=db_school['group']).count() == 1
 
 
-def test_recalculate_orphan_other_time_not_bound(db_school):
+def test_orphan_rebinds_by_day_when_time_changed(db_school):
+    """Время отмены сменилось (мягкое обновление): в группе на дату одна сирота и
+    один маркер без начисления — это та же отмена. Иначе прошлая сирота осталась
+    бы рядом с новым начислением — двойная оплата."""
     from apps.payroll.models import CancellationPay
     db_version(datetime.date(2026, 6, 1))
     day = datetime.date(2026, 6, 10)
-    orphan = CancellationPay.objects.create(
-        teacher=db_school['t1'], group=db_school['group'], lesson_date=day,
-        scheduled_time=datetime.time(10, 0), payment=D('1'), calc_payment=D('1'))
+    orphan = db_orphan(db_school, day, time=datetime.time(10, 0), payment='777')
+    CancellationPay.objects.filter(id=orphan.id).update(is_manual=True)
     marker = db_marker(db_school, day, time=datetime.time(15, 0))
+
     stats = recalc_group(db_school)
-    assert stats['created'] == 1
+
+    assert (stats['created'], stats['updated']) == (0, 1)
+    orphan.refresh_from_db()
+    assert orphan.planned_lesson_id == marker.id
+    assert orphan.scheduled_time == datetime.time(15, 0)
+    assert (orphan.payment, orphan.calc_payment, orphan.is_manual) == (D('777'), D('300.00'), True)
+    assert CancellationPay.objects.filter(group=db_school['group']).count() == 1
+
+
+def test_orphan_not_rebound_by_day_when_ambiguous(db_school):
+    """Два маркера без начисления на дату — какой из них «та же» отмена, неизвестно:
+    сирота остаётся (прошлая), маркеры получают свои начисления."""
+    from apps.payroll.models import CancellationPay
+    db_version(datetime.date(2026, 6, 1))
+    day = datetime.date(2026, 6, 10)
+    orphan = db_orphan(db_school, day, time=datetime.time(10, 0), payment='1')
+    db_marker(db_school, day, time=datetime.time(15, 0))
+    db_marker(db_school, day, time=datetime.time(17, 0))
+
+    stats = recalc_group(db_school)
+
+    assert stats['created'] == 2
     orphan.refresh_from_db()
     assert orphan.planned_lesson_id is None
+
+
+def test_orphan_not_rebound_by_day_when_two_orphans(db_school):
+    from apps.payroll.models import CancellationPay
+    db_version(datetime.date(2026, 6, 1))
+    day = datetime.date(2026, 6, 10)
+    first = db_orphan(db_school, day, time=datetime.time(10, 0), payment='1')
+    second = db_orphan(db_school, day, time=datetime.time(11, 0), payment='2')
+    marker = db_marker(db_school, day, time=datetime.time(15, 0))
+
+    recalc_group(db_school)
+
     assert CancellationPay.objects.get(planned_lesson=marker).payment == D('300.00')
+    assert set(CancellationPay.objects.filter(planned_lesson__isnull=True)
+               .values_list('id', flat=True)) == {first.id, second.id}
+
+
+def test_orphan_not_rebound_by_day_when_marker_already_paid(db_school):
+    """Маркер дня уже со своим начислением — сирота другого времени к нему не липнет."""
+    from apps.payroll.models import CancellationPay
+    db_version(datetime.date(2026, 6, 1))
+    day = datetime.date(2026, 6, 10)
+    marker = db_marker(db_school, day, time=datetime.time(15, 0))
+    recalc_group(db_school)
+    orphan = db_orphan(db_school, day, time=datetime.time(10, 0), payment='1')
+
+    stats = recalc_group(db_school)
+
+    assert stats['changed'] == 0
+    orphan.refresh_from_db()
+    assert orphan.planned_lesson_id is None
+    assert CancellationPay.objects.filter(planned_lesson=marker).count() == 1
 
 
 def test_point_recalc_by_lesson_deletes_future_orphans_of_its_group(db_school):

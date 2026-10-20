@@ -216,11 +216,26 @@ def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
         if p.planned_lesson_id is None:
             orphans.setdefault((p.group_id, p.lesson_date, p.scheduled_time), []).append(p)
 
-    to_create, to_update = [], []
+    # Начисление каждого маркера: своё; иначе сирота с тем же ключом — привязка
+    # сохраняет её ручную правку (§2): маркер пересоздан, а отмена та же.
+    current_by_marker: dict[int, object] = {}
+    unbound: list[dict] = []
     scope_keys = set()
     for row in marker_rows:
         key = (row['group_id'], row['scheduled_date'], row['scheduled_time'])
         scope_keys.add(key)
+        current = linked.get(row['id'])
+        if current is None:
+            bucket = orphans.get(key)
+            current = bucket.pop(0) if bucket else None
+        if current is None:
+            unbound.append(row)
+        else:
+            current_by_marker[row['id']] = current
+    _bind_by_day(unbound, orphans, current_by_marker)
+
+    to_create, to_update = [], []
+    for row in marker_rows:
         marker = MarkerInput(
             teacher_id=row['eff_teacher_id'], group_id=row['group_id'],
             scheduled_date=row['scheduled_date'],
@@ -236,12 +251,7 @@ def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
             'lesson_date': marker.scheduled_date, 'scheduled_time': row['scheduled_time'],
             'calc_payment': res.payment, 'rule_note': res.rule_note,
         }
-        current = linked.get(row['id'])
-        if current is None:
-            # Привязка сироты сохраняет её ручную правку (§2): маркер пересоздан,
-            # а отмена та же.
-            bucket = orphans.get(key)
-            current = bucket.pop(0) if bucket else None
+        current = current_by_marker.get(row['id'])
         if current is None:
             to_create.append(CancellationPay(payment=res.payment, is_manual=False, **values))
             continue
@@ -264,6 +274,29 @@ def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
     CancellationPay.objects.bulk_create(to_create, batch_size=_BATCH)
     CancellationPay.objects.bulk_update(to_update, _CANCEL_FIELDS, batch_size=_BATCH)
     return {'created': len(to_create), 'updated': len(to_update), 'deleted': deleted}
+
+
+def _bind_by_day(unbound: list[dict], orphans: dict[tuple, list], current_by_marker: dict) -> None:
+    """Запасная привязка сироты к маркеру по (группа, дата), когда время отмены
+    сменилось (мягкое обновление: в старой системе перенесли время отменённого
+    занятия). Без неё прошлая сирота осталась бы рядом с новым начислением —
+    двойная оплата одной отмены. Только однозначный случай: в группе на дату ровно
+    один маркер без начисления и ровно одна свободная сирота. Сирота, чей маркер
+    с тем же ключом есть вне охвата (has_marker), не кандидат — её привяжет он."""
+    markers_by_day: dict[tuple, list[dict]] = {}
+    for row in unbound:
+        markers_by_day.setdefault((row['group_id'], row['scheduled_date']), []).append(row)
+    orphans_by_day: dict[tuple, list[tuple]] = {}
+    for key, bucket in orphans.items():
+        for p in bucket:
+            orphans_by_day.setdefault(key[:2], []).append((key, p))
+    for day_key, rows in markers_by_day.items():
+        candidates = orphans_by_day.get(day_key, [])
+        if len(rows) != 1 or len(candidates) != 1 or candidates[0][1].has_marker:
+            continue
+        key, orphan = candidates[0]
+        orphans[key].remove(orphan)
+        current_by_marker[rows[0]['id']] = orphan
 
 
 def recalculate(*, lesson_ids=None, marker_ids=None, group_ids=None,

@@ -245,3 +245,30 @@ def test_plan_fitted_to_course_length(tmp_path):
     # целый урок вышел бы за 48) — это правильно, курс не превышен.
     assert Decimal('47') < last <= 48
     assert 'план подогнан под длину курса' in out
+
+
+def test_import_creates_payroll(tmp_path, payroll_rates):
+    """Вся история получает начисления (спека зарплат §1.8): уроки — по ставке на
+    дату, отмена — 50 % от ставки группового."""
+    from apps.payroll.models import CancellationPay, Payroll
+
+    out = _call(_db(tmp_path).close())
+
+    pays = dict(Payroll.objects.values_list('lesson__lesson_date', 'payment'))
+    assert len(pays) == Lesson.objects.count() == 2
+    assert set(pays.values()) == {Decimal('500')}
+    cancel = CancellationPay.objects.get()
+    assert (str(cancel.lesson_date), cancel.payment, cancel.planned_lesson_id is not None) == (
+        '2026-07-20', Decimal('250'), True)
+    assert 'зарплата: начислений 3' in out
+
+
+def test_import_without_rates_pays_zero_with_note(tmp_path):
+    from apps.payroll.models import PayRateVersion, Payroll
+
+    PayRateVersion.objects.all().delete()
+    _call(_db(tmp_path).close())
+
+    rows = list(Payroll.objects.values_list('payment', 'rule_note'))
+    assert len(rows) == 2
+    assert all(p == 0 and note.startswith('Нет ставки') for p, note in rows)

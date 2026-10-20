@@ -5,21 +5,26 @@ from __future__ import annotations
 
 import datetime
 import io
+from decimal import Decimal
 from unittest import mock
 
-import pghistory.models
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import connection
 from django.db.models import Count
+from django.test.utils import CaptureQueriesContext
 
 from apps.accounts.models import Account
 from apps.eduson_import.models import EdusonLink
+from apps.eduson_import.sync import HISTORYLESS_MODELS, purge_group_facts
 from apps.eduson_import.tests.factory import EdusonDB
 from apps.feedback.models import LessonFeedback
 from apps.groups.models import Group, GroupScheduleSlot
 from apps.lessons.models import Lesson
 from apps.memberships.models import GroupMembership
+from apps.payroll.models import CancellationPay, PayRateVersion, Payroll
+from apps.payroll.repository import update_payroll
 from apps.renewals.models import RenewalDeal
 from apps.scheduling.models import PlannedLesson
 from apps.students.models import Student, StudentComment
@@ -186,12 +191,26 @@ def test_renewals_accounts_and_platform_groups_untouched(db):
     assert Group.objects.filter(id=own.id, name='Платформенная', active=True).exists()
 
 
-def test_lesson_replacement_skips_change_history(db):
+def _history_counts() -> list[int]:
+    return [m.pgh_event_model.objects.count() for m in HISTORYLESS_MODELS]
+
+
+def test_replacement_skips_change_history(db, payroll_rates):
+    """Замена фактов и пересчёт зарплаты в синке не пишут в журнал изменений ни
+    одной из моделей HISTORYLESS_MODELS (включая начисления и доп.уроки)."""
     _sync(db)
-    contexts = pghistory.models.Context.objects.filter(metadata__operation='eduson.sync')
-    models = set(pghistory.models.Events.objects.filter(pgh_context_id__in=contexts)
-                 .values_list('pgh_model', flat=True))
-    assert not any(m.startswith(('lessons.', 'scheduling.', 'feedback.', 'memberships.')) for m in models)
+    update_payroll(Payroll.objects.get().id, {'payment': Decimal('777')})
+    CancellationPay.objects.update(payment=Decimal('123'), is_manual=True)
+    # Положительный контроль: вне синка журнал этих моделей пишется.
+    before = _history_counts()
+    Lesson.objects.update(record_url='https://example.org/control')
+    assert sum(_history_counts()) == sum(before) + 1
+    before = _history_counts()
+    assert before[HISTORYLESS_MODELS.index(Payroll)] and before[HISTORYLESS_MODELS.index(CancellationPay)]
+
+    _sync(db)
+
+    assert _history_counts() == before
 
 
 def test_reconcile_error_rolls_back_everything(db):
@@ -224,3 +243,187 @@ def test_caches_invalidated_after_commit(db, django_capture_on_commit_callbacks)
         _sync(db)
     fin.assert_called_once_with()
     reg.assert_called_once_with()
+
+
+# ── зарплата (спека 2026-10-20-eduson-motivation-payroll-design, §3) ─────────
+
+def _lesson_pay() -> dict:
+    """Начисления за уроки по естественному ключу урока (id урока меняется на синке)."""
+    return {
+        (p['lesson__group_id'], p['lesson__lesson_date'], p['lesson__lesson_number']):
+            (p['payment'], p['penalty'], p['calc_payment'], p['is_manual'])
+        for p in Payroll.objects.values('lesson__group_id', 'lesson__lesson_date', 'lesson__lesson_number',
+                                        'payment', 'penalty', 'calc_payment', 'is_manual')
+    }
+
+
+def _cancel_pay() -> list[tuple]:
+    # id маркера меняется на синке — сравниваем лишь факт привязки.
+    return sorted((*row[:-1], row[-1] is not None) for row in CancellationPay.objects.values_list(
+        'group_id', 'lesson_date', 'scheduled_time', 'payment', 'calc_payment', 'is_manual',
+        'planned_lesson_id'))
+
+
+def _make_manual(payment='777', penalty=None, group=None) -> Payroll:
+    pay = Payroll.objects.get(lesson__group=group or _group())
+    fields = {'payment': Decimal(payment)}
+    if penalty is not None:
+        fields['penalty'] = Decimal(penalty)
+    update_payroll(pay.id, fields)
+    return pay
+
+
+def test_resync_keeps_payroll(db, payroll_rates):
+    _sync(db)
+    lessons, cancels = _lesson_pay(), _cancel_pay()
+    assert lessons and cancels                                    # есть что сравнивать
+
+    out = _sync(db)
+
+    assert _lesson_pay() == lessons
+    assert _cancel_pay() == cancels
+    assert ('зарплата: начислений 2, ручных восстановлено 0, не найдено 0, '
+            'удалено начислений за отмены 0') in out
+
+
+def test_imported_lessons_paid_by_rate_after_sync(db):
+    """Без версии ставок — 0 «Нет ставки»; версия появилась — синк считает по ставке."""
+    PayRateVersion.objects.all().delete()
+    _sync(db)
+    assert set(Payroll.objects.values_list('payment', flat=True)) == {Decimal('0')}
+    PayRateVersion.objects.create(
+        effective_from=datetime.date(2000, 1, 1), group_rate=Decimal('500'),
+        individual_rate=Decimal('700'), cancel_mode='percent', cancel_value=Decimal('50'))
+
+    _sync(db)
+
+    pay = Payroll.objects.get(lesson__group=_group())
+    assert (pay.payment, pay.calc_payment, pay.is_manual) == (Decimal('500'), Decimal('500'), False)
+    cancel = CancellationPay.objects.get()
+    assert (cancel.lesson_date, cancel.payment) == (datetime.date(2026, 7, 13), Decimal('250'))
+    assert cancel.planned_lesson is not None
+
+
+def test_manual_lesson_pay_survives_sync(db, payroll_rates):
+    _sync(db)
+    old = _make_manual('777', '10')
+
+    out = _sync(db)
+
+    new = Payroll.objects.get(lesson__group=_group())
+    assert new.lesson_id != old.lesson_id                         # урок заменён синком
+    assert (new.payment, new.penalty, new.is_manual) == (Decimal('777'), Decimal('10'), True)
+    assert (new.calc_payment, new.calc_penalty) == (Decimal('500'), Decimal('0'))
+    assert 'ручных восстановлено 1, не найдено 0' in out
+
+
+def test_manual_pay_follows_lesson_when_numbers_shift(db, payroll_rates):
+    """В старой системе раньше появился урок — номера сдвинулись; в этот день у
+    группы один урок и до, и после — правка находит его по дате."""
+    _sync(db)
+    _make_manual('777')
+    db.session(100, 5, '2026-06-29')
+    db.report(100, 5, 1)
+
+    out = _sync(db)
+
+    pay = Payroll.objects.get(lesson__group=_group(), lesson__lesson_date=datetime.date(2026, 7, 6))
+    assert pay.lesson.lesson_number == 2
+    assert (pay.payment, pay.is_manual) == (Decimal('777'), True)
+    assert 'ручных восстановлено 1, не найдено 0' in out
+
+
+def test_manual_pay_not_moved_when_teacher_changed(db, payroll_rates):
+    _sync(db)
+    _make_manual('777')
+    db.teacher(2, 'Борис Новый')
+    db.user('boris@example.com', 'teacher', teacher_id=2)
+    # Группу передали другому преподавателю: урок в новой заливке — его.
+    db.con.execute('UPDATE student_groups SET teacher_id=2 WHERE id=5')
+
+    out = _sync(db)
+
+    pay = Payroll.objects.get(lesson__group=_group())
+    assert pay.lesson.teacher.name == 'Борис Новый'
+    assert (pay.payment, pay.is_manual) == (Decimal('500'), False)
+    assert 'ручных восстановлено 0, не найдено 1' in out
+    assert ('ручная правка зарплаты не перенесена: сменился преподаватель урока '
+            '(ПИ1001, 2026-07-06, урок 1)') in out
+    assert 'Борис' not in out
+
+
+def test_manual_cancellation_pay_survives_sync(db, payroll_rates):
+    _sync(db)
+    marker_id = CancellationPay.objects.get().planned_lesson_id
+    CancellationPay.objects.update(payment=Decimal('123'), is_manual=True)
+
+    _sync(db)
+
+    pay = CancellationPay.objects.get()
+    assert pay.planned_lesson_id is not None and pay.planned_lesson_id != marker_id
+    assert (pay.payment, pay.calc_payment, pay.is_manual) == (Decimal('123'), Decimal('250'), True)
+
+
+def test_manual_cancellation_pay_survives_time_change(db, payroll_rates):
+    """В старой системе сменили время отменённого занятия: прошлое начисление не
+    остаётся сиротой рядом с новым (двойная оплата), правка переезжает."""
+    _sync(db)
+    CancellationPay.objects.update(payment=Decimal('123'), is_manual=True)
+    db.con.execute("UPDATE sessions SET time='17:30' WHERE id=102")
+
+    _sync(db)
+
+    pay = CancellationPay.objects.get()
+    assert pay.planned_lesson_id is not None
+    assert pay.scheduled_time == datetime.time(17, 30)
+    assert (pay.payment, pay.is_manual) == (Decimal('123'), True)
+
+
+def test_manual_pay_of_vanished_lesson_reported(db, payroll_rates):
+    _sync(db)
+    _make_manual('777')
+    db.session(104, 5, '2026-07-20')
+    db.report(104, 5, 1)
+    db.con.execute('DELETE FROM lesson_reports WHERE session_id=101')
+    db.con.execute('DELETE FROM sessions WHERE id=101')
+
+    out = _sync(db)
+
+    assert not Payroll.objects.filter(is_manual=True).exists()
+    assert 'ручных восстановлено 0, не найдено 1' in out
+    assert 'ручная правка зарплаты не перенесена: урок не найден (ПИ1001, 2026-07-06, урок 1)' in out
+
+
+def test_manual_pay_in_vanished_group_reported(db, payroll_rates):
+    db.group(6, 'СИ1002', 'scratch', 1, fmt='individual')
+    db.participant(6, 'Оля', 'Мама Оли', '79990000004', id=14)
+    db.session(201, 6, '2026-07-21')
+    _sync(db)
+    _make_manual('999', group=_group('СИ1002'))
+    db.con.execute('DELETE FROM sessions WHERE group_id=6')
+    db.con.execute('DELETE FROM participants WHERE group_id=6')
+    db.con.execute('DELETE FROM student_groups WHERE id=6')
+
+    out = _sync(db)
+
+    assert not Payroll.objects.filter(lesson__group=_group('СИ1002')).exists()
+    assert 'ручная правка зарплаты не перенесена: урок не найден (СИ1002, 2026-07-21, урок 1)' in out
+
+
+def test_purge_locks_lessons_then_plan_then_all_payroll_before_deleting(db, payroll_rates):
+    """Порядок проекта «урок → план → деньги»: синк идёт при работающем сервере.
+    Лок начислений — без условия на is_manual: иначе параллельный PATCH, делающий
+    строку ручной, не попал бы под лок и потерялся."""
+    with CaptureQueriesContext(connection) as q:
+        purge_group_facts([_group().id])
+    sqls = [x['sql'] for x in q.captured_queries]
+    locks = [s for s in sqls if 'FOR UPDATE' in s]
+    first_write = next(i for i, s in enumerate(sqls) if s.startswith(('DELETE', 'UPDATE')))
+    assert [s.split(' FROM ', 1)[1].split()[0] for s in locks[:3]] == [
+        '"lessons"', '"planned_lessons"', '"payroll"']
+    assert sqls.index(locks[2]) < first_write
+    lessons_lock, plan_lock, payroll_lock = locks[:3]
+    assert 'ORDER BY "lessons"."id" ASC' in lessons_lock
+    assert 'ORDER BY "planned_lessons"."seq" ASC NULLS LAST, "planned_lessons"."id" ASC' in plan_lock
+    assert 'ORDER BY "payroll"."lesson_id" ASC' in payroll_lock
+    assert 'is_manual' not in payroll_lock.split(' WHERE ', 1)[1]

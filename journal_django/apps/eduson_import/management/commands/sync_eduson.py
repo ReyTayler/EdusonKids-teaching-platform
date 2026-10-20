@@ -50,7 +50,8 @@ from apps.eduson_import.sqlite_source import EdusonSource
 from apps.eduson_import.steps.groups import import_memberships, sync_groups
 from apps.eduson_import.steps.lessons import import_feedback, import_lessons
 from apps.eduson_import.steps.people import sync_people
-from apps.eduson_import.sync import facts_without_history, purge_group_facts
+from apps.eduson_import.sync import facts_without_history, purge_group_facts, restore_manual_payroll
+from apps.payroll.recalc import recalculate
 
 # Строка итога — её ищут скрипт обновления и кнопка в «Синхро» (apps.sync.prod_refresh).
 DONE_LINE = 'Мягкое обновление Eduson завершено.'
@@ -127,9 +128,12 @@ class Command(ImportCommand):
                 step = 'группы и ученики'
                 members = sync_groups(src, ctx)
                 groups = {g['id']: g for g in src.rows('student_groups')}
+                # Исчезнувшие группы — тоже в охвате: их факты удаляются, а пересчёт
+                # убирает будущие начисления за отмены, которых больше нет.
+                run_groups = sorted({*ctx.group_by_eduson.values(), *ctx.vanished_groups})
                 with facts_without_history():
                     step = 'удаление прежних уроков'
-                    purged = purge_group_facts([*ctx.group_by_eduson.values(), *ctx.vanished_groups])
+                    purged, manual_pay = purge_group_facts(run_groups)
                     step = 'членства'
                     import_memberships(src, groups, members, ctx)
                     step = 'уроки и план'
@@ -142,9 +146,20 @@ class Command(ImportCommand):
                 step = 'сверка'
                 lines, errors, warnings = reconcile(src, ctx, scope='sync')
                 if not errors:
-                    step = 'план под длину курса'
                     with facts_without_history():
+                        step = 'план под длину курса'
                         fit_plans_to_course(ctx)
+                        # Зарплата — после плана: маркеры отмен уже на месте, к ним
+                        # привязываются начисления-сироты (ручные правки отмен).
+                        # Без журнала: начисления уроков создаются заново на каждом
+                        # синке (удалены вместе с уроками) — это замена, не правка.
+                        step = 'зарплата'
+                        pay = recalculate(group_ids=run_groups)
+                        restored, lost = restore_manual_payroll(manual_pay, ctx)
+                        ctx.report.append(
+                            f'зарплата: начислений {pay["lessons"] + pay["cancellations"]}, '
+                            f'ручных восстановлено {restored}, не найдено {lost}, '
+                            f'удалено начислений за отмены {pay["deleted"]}')
                     step = 'связи'
                     save_links(ctx)
             for table, n in purged.items():

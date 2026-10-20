@@ -68,6 +68,7 @@ from apps.eduson_import.steps.groups import import_groups
 from apps.eduson_import.steps.lessons import import_feedback, import_lessons
 from apps.eduson_import.steps.people import import_people
 from apps.eduson_import.steps.renewals import import_renewals
+from apps.payroll.recalc import recalculate
 from apps.groups.models import Group
 from apps.lessons.models import Lesson
 from apps.payments.models import Payment
@@ -170,6 +171,13 @@ class Command(BaseCommand):
                     # в том же контексте журнала — импорт остаётся одной операцией.
                     step = 'план под длину курса'
                     fit_plans_to_course(ctx)
+                    # Зарплата за всю перенесённую историю (спека зарплат §1.8) — после
+                    # плана, когда маркеры отмен на месте. Нет версии ставок — начисления
+                    # 0 с «Нет ставки на …»: ставки заводят потом, их сохранение
+                    # пересчитает период.
+                    step = 'зарплата'
+                    pay = recalculate(group_ids=sorted(set(ctx.group_by_eduson.values())))
+                    ctx.report.append(f'зарплата: начислений {pay["lessons"] + pay["cancellations"]}')
                     # Соответствия — для мягкого обновления (sync_eduson).
                     step = 'связи для мягкого обновления'
                     save_links(ctx)

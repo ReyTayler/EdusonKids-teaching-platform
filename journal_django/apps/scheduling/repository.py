@@ -358,7 +358,7 @@ def _recalc_cancellations_after_delete(group_id: int) -> None:
 _PLAN_LOCK_ORDER = (F('seq').asc(nulls_last=True), 'id')
 
 
-def _lock_plan_rows(qs) -> list[int]:
+def lock_plan_rows(qs) -> list[int]:
     """Залочить строки плана перед удалением: коллектор Django обнуляет ссылку
     начисления отмены (UPDATE payroll_cancellations) раньше DELETE плана, и без
     этого лока порядок был бы «деньги → план». Порядок — _PLAN_LOCK_ORDER."""
@@ -385,7 +385,7 @@ def reset_plan(group_id: int) -> int:
     (спека зарплат §3, «удаление маркера»)."""
     with transaction.atomic():
         plan = PlannedLesson.objects.filter(group_id=group_id)
-        _lock_plan_rows(plan)
+        lock_plan_rows(plan)
         deleted, _ = plan.delete()
         _recalc_cancellations_after_delete(group_id)
     return deleted
@@ -1338,7 +1338,7 @@ def wipe_one_offs(
             course = course.filter(scheduled_date__gte=date_from)
             if date_to is not None:
                 course = course.filter(scheduled_date__lte=date_to)
-        course_ids = _lock_plan_rows(course)
+        course_ids = lock_plan_rows(course)
         if course_ids:
             PlannedLesson.objects.filter(id__in=course_ids).update(
                 moved_from_date=None, substitute_teacher_id=None, updated_at=now)
@@ -1348,7 +1348,7 @@ def wipe_one_offs(
             scheduled_date__gte=date_from)
         if date_to is not None:
             markers = markers.filter(scheduled_date__lte=date_to)
-        marker_ids = _lock_plan_rows(markers)
+        marker_ids = lock_plan_rows(markers)
         if marker_ids:
             PlannedLesson.objects.filter(id__in=marker_ids).delete()
             _recalc_cancellations_after_delete(group_id)

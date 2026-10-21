@@ -1,9 +1,8 @@
 """
 Serializers for payroll.
 
-PayrollUpdateSerializer — вход для PATCH (updatePayrollSchema из shared/schemas.js):
-все поля необязательны, total_students/present_count int≥0, payment/penalty —
-Decimal≥0 с точностью до копеек.
+PayrollUpdateSerializer — вход для PATCH (ручная правка суммы урока): payment/penalty
+необязательны, Decimal≥0 с точностью до копеек; прочие поля — 400.
 
 PayrollReadSerializer — справочное представление вывода (views возвращают сырые
 dict из repository, Decimal/date приводит DateSafeJSONRenderer).
@@ -26,13 +25,22 @@ def _money_field(**kwargs) -> serializers.DecimalField:
 
 
 class PayrollUpdateSerializer(serializers.Serializer):
-    """Вход для PATCH /api/admin/payroll/:id (updatePayrollSchema, все поля optional)."""
+    """Вход для PATCH /api/admin/payroll/:id: только суммы, обе необязательны.
 
-    total_students = serializers.IntegerField(min_value=0, required=False)
-    present_count = serializers.IntegerField(min_value=0, required=False)
+    total_students/present_count не принимаются: их выводит пересчёт из
+    посещаемости и перезаписал бы правку при ближайшем пересчёте урока. Неизвестные
+    поля — 400, а не молчаливый игнор: клиент, приславший headcount, должен узнать,
+    что правка не применится (как StrictSerializer в scheduling/extra_lessons)."""
+
     # Ручная правка суммы урока — те же правила денег, что у правки отмены.
     payment = _money_field(required=False)
     penalty = _money_field(required=False)
+
+    def validate(self, attrs):
+        unknown = set(self.initial_data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({k: 'Неизвестное поле.' for k in sorted(unknown)})
+        return attrs
 
 
 class PayrollReadSerializer(serializers.Serializer):

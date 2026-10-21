@@ -129,6 +129,48 @@ def test_recalculate_keeps_manual_payment_updates_calc(db_school):
     assert recalc_group(db_school)['changed'] == 0
 
 
+def test_recalculate_teacher_change_drops_manual_payment(db_school):
+    """Сменился преподаватель урока — ручная сумма прежнего к новому не переходит:
+    правка снимается, payment/penalty = расчётным (как мягкое обновление импорта)."""
+    from apps.payroll.models import Payroll
+    db_version(datetime.date(2026, 6, 1))
+    lesson = db_lesson(db_school, datetime.date(2026, 6, 10), 1)
+    recalc_group(db_school)
+    Payroll.objects.filter(lesson=lesson).update(payment=D('1234.00'), penalty=D('7.00'),
+                                                 is_manual=True)
+    lesson.teacher = db_school['t2']
+    lesson.save()
+
+    stats = recalc_group(db_school)
+
+    assert stats['updated'] == 1
+    row = Payroll.objects.get(lesson=lesson)
+    assert row.teacher_id == db_school['t2'].id
+    assert row.is_manual is False
+    assert (row.payment, row.penalty) == (row.calc_payment, row.calc_penalty)
+    assert row.payment == D('600.00')
+    assert recalc_group(db_school)['changed'] == 0
+
+
+def test_orphan_rebind_to_other_teacher_drops_manual(db_school):
+    """Сирота с ручной суммой привязывается к маркеру другого преподавателя —
+    сумма прежнего получателя не переносится, начисление расчётное."""
+    from apps.payroll.models import CancellationPay
+    db_version(datetime.date(2026, 6, 1))
+    day = datetime.date(2026, 6, 10)
+    orphan = db_orphan(db_school, day, payment='777')
+    CancellationPay.objects.filter(id=orphan.id).update(is_manual=True)
+    marker = db_marker(db_school, day, teacher=db_school['t2'])
+
+    recalc_group(db_school)
+
+    orphan.refresh_from_db()
+    assert orphan.planned_lesson_id == marker.id
+    assert orphan.teacher_id == db_school['t2'].id
+    assert (orphan.payment, orphan.calc_payment, orphan.is_manual) == (
+        D('300.00'), D('300.00'), False)
+
+
 def test_recalculate_filters_combine(db_school):
     from apps.payroll.models import Payroll
     db_version(datetime.date(2026, 6, 1))
@@ -193,11 +235,11 @@ def test_recalculate_orphan_rebinds_to_new_marker_keeping_manual(db_school):
     pay.save()
 
     # Пересборка плана: маркер удалён (SET NULL), создан новый с тем же ключом
-    # и уже другим преподавателем.
+    # и тем же преподавателем — та же отмена, ручная правка сохраняется.
     old_marker.delete()
     pay.refresh_from_db()
     assert pay.planned_lesson_id is None
-    new_marker = db_marker(db_school, day, teacher=db_school['t2'])
+    new_marker = db_marker(db_school, day)
 
     stats = recalc_group(db_school)
     assert stats['created'] == 0
@@ -205,7 +247,7 @@ def test_recalculate_orphan_rebinds_to_new_marker_keeping_manual(db_school):
     assert stats['updated'] == 1
     pay.refresh_from_db()
     assert pay.planned_lesson_id == new_marker.id
-    assert pay.teacher_id == db_school['t2'].id
+    assert pay.teacher_id == db_school['t1'].id
     assert (pay.payment, pay.is_manual) == (D('777.00'), True)
     assert pay.calc_payment == D('300.00')
     assert CancellationPay.objects.filter(group=db_school['group']).count() == 1
@@ -416,8 +458,8 @@ def test_recalculate_query_count_does_not_grow(db_school, django_assert_max_num_
 
 def test_substitute_on_cancelled_marker_moves_pay(db_school):
     # Замену поставили на уже отменённое занятие: начисление уходит заменяющему
-    # (эффективный преподаватель), ручная сумма остаётся, расчётная — по его
-    # персональной ставке.
+    # (эффективный преподаватель) по его персональной ставке. Ручная сумма
+    # исходного преподавателя к заменяющему не переходит — правка снимается.
     from apps.payroll.models import CancellationPay, PersonalRate
     db_version(datetime.date(2026, 6, 1))
     PersonalRate.objects.create(teacher=db_school['t2'], group=db_school['group'],
@@ -432,7 +474,7 @@ def test_substitute_on_cancelled_marker_moves_pay(db_school):
     assert stats['updated'] == 1
     pay = CancellationPay.objects.get(planned_lesson=marker)
     assert pay.teacher_id == db_school['t2'].id
-    assert (pay.payment, pay.is_manual, pay.calc_payment) == (D('111.00'), True, D('500.00'))
+    assert (pay.payment, pay.is_manual, pay.calc_payment) == (D('500.00'), False, D('500.00'))
 
 
 def test_rule_note_has_no_personal_data(db_school):

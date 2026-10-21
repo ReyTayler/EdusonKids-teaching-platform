@@ -93,7 +93,9 @@ def test_cancel_locks_plan_before_money_and_never_lessons(plan_group):
     assert not [sql for sql in locked if '"lessons"' in sql or 'FROM "payroll"' in sql]
 
 
-def test_substitute_on_cancelled_marker_moves_pay_keeping_manual(plan_group):
+def test_substitute_on_cancelled_marker_moves_pay_dropping_manual(plan_group):
+    """Замена на отменённом занятии: начисление уходит заменяющему, а ручная сумма
+    исходного преподавателя к нему не переходит — правка снимается, сумма расчётная."""
     from apps.payroll.models import CancellationPay
     from apps.scheduling import repository
     gid, tid = plan_group
@@ -106,7 +108,7 @@ def test_substitute_on_cancelled_marker_moves_pay_keeping_manual(plan_group):
 
     pay = CancellationPay.objects.get(planned_lesson=marker)
     assert pay.teacher_id == substitute.id
-    assert (pay.payment, pay.is_manual, pay.calc_payment) == (D('400.00'), True, D('250.00'))
+    assert (pay.payment, pay.is_manual, pay.calc_payment) == (D('250.00'), False, D('250.00'))
 
 
 def test_reschedule_marker_moves_pay_date(plan_group):

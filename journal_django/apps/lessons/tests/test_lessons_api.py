@@ -13,6 +13,8 @@ E2E тесты для /api/admin/lessons (DRF APIClient, реальная БД m
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -609,3 +611,34 @@ def test_post_not_blocked_by_unfilled_plan(
     finally:
         with connection.cursor() as cur:
             cur.execute('DELETE FROM planned_lessons WHERE group_id = %s', [group_fixture])
+
+
+def test_patch_teacher_change_drops_manual_payroll(group_fixture, teacher_id_fixture,
+                                                    payroll_rates):
+    """PATCH со сменой преподавателя: ручная сумма прежнего получателя новому не
+    переходит — начисление уходит новому преподавателю по расчёту, is_manual снят."""
+    from django.utils import timezone
+
+    from apps.lessons import repository as lessons_repository
+    from apps.payroll.models import Payroll
+    from apps.teachers.models import Teacher
+
+    lesson_id = _create_lesson(group_fixture, teacher_id_fixture)
+    other = Teacher.objects.create(name='__les_patch_other__', created_at=timezone.now())
+    try:
+        lessons_repository.recalculate_payroll(lesson_id)
+        Payroll.objects.filter(lesson_id=lesson_id).update(
+            payment=Decimal('1234.00'), penalty=Decimal('7.00'), is_manual=True)
+
+        resp = _client('admin').patch(
+            f'{BASE_URL}/{lesson_id}', {'teacher_id': other.id}, format='json')
+
+        assert resp.status_code == 200
+        row = Payroll.objects.get(lesson_id=lesson_id)
+        assert row.teacher_id == other.id
+        assert row.is_manual is False
+        assert (row.payment, row.penalty) == (row.calc_payment, row.calc_penalty)
+        assert row.payment == Decimal('500.00')
+    finally:
+        _delete_lesson(lesson_id)
+        other.delete()

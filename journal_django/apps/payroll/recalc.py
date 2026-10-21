@@ -49,9 +49,20 @@ _CANCELLED = 'cancelled'
 _BATCH = 500
 
 _PAYROLL_FIELDS = ['teacher_id', 'total_students', 'present_count', 'payment', 'penalty',
-                   'calc_payment', 'calc_penalty', 'rule_note']
+                   'calc_payment', 'calc_penalty', 'rule_note', 'is_manual']
 _CANCEL_FIELDS = ['planned_lesson_id', 'teacher_id', 'group_id', 'lesson_date',
-                  'scheduled_time', 'payment', 'calc_payment', 'rule_note']
+                  'scheduled_time', 'payment', 'calc_payment', 'rule_note', 'is_manual']
+
+
+def _keeps_manual(current, teacher_id: int) -> bool:
+    """Сохраняется ли ручная правка начисления при пересчёте.
+
+    Ручная сумма — договорённость с конкретным человеком. Сменился получатель
+    (преподаватель урока поправлен PATCH-ем, на отменённое занятие поставили
+    замену, сирота привязалась к маркеру другого преподавателя) — сумма прежнего
+    к новому не переходит: правка снимается, начисление становится расчётным.
+    То же правило, что у мягкого обновления импорта (apps/eduson_import/sync.py)."""
+    return current.is_manual and current.teacher_id == teacher_id
 
 
 def load_rate_cards() -> list[RateCard]:
@@ -176,8 +187,10 @@ def _recalc_lessons(rows, cards, personal_by_group) -> dict:
             to_create.append(Payroll(lesson_id=row['id'], payment=res.payment,
                                      penalty=res.penalty, is_manual=False, **values))
             continue
-        if not current.is_manual:
-            # Ручная правка (§1.9) хранит свои payment/penalty; остальным — расчёт.
+        # Ручная правка (§1.9) хранит свои payment/penalty; остальным — расчёт.
+        # Проверка до записи teacher_id в current: сравниваем прежнего получателя.
+        values['is_manual'] = _keeps_manual(current, lesson.teacher_id)
+        if not values['is_manual']:
             values['payment'] = res.payment
             values['penalty'] = res.penalty
         if _diff(current, values):
@@ -217,7 +230,8 @@ def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
             orphans.setdefault((p.group_id, p.lesson_date, p.scheduled_time), []).append(p)
 
     # Начисление каждого маркера: своё; иначе сирота с тем же ключом — привязка
-    # сохраняет её ручную правку (§2): маркер пересоздан, а отмена та же.
+    # сохраняет её ручную правку (§2): маркер пересоздан, а отмена та же. Если у
+    # нового маркера другой преподаватель, правку снимет _keeps_manual.
     current_by_marker: dict[int, object] = {}
     unbound: list[dict] = []
     scope_keys = set()
@@ -255,7 +269,8 @@ def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
         if current is None:
             to_create.append(CancellationPay(payment=res.payment, is_manual=False, **values))
             continue
-        if not current.is_manual:
+        values['is_manual'] = _keeps_manual(current, marker.teacher_id)
+        if not values['is_manual']:
             values['payment'] = res.payment
         if _diff(current, values):
             to_update.append(current)

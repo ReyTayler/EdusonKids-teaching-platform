@@ -451,6 +451,25 @@ def test_personal_rates_list_rejects_garbage(motivation_admin_client, db_school,
 # Начисления: сброс правки, отмены, объединённый список, сводка
 # ---------------------------------------------------------------------------
 
+@pytest.mark.parametrize('field', ['total_students', 'present_count'])
+def test_patch_payroll_rejects_headcount(motivation_admin_client, db_school, field):
+    """Число учеников и присутствующих выводит пересчёт из посещаемости — правка
+    через PATCH была бы молча затёрта, поэтому поле отклоняется, а не глотается."""
+    db_version(d(2031, 1, 1))
+    lesson = db_lesson(db_school, d(2031, 3, 2), 1)
+    recalc_group(db_school)
+    row = Payroll.objects.get(lesson=lesson)
+
+    resp = motivation_admin_client.patch(f'{BASE}/{row.id}', {field: 9, 'payment': 999},
+                                         format='json')
+
+    assert resp.status_code == 400
+    assert field in resp.json()['details']
+    row.refresh_from_db()
+    assert (row.total_students, row.present_count) == (3, 2)
+    assert (row.payment, row.is_manual) == (D('600.00'), False)
+
+
 def test_reset_manual_lesson_payroll(motivation_admin_client, db_school):
     db_version(d(2031, 1, 1))
     lesson = db_lesson(db_school, d(2031, 3, 2), 1)

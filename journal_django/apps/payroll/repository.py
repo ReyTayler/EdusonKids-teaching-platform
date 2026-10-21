@@ -362,11 +362,12 @@ def excluded_headcount(lesson_ids: list[int]) -> dict[int, dict]:
 
 def update_payroll(payroll_id: int, fields: dict) -> Optional[dict]:
     """
-    Частичное обновление payroll (COALESCE-семантика). Возвращает RETURNING * или None.
+    Частичное обновление payroll (COALESCE-семантика). Возвращает строку или None.
 
-    total_students/present_count/payment/penalty — set если значение не None.
-    Правка суммы (payment/penalty) — ручная: ставит is_manual, и пересчёт движка
-    зарплат дальше обновляет у строки только calc_* (спека 2026-10-20, §1.9).
+    payment/penalty — set если значение не None. total_students/present_count
+    сюда не входят: их выводит пересчёт из посещаемости. Правка суммы — ручная:
+    ставит is_manual, и пересчёт движка зарплат дальше обновляет у строки только
+    calc_* (спека 2026-10-20, §1.9), пока не сменится получатель (recalc).
     """
     with transaction.atomic():
         # Лок строки: пересчёт (apps.payroll.recalc) держит тот же FOR UPDATE, так
@@ -378,15 +379,13 @@ def update_payroll(payroll_id: int, fields: dict) -> Optional[dict]:
             return None
 
         changed = []
-        for name in ('total_students', 'present_count', 'payment', 'penalty'):
+        for name in ('payment', 'penalty'):
             if fields.get(name) is not None:
                 setattr(obj, name, fields[name])
                 changed.append(name)
-        if 'payment' in changed or 'penalty' in changed:
-            obj.is_manual = True
-            changed.append('is_manual')
         if changed:
-            obj.save(update_fields=changed)
+            obj.is_manual = True
+            obj.save(update_fields=[*changed, 'is_manual'])
     return dictrow(Payroll.objects.filter(id=payroll_id).values(*_PAYROLL_FIELDS))
 
 

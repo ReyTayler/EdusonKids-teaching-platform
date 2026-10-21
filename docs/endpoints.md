@@ -87,7 +87,7 @@ students/0016). «Статус» — стадия последней сделк�
 |-------|------|------------|
 | GET | `/api/admin/lessons?filter[group_id]=&filter[date_from]=` | Paginated |
 | GET | `/api/admin/lessons/:id` | Полный урок + attendance + payroll |
-| POST | `/api/admin/lessons` | Создать (attendance + payroll) |
+| POST | `/api/admin/lessons` | Создать (attendance; зарплату считает движок; без присутствующих → 400) |
 | PATCH | `/api/admin/lessons/:id` | Дата/тип/url |
 | DELETE | `/api/admin/lessons/:id` | Hard (cascade attendance + payroll) |
 | PATCH | `/api/admin/lessons/:lessonId/attendance/:studentId` | Toggle present |
@@ -98,7 +98,17 @@ students/0016). «Статус» — стадия последней сделк�
 |-------|------|------------|
 | GET | `/api/admin/payroll?filter[date_from]=&filter[date_to]=` | Paginated |
 | GET | `/api/admin/payroll/summary?teacher_id=&date_from=&date_to=` | Агрегация за период |
-| PATCH | `/api/admin/payroll/:id` | Обновить payment/penalty/counts |
+| GET | `/api/admin/payroll?filter[kind]=lesson\|cancellation` | Строки уроков и отмен (`kind` + `id`) |
+| PATCH | `/api/admin/payroll/:id` | Ручная правка payment/penalty урока → `is_manual` |
+| POST | `/api/admin/payroll/:id/reset` | Сбросить ручную правку урока, пересчитать |
+| PATCH | `/api/admin/payroll/cancellations/:id` | Ручная правка суммы за отмену → `is_manual` |
+| POST | `/api/admin/payroll/cancellations/:id/reset` | Сбросить ручную правку отмены |
+| GET/POST | `/api/admin/payroll/rate-versions` | Версии ставок школы (+ ставки направлений), `no_rate` |
+| PATCH/DELETE | `/api/admin/payroll/rate-versions/:id` | Правка/удаление версии → пересчёт периода (`recalculated`) |
+| GET/POST | `/api/admin/payroll/personal-rates` | Персональные ставки (paginated, `?teacher=&group=`) |
+| PATCH/DELETE | `/api/admin/payroll/personal-rates/:id` | Правка/удаление → пересчёт группы (`recalculated`) |
+
+Всё под `/api/admin/payroll` — только superadmin. Правила расчёта — `CLAUDE.md`, раздел «Зарплата преподавателей».
 
 ### Teachers / Directions / Tokens / Memberships
 

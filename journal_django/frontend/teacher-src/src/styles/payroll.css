@@ -115,6 +115,7 @@
   color: var(--text2);
 }
 .pr-badge--substitution,
+.pr-badge--cancellation,
 .pr-badge--reschedule { color: var(--info); background: var(--info-bg); border-color: var(--info-line); }
 .pr-badge--burned     { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
 

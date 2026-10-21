@@ -422,10 +422,22 @@ def payroll_for_month(teacher_id: int, month: str) -> dict:
     Отдаётся ТОЛЬКО суперадмину — раздел «Зарплата» закрыт `IsSuperAdmin`
     (`apps/payroll/views.py`), а карточку преподавателя видит и менеджер.
     Решение о том, звать ли эту функцию, принимает вьюха; здесь только счёт.
-    """
-    from apps.payroll.models import Payroll
 
+    payment — к начислению всего: уроки (Payroll, месяц по дате урока) плюс
+    отмены (CancellationPay, месяц по lesson_date отмены) — тот же итог, что
+    sum_payment в сводке раздела «Зарплата» (apps.payroll.repository.payroll_summary),
+    иначе плитка «Начислено» на карточке разойдётся с ведомостью. penalty —
+    только уроки: у начисления за отмену штрафа нет.
+    """
+    from apps.payroll.models import CancellationPay, Payroll
+
+    money = DecimalField(max_digits=20, decimal_places=2)
     date_from, date_to = month_bounds(month)
+    cancellations = (
+        CancellationPay.objects
+        .filter(teacher_id=teacher_id, lesson_date__gte=date_from, lesson_date__lte=date_to)
+        .aggregate(payment=Coalesce(Sum('payment'), Value(Decimal('0')), output_field=money))
+    )
     row = (
         Payroll.objects
         .filter(
@@ -440,4 +452,4 @@ def payroll_for_month(teacher_id: int, month: str) -> dict:
                              output_field=DecimalField(max_digits=20, decimal_places=2)),
         )
     )
-    return {'payment': row['payment'], 'penalty': row['penalty']}
+    return {'payment': row['payment'] + cancellations['payment'], 'penalty': row['penalty']}

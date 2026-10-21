@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { useLessonFull, useLessonMutations } from '../../hooks/useLessons';
 import { usePayrollMutations } from '../../hooks/usePayroll';
@@ -8,9 +9,31 @@ import { canWriteLessons, canSeeLessonPayroll, type Role } from '../../lib/permi
 import { DetailShell, type DetailField } from '../../components/detail/DetailShell';
 import { EntityLink } from '../../components/EntityLink';
 import { PageLoading } from '../../components/ui/Skeleton';
-import { fmtDate } from '../../lib/format';
+import { fmtDate, fmtRub } from '../../lib/format';
+import { Checkbox } from '../../components/form/Checkbox';
+import { NumberInput } from '../../components/form/NumberInput';
+import { StatusBadge } from '../../components/ui/StatusBadge';
 import { LESSON_TYPE_LABELS } from '../../lib/labels';
 import type { LessonFull } from '../../lib/types';
+
+/** Чекбокс посещаемости с локальным состоянием: при отказе сервера (например,
+ *  «Нельзя снять отметку с последнего пришедшего…») откатывается назад. */
+function AttendanceBox({ present, disabled, onToggle }: {
+  present: boolean; disabled: boolean; onToggle: (v: boolean) => Promise<boolean>;
+}) {
+  const [checked, setChecked] = useState(present);
+  return (
+    <Checkbox
+      checked={checked}
+      disabled={disabled}
+      onChange={(e) => {
+        const v = e.target.checked;
+        setChecked(v);
+        void onToggle(v).then((ok) => { if (!ok) setChecked(!v); });
+      }}
+    />
+  );
+}
 
 export default function LessonDetailPage() {
   const params = useParams();
@@ -54,18 +77,43 @@ export default function LessonDetailPage() {
     } catch (err) { showError(err); }
   };
 
-  const toggleAttendance = async (sid: number, present: boolean) => {
+  // Чекбокс держит своё состояние (AttendanceBox): при отказе сервера (например, «Нельзя снять отметку
+  // с последнего пришедшего…») возвращаем его назад, иначе на экране останется
+  // состояние, которого в базе нет.
+  const toggleAttendance = async (sid: number, present: boolean): Promise<boolean> => {
     try {
       await muts.toggleAttendance.mutateAsync({ lessonId: lesson.id, studentId: sid, present });
       toast('Сохранено', 'ok');
-    } catch (err) { showError(err); }
+      return true;
+    } catch (err) {
+      showError(err);
+      return false;
+    }
   };
 
-  const updatePayrollField = async (field: 'total_students' | 'present_count' | 'payment' | 'penalty', value: number) => {
+  const updatePayrollField = async (field: 'payment' | 'penalty', box: HTMLInputElement, current: string | null) => {
+    if (!lesson.payroll) return;
+    // Без изменений ничего не шлём: PATCH сам по себе помечает начисление «вручную».
+    const raw = box.value;
+    if (raw === '' || Number(raw) === Number(current ?? 0)) return;
+    try {
+      await payrollMuts.update.mutateAsync({
+        target: { kind: 'lesson', id: lesson.payroll.id }, body: { [field]: raw },
+      });
+      toast('Сохранено', 'ok');
+    } catch (err) {
+      // Поле неконтролируемое: возвращаем прежнее значение, иначе на экране
+      // останется сумма, которой в базе нет.
+      box.value = String(current ?? 0);
+      showError(err);
+    }
+  };
+
+  const resetPayroll = async () => {
     if (!lesson.payroll) return;
     try {
-      await payrollMuts.update.mutateAsync({ id: lesson.payroll.id, body: { [field]: value } });
-      toast('Сохранено', 'ok');
+      await payrollMuts.reset.mutateAsync({ kind: 'lesson', id: lesson.payroll.id });
+      toast('Сумма возвращена к расчётной', 'ok');
     } catch (err) { showError(err); }
   };
 
@@ -96,15 +144,11 @@ export default function LessonDetailPage() {
                   <EntityLink section="students" id={a.student_id} text={a.student_name || `#${a.student_id}`} />
                 </div>
                 <div>
-                  <label className="modal__check" style={{ margin: 0 }}>
-                    <input
-                      type="checkbox"
-                      defaultChecked={a.present}
-                      disabled={!canWrite || a.compensated}
-                      onChange={(e) => { void toggleAttendance(a.student_id, e.target.checked); }}
-                    />
-                    <span className="modal__check-box" />
-                  </label>
+                  <AttendanceBox
+                    present={a.present}
+                    disabled={!canWrite || a.compensated}
+                    onToggle={(v) => toggleAttendance(a.student_id, v)}
+                  />
                 </div>
                 <div>
                   {a.compensated && (
@@ -127,28 +171,42 @@ export default function LessonDetailPage() {
           {!lesson.payroll ? (
             <div className="memberships__empty">Зарплата для этого урока не создана</div>
           ) : (
-            <div className="payroll-edit">
-              <div className="field">
-                <label htmlFor="payroll-total-students">Всего учеников</label>
-                <input id="payroll-total-students" type="number" defaultValue={lesson.payroll.total_students}
-                  onBlur={(e) => { void updatePayrollField('total_students', Number(e.target.value)); }} />
+            <>
+              <div className="payroll-edit">
+                <div className="field">
+                  <span className="label">Было на уроке</span>
+                  <div>{lesson.payroll.present_count} из {lesson.payroll.total_students}</div>
+                </div>
+                <div className="field">
+                  <label htmlFor="payroll-payment">Оплата, ₽</label>
+                  <NumberInput id="payroll-payment" step={0.01} min={0}
+                    key={`pay-${lesson.payroll.payment}`} defaultValue={String(lesson.payroll.payment)}
+                    onBlur={(e) => { void updatePayrollField('payment', e.target, lesson.payroll!.payment); }} />
+                </div>
+                <div className="field">
+                  <label htmlFor="payroll-penalty">Штраф, ₽</label>
+                  <NumberInput id="payroll-penalty" step={0.01} min={0}
+                    key={`pen-${lesson.payroll.penalty}`} defaultValue={String(lesson.payroll.penalty)}
+                    onBlur={(e) => { void updatePayrollField('penalty', e.target, lesson.payroll!.penalty); }} />
+                </div>
               </div>
-              <div className="field">
-                <label htmlFor="payroll-present-count">Было на уроке</label>
-                <input id="payroll-present-count" type="number" defaultValue={lesson.payroll.present_count}
-                  onBlur={(e) => { void updatePayrollField('present_count', Number(e.target.value)); }} />
+              <div className="payroll-lesson-note">
+                {lesson.payroll.is_manual && (
+                  <p className="payroll-lesson-note__manual">
+                    <StatusBadge tone="muted">вручную</StatusBadge>
+                    {' '}расчёт системы: {fmtRub(lesson.payroll.calc_payment)}
+                    {lesson.payroll.calc_penalty != null && Number(lesson.payroll.calc_penalty) > 0
+                      ? `, штраф ${fmtRub(lesson.payroll.calc_penalty)}` : ''}
+                    {' '}
+                    <button type="button" className="btn-secondary" disabled={payrollMuts.reset.isPending}
+                      onClick={() => { void resetPayroll(); }}>Сбросить к расчёту</button>
+                  </p>
+                )}
+                <p className="payroll-note-full">
+                  Как посчитано: {lesson.payroll.rule_note || '—'}
+                </p>
               </div>
-              <div className="field">
-                <label htmlFor="payroll-payment">Оплата, ₽</label>
-                <input id="payroll-payment" type="number" step={0.01} defaultValue={String(lesson.payroll.payment)}
-                  onBlur={(e) => { void updatePayrollField('payment', Number(e.target.value)); }} />
-              </div>
-              <div className="field">
-                <label htmlFor="payroll-penalty">Штраф, ₽</label>
-                <input id="payroll-penalty" type="number" step={0.01} defaultValue={String(lesson.payroll.penalty)}
-                  onBlur={(e) => { void updatePayrollField('penalty', Number(e.target.value)); }} />
-              </div>
-            </div>
+            </>
           )}
         </div>
       )}

@@ -118,3 +118,26 @@ def test_list_no_n_plus_1(payroll_fixture, teacher_id_fixture):
         assert resp.status_code == 200
     # COUNT + rows ≤ 4 запросов (нет N+1 по lessons/teachers/groups)
     assert len(ctx.captured_queries) <= 4
+
+
+def test_patch_payroll_money_is_exact_decimal(payroll_fixture):
+    """Сумма приходит строкой с копейками и сохраняется без двоичной погрешности float."""
+    payroll_id, _ = payroll_fixture
+    resp = _client('superadmin').patch(
+        f'{BASE_URL}/{payroll_id}', {'payment': '500.50', 'penalty': '0.10'}, format='json'
+    )
+    assert resp.status_code == 200
+    assert resp.json()['payment'] == '500.50'
+    assert resp.json()['penalty'] == '0.10'
+
+
+@pytest.mark.parametrize('body', [
+    {'payment': '500.505'},   # дробь мельче копейки — 400, а не молчаливое округление
+    {'penalty': '0.001'},
+    {'payment': '-1'},
+    {'payment': 'abc'},
+])
+def test_patch_payroll_rejects_bad_money(payroll_fixture, body):
+    payroll_id, _ = payroll_fixture
+    resp = _client('superadmin').patch(f'{BASE_URL}/{payroll_id}', body, format='json')
+    assert resp.status_code == 400

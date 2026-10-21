@@ -54,3 +54,38 @@
     display: none;
   }
 }
+
+/* ── «Как посчитано» и пометка ручной правки ──
+   Пояснение движка бывает длинным («Персональная ставка (уроки 10–15): +20 % к
+   600 ₽ = 720 ₽»): в таблице обрезаем одной строкой, полный текст — в title,
+   иначе одна строка раздувала бы всю таблицу. */
+.payroll-note {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text3);
+  font-size: var(--fs-sm);
+}
+.payroll-amount { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.payroll-amount__calc { font-size: var(--fs-xs); color: var(--text3); }
+.payroll-note-full {
+  margin: var(--space-2) 0 0;
+  color: var(--text2);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.payroll-sum-row td { background: var(--bg3); font-weight: 600; }
+.payroll-edit-form { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* Пояснение к начислению в карточке урока: сумма уже в полях выше, здесь — «почему». */
+.payroll-lesson-note { margin-top: var(--space-3); }
+.payroll-lesson-note__manual {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  margin: 0; color: var(--text2); font-size: var(--fs-sm);
+}
+
+/* Подпись без поля ввода (read-only значение): <label> без контрола невалиден,
+   поэтому span с теми же параметрами, что у `.field label`. */
+.field .label { font-size: var(--fs-xs); font-weight: 500; color: var(--text2); }

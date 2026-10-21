@@ -46,7 +46,7 @@ export function useRecordExtraLesson() {
     mutationFn: ({ id, body }: {
       id: number;
       body: { record_url?: string; present: boolean };
-    }) => api<{ lesson_id: number; payment: number; penalty: number }>(
+    }) => api<{ lesson_id: number; payment: string; penalty: string }>(
       'POST', `/api/extra-lessons/${id}/record`, body,
     ),
     // retry:0 — авто-повтор запрещён: доп.урок начисляет зарплату и списывает

@@ -2,7 +2,8 @@
 Serializers for payroll.
 
 PayrollUpdateSerializer — вход для PATCH (updatePayrollSchema из shared/schemas.js):
-все поля необязательны, total_students/present_count int≥0, payment/penalty number≥0.
+все поля необязательны, total_students/present_count int≥0, payment/penalty —
+Decimal≥0 с точностью до копеек.
 
 PayrollReadSerializer — справочное представление вывода (views возвращают сырые
 dict из repository, Decimal/date приводит DateSafeJSONRenderer).
@@ -17,16 +18,21 @@ from apps.core.fields import DateStringField
 from apps.payroll import motivation  # тексты ошибок живут в домене
 
 
+def _money_field(**kwargs) -> serializers.DecimalField:
+    # Деньги — DecimalField, не Float: сумма доходит до движка точным Decimal,
+    # а лишние знаки после копеек отклоняются валидацией, а не округляются молча.
+    return serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0'),
+                                     **kwargs)
+
+
 class PayrollUpdateSerializer(serializers.Serializer):
     """Вход для PATCH /api/admin/payroll/:id (updatePayrollSchema, все поля optional)."""
 
-    # Допустимая разница с Express: DRF FloatField/IntegerField коэрсят числовые
-    # строки ("700" → 700), Zod z.number() их отвергает (400). Реальный admin SPA
-    # шлёт JSON-числа, поэтому e2e не страдает (как и в apps/lessons).
     total_students = serializers.IntegerField(min_value=0, required=False)
     present_count = serializers.IntegerField(min_value=0, required=False)
-    payment = serializers.FloatField(min_value=0, required=False)
-    penalty = serializers.FloatField(min_value=0, required=False)
+    # Ручная правка суммы урока — те же правила денег, что у правки отмены.
+    payment = _money_field(required=False)
+    penalty = _money_field(required=False)
 
 
 class PayrollReadSerializer(serializers.Serializer):
@@ -49,13 +55,6 @@ class PayrollReadSerializer(serializers.Serializer):
 # ---------------------------------------------------------------------------
 # «Настройки → Мотивация» (спека 2026-10-20-eduson-motivation-payroll-design, §4)
 # ---------------------------------------------------------------------------
-
-def _money_field(**kwargs) -> serializers.DecimalField:
-    # Деньги — DecimalField, не Float: сумма доходит до движка точным Decimal,
-    # а лишние знаки после копеек отклоняются валидацией, а не округляются молча.
-    return serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0'),
-                                     **kwargs)
-
 
 class RateDirectionInputSerializer(serializers.Serializer):
     """Ячейки направления в версии. null (или отсутствие ключа) — «как по умолчанию»."""

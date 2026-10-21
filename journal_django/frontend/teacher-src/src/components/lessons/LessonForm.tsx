@@ -10,7 +10,8 @@ import { useToast } from '@shared/components/ui/Toast';
 import { useSubmitLesson } from '../../hooks/useSubmitLesson';
 import { useGroupDirections } from '../../hooks/useGroupDirections';
 import { isoDate, todayMsk } from '../../lib/dates';
-import { calcPayment, fmtNum, getCourseLimit, isHalfLesson, lessonNumber, rub } from '../../lib/teacher-calc';
+import { fmtNum, getCourseLimit, isHalfLesson, lessonNumber } from '../../lib/teacher-calc';
+import { formatMoney } from '../../lib/money';
 import type { GroupData, SubmitPayload, SubmitResult } from '../../lib/types';
 import { ScaleField, YesNoField, FeedbackQuestion } from './FeedbackFields';
 
@@ -82,9 +83,10 @@ function blockedReason(
 }
 
 /**
- * Форма записи проведённого урока (submitLesson). Клиентские расчёты (выплата,
- * номер урока, лимит курса) — только превью; сервер авторитетен и может
- * посчитать иначе (штраф, округления). См. teacher-calc.ts.
+ * Форма записи проведённого урока (submitLesson). Клиентские расчёты (номер
+ * урока, лимит курса) — только превью; сервер авторитетен. Выплату форма не
+ * считает вовсе: её определяет движок зарплат на сервере (ставки школы,
+ * персональные ставки), второй расчёт на клиенте показывал бы неверные суммы.
  *
  * isSubstitution — ТОЛЬКО отображение (подзаголовок «Замена»): сервер выводит
  * замену сам из planned_lessons (назначение «Сменить преподавателя» в admin),
@@ -213,17 +215,14 @@ export function LessonForm({
 
   // Переведённого ученика, ждущего, пока группа догонит его прогресс, на этом уроке
   // как будто нет: record_lesson выкидывает его из attendance ДО подсчёта
-  // total_students/present_count/payroll. Значит и превью выплаты обязано считать по
-  // ТОМУ ЖЕ составу, иначе преподаватель видит не ту сумму, что реально получит:
-  // ростер 3 чел., один переведён → сервер платит как за малую группу (2 из 2 = 500₽),
-  // а превью по ростеру из 3 показывало бы 200×2 = 400₽.
+  // total_students/present_count. Значит и счётчик «пришли / не пришли» обязан
+  // считать по ТОМУ ЖЕ составу, иначе преподаватель увидит не те цифры, что запишутся.
   // Неоплаченные (reason 'unpaid') из total НЕ вычитаются: сервер оставляет их в
   // total_students (фильтруется только перевод), они лишь не могут быть «пришёл».
-  // Неоплачиваемый пропуск (skip) сервер исключает из зарплаты — вычитаем из total.
+  // Неоплачиваемый пропуск (skip) сервер исключает — вычитаем из total.
   const total = groupData.students.length - lockedStudents.length - skipStudents.length;
   const presentCount = groupData.students.reduce((n, s) => n + (presentOf(s.id) ? 1 : 0), 0);
   const absentCount = total - presentCount;
-  const payment = calcPayment(total, presentCount, isHalf);
   const eligibleStudents = groupData.students.filter((s) => !isBlocked(s));
   const allPresent = eligibleStudents.length > 0 && eligibleStudents.every((s) => present[s.id]);
 
@@ -281,7 +280,8 @@ export function LessonForm({
       // TS не narrow-ит union по boolean-дискриминанту через truthy-проверку.
       onSuccess: (result: SubmitResult) => {
         if (result.success === true) {
-          toast(`Урок записан · ${rub(result.payment)}`, 'ok');
+          // payment приходит строкой ('500.00') — форматируем как деньги, а не как число.
+          toast(`Урок записан · ${formatMoney(result.payment)}`, 'ok');
           onClose();
         } else {
           // Устаревший состав распознаём по коду, не по тексту; данные группы уже
@@ -509,7 +509,7 @@ export function LessonForm({
       <div className="lf-preview">
         <div className="lf-preview-row">
           <span>Пришли {presentCount} / Не пришли {absentCount}</span>
-          <span className="lf-preview-money">Выплата {rub(payment)}</span>
+          <span className="lf-preview-hint">Выплату посчитает система</span>
         </div>
         <div className="lf-preview-num">
           №{fmtNum(next)}{isHalf ? ' (45 минут)' : ''}

@@ -482,7 +482,7 @@ def test_stats_uses_fixed_number_of_queries(django_assert_num_queries, stats_tea
     """
     Число запросов постоянно и НЕ зависит от числа групп и уроков.
 
-    Само значение (11 без зарплаты, +1 с ней) не догма — агрегатов может
+    Само значение (11 без зарплаты, +2 с ней) не догма — агрегатов может
     стать больше. Догма — постоянство: тест ниже гоняет ту же выборку на
     3 и на 6 группах и требует одинакового числа запросов. Именно это ловит
     N+1 (дозапрос направления/слотов на каждую группу), а не конкретная цифра.
@@ -500,8 +500,8 @@ def test_stats_uses_fixed_number_of_queries(django_assert_num_queries, stats_tea
     with django_assert_num_queries(11):
         services.get_teacher_stats(stats_teacher, '2026-07')
 
-    # Зарплата — ровно один дополнительный запрос.
-    with django_assert_num_queries(12):
+    # Зарплата — ровно два дополнительных запроса: агрегат уроков и агрегат отмен.
+    with django_assert_num_queries(13):
         services.get_teacher_stats(stats_teacher, '2026-07', with_payroll=True)
 
 
@@ -647,5 +647,48 @@ def test_payroll_for_month_sums_payment_and_penalty(
         # Августовский урок в июльскую сумму не попадает.
         assert result == {'payment': Decimal('600'), 'penalty': Decimal('40')}
     finally:
+        with connection.cursor() as cur:
+            cur.execute('DELETE FROM payroll WHERE teacher_id = %s', [stats_teacher])
+
+
+@pytest.mark.django_db
+def test_payroll_for_month_includes_cancellation_pay(
+        stats_teacher, make_group, make_lesson):
+    """
+    «Начислено» = уроки + отмены (как sum_payment в /api/admin/payroll/summary).
+    Отмена относится к месяцу по своей lesson_date; штраф у отмены не бывает.
+    """
+    from datetime import date, time
+
+    from django.db import connection
+
+    from apps.payroll.models import CancellationPay
+
+    group = make_group('__stats_g_cancel__')
+    lesson = make_lesson(group, '2026-07-06')
+    with connection.cursor() as cur:
+        cur.execute(
+            'INSERT INTO payroll (lesson_id, teacher_id, total_students, present_count, '
+            'payment, penalty) VALUES (%s, %s, 3, 3, 600.10, 40)',
+            [lesson, stats_teacher],
+        )
+    CancellationPay.objects.bulk_create([
+        CancellationPay(teacher_id=stats_teacher, group_id=group,
+                        lesson_date=date(2026, 7, 13), scheduled_time=time(10, 0),
+                        payment=Decimal('300.25')),
+        # Августовская отмена в июль не попадает.
+        CancellationPay(teacher_id=stats_teacher, group_id=group,
+                        lesson_date=date(2026, 8, 3), scheduled_time=time(10, 0),
+                        payment=Decimal('999')),
+    ])
+    try:
+        result = stats.payroll_for_month(stats_teacher, '2026-07')
+        assert result == {'payment': Decimal('900.35'), 'penalty': Decimal('40')}
+
+        # Месяц только с отменами — тоже не ноль.
+        only_cancel = stats.payroll_for_month(stats_teacher, '2026-08')
+        assert only_cancel == {'payment': Decimal('999'), 'penalty': Decimal('0')}
+    finally:
+        CancellationPay.objects.filter(teacher_id=stats_teacher).delete()
         with connection.cursor() as cur:
             cur.execute('DELETE FROM payroll WHERE teacher_id = %s', [stats_teacher])

@@ -1,26 +1,9 @@
 /**
- * Клиентская бизнес-логика записи урока — порт из старого `frontend/teacher/app.js`.
- * ВАЖНО: это только ПРЕВЬЮ для UI. Сервер — авторитетный источник выплаты/номера
- * урока/штрафа (см. ответ /api/submitLesson). Здесь ничего не должно расходиться
- * с бэкендом настолько, чтобы вводить преподавателя в заблуждение, но окончательный
- * расчёт всегда идёт на сервере.
+ * Клиентская логика записи урока — только ПРЕВЬЮ для UI (номер урока, лимит курса).
+ * Сервер — авторитетный источник номера урока и зарплаты (см. ответ /api/submitLesson).
+ * Выплату здесь НЕ считаем: её определяет движок зарплат на сервере.
  */
 import type { TStudent } from './types';
-
-export const RATES = {
-  halfLesson: 250,
-  smallFull: 500,
-  smallPartial: 300,
-  perStudent: 200,
-} as const;
-
-/** Выплата за урок (превью). total — размер группы, present — сколько пришло. */
-export function calcPayment(total: number, present: number, isHalf: boolean): number {
-  if (present === 0) return 0;
-  if (isHalf) return RATES.halfLesson * present;
-  if (total <= 2) return present === total ? RATES.smallFull : RATES.smallPartial;
-  return RATES.perStudent * present;
-}
 
 /**
  * «45 минут» в названии группы → полурок (0.5 вместо 1 в счётчике уроков).
@@ -64,9 +47,4 @@ export function getCourseLimit(groupName: string): number | null {
 /** Целое → без дробной части, иначе один знак после запятой (совпадает с app.js). */
 export function fmtNum(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-
-/** Рубли с разделителями разрядов ru-локали. */
-export function rub(n: number): string {
-  return n.toLocaleString('ru') + ' ₽';
 }

@@ -192,7 +192,7 @@ export interface LessonAttendance {
 
 export interface LessonFull extends Lesson {
   attendance: LessonAttendance[];
-  payroll: PayrollEntry | null;
+  payroll: LessonPayroll | null;
   // Ученики, чей пропуск на этом уроке закрыт доп.уроком/сгоранием. Отдельный
   // список, а не только флаг на строке посещаемости: у ученика, добавленного в
   // группу ПОСЛЕ проведения урока, строки нет вовсе, а компенсация есть — и
@@ -235,27 +235,57 @@ export interface ExtraLessonCreateResult {
 }
 
 // ===== Payroll =====
+// Зарплату считает сервер (движок мотивации). Деньги приходят строками —
+// точный Decimal, арифметику над ними на фронте не делаем.
+export type PayrollKind = 'lesson' | 'cancellation';
+
+/** Строка общего списка «Зарплата»: урок или оплаченная отмена. */
 export interface PayrollEntry {
+  kind: PayrollKind;
+  /** Уникален только вместе с kind: у уроков и отмен разные таблицы. */
   id: ID;
-  lesson_id: ID;
+  lesson_id: ID | null;
   teacher_id: ID;
+  total_students: number | null;
+  present_count: number | null;
+  payment: string;
+  penalty: string;
+  lesson_date: string;
+  scheduled_time: string | null;
+  lesson_number: string | null;
+  group_id: ID;
+  group_name: string;
+  teacher_name: string;
+  is_manual: boolean;
+  calc_payment: string;
+  calc_penalty: string | null;
+  rule_note: string;
+}
+
+/** Начисление за урок в карточке урока (GET /api/admin/lessons/<id>). */
+export interface LessonPayroll {
+  id: ID;
   total_students: number;
   present_count: number;
-  payment: string | number;  // numeric(10,2)
-  penalty: string | number;
-  // joined-only:
-  lesson_date?: string;
-  group_name?: string;
-  lesson_number?: number;
-  teacher_name?: string;
+  payment: string;
+  penalty: string;
+  rule_note: string;
+  is_manual: boolean;
+  calc_payment: string;
+  calc_penalty: string | null;
 }
 
 export interface PayrollSummaryRow {
   teacher_id: ID;
   teacher_name: string;
-  lessons_count: number;
-  sum_payment: string | number;
-  sum_penalty: string | number;
+  /** Счётчики приходят строками (bigint → text). */
+  lessons_count: string;
+  cancellations_count: string;
+  sum_lessons_payment: string;
+  sum_cancellations_payment: string;
+  /** Уроки + отмены. */
+  sum_payment: string;
+  sum_penalty: string;
 }
 
 // ===== Archive (sidebar shape) =====

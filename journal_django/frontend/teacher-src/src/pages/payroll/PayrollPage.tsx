@@ -8,6 +8,7 @@ import { resolveDirectionColor } from '../../lib/subjects';
 import type { PayrollEntry } from '../../lib/types';
 
 const PLURAL_LESSONS = ['урок', 'урока', 'уроков'];
+const PLURAL_CANCELLATIONS = ['отмена', 'отмены', 'отмен'];
 const PLURAL_PRESENCES = ['присутствие', 'присутствия', 'присутствий'];
 
 function plural(count: number, forms: string[]): string {
@@ -22,6 +23,8 @@ function plural(count: number, forms: string[]): string {
 function PayrollRow({ entry }: { entry: PayrollEntry }) {
   const kindLabel = LESSON_KIND_LABEL[entry.kind];
   const hasPenalty = isPositive(entry.penalty);
+  const isCancellation = entry.kind === 'cancellation';
+  const time = entry.time ? entry.time.slice(0, 5) : null;
 
   return (
     <div
@@ -30,7 +33,9 @@ function PayrollRow({ entry }: { entry: PayrollEntry }) {
     >
       <div className="pr-date">
         <span className="pr-date-day">{dayMonthOfIso(entry.date)}</span>
-        <span className="pr-date-dow">{weekdayShortOfIso(entry.date)}</span>
+        <span className="pr-date-dow">
+          {weekdayShortOfIso(entry.date)}{time ? ` · ${time}` : ''}
+        </span>
       </div>
 
       <div className="pr-main">
@@ -42,27 +47,36 @@ function PayrollRow({ entry }: { entry: PayrollEntry }) {
           )}
         </div>
 
+        {/* Пояснение сервера — единственная расшифровка суммы: ставку фронт не
+            выводит сам. У отмены состава урока нет — «пришли из» не показываем. */}
         <div className="pr-formula">
-          <span className="pr-attendance">
-            пришли {entry.presentCount} из {entry.totalStudents}
-          </span>
-          <span className="pr-sep">·</span>
-          <span className="pr-rule" title={entry.rule.note}>{entry.rule.text}</span>
+          {!isCancellation && (
+            <>
+              <span className="pr-attendance">
+                пришли {entry.presentCount} из {entry.totalStudents}
+              </span>
+              <span className="pr-sep">·</span>
+            </>
+          )}
+          <span className="pr-rule" title={entry.ruleNote}>{entry.ruleNote || formatMoney(entry.payment)}</span>
         </div>
 
         {entry.excludedNote && <div className="pr-note">{entry.excludedNote}</div>}
         {hasPenalty && (
           <div className="pr-penalty">
-            {formatDeduction(entry.penalty)} · {entry.penaltyNote}
+            {formatDeduction(entry.penalty)}{entry.penaltyNote ? ` · ${entry.penaltyNote}` : ''}
           </div>
         )}
-        {entry.adjusted && <div className="pr-note">{entry.rule.note}</div>}
+        {entry.isManual && <div className="pr-note">Сумма изменена администратором</div>}
       </div>
 
       <div className="pr-amount">
         <span className="pr-net">{formatMoney(entry.net)}</span>
         {hasPenalty && (
           <span className="pr-gross">начислено {formatMoney(entry.payment)}</span>
+        )}
+        {entry.isManual && (
+          <span className="pr-gross">по расчёту {formatMoney(entry.calcPayment)}</span>
         )}
       </div>
     </div>
@@ -113,6 +127,12 @@ export default function PayrollPage() {
               </div>
               <div className="pr-summary-count">
                 {totals?.lessons ?? 0} {plural(totals?.lessons ?? 0, PLURAL_LESSONS)}
+                {(totals?.cancellations ?? 0) > 0 && (
+                  <>
+                    <span className="pr-sep">·</span>
+                    {totals.cancellations} {plural(totals.cancellations, PLURAL_CANCELLATIONS)}
+                  </>
+                )}
                 <span className="pr-sep">·</span>
                 {totals?.presences ?? 0} {plural(totals?.presences ?? 0, PLURAL_PRESENCES)}
               </div>
@@ -120,11 +140,11 @@ export default function PayrollPage() {
           </div>
 
           {data && data.rows.length === 0 ? (
-            <div className="cal-empty">В этом месяце проведённых уроков ещё нет.</div>
+            <div className="cal-empty">В этом месяце уроков и оплаченных отмен ещё нет.</div>
           ) : (
             <div className="t-panel">
               {data?.rows.map((entry) => (
-                <PayrollRow key={entry.lessonId} entry={entry} />
+                <PayrollRow key={entry.lessonId ?? `c${entry.cancellationId}`} entry={entry} />
               ))}
             </div>
           )}

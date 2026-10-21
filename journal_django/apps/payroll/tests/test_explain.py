@@ -20,20 +20,27 @@ def test_no_exclusions_returns_none():
 
 def test_single_free_student():
     note = explain_excluded(free=1, skip=0)
-    assert note == '1 ученик не учтён в оплате: бесплатное занятие'
+    assert note == '1 ученик не учтён в счёте «пришли из»: бесплатное занятие'
 
 
 def test_two_free_students_plural():
     note = explain_excluded(free=2, skip=0)
-    assert note == '2 ученика не учтены в оплате: бесплатное занятие'
+    assert note == '2 ученика не учтены в счёте «пришли из»: бесплатное занятие'
 
 
 def test_five_skipped_students_plural():
     note = explain_excluded(free=0, skip=5)
-    assert note == '5 учеников не учтены в оплате: неоплачиваемый пропуск'
+    assert note == '5 учеников не учтены в счёте «пришли из»: неоплачиваемый пропуск'
 
 
 def test_both_reasons_are_listed_separately():
     note = explain_excluded(free=1, skip=2)
     assert 'бесплатное занятие — 1' in note
     assert 'неоплачиваемый пропуск — 2' in note
+
+
+def test_note_speaks_of_headcount_not_money():
+    """Сумма за урок — фикс; подпись не должна обещать, что ученик «не учтён в оплате»."""
+    for note in (explain_excluded(free=1, skip=0), explain_excluded(free=1, skip=2)):
+        assert 'в оплате' not in note
+        assert 'в счёте «пришли из»' in note

@@ -1,4 +1,4 @@
-import type { CancelMode, LessonType, PenaltyMode, PersonalRateKind, RegistrySegment, RegistryStatus, Role, StudentLessonKind } from './types';
+import type { CancelMode, LessonType, PayrollKind, PenaltyMode, PersonalRateKind, RegistrySegment, RegistryStatus, Role, StudentLessonKind } from './types';
 
 // Статуса ученика больше нет (спека 2026-07-25): его «статус» — стадия последней
 // сделки продления, подписи стадий приходят с бэка (useRenewalStages).
@@ -70,6 +70,19 @@ export const LESSON_TYPE_LABELS: Record<LessonType, string> = {
 export const LESSON_TYPE_OPTIONS: { value: LessonType; label: string }[] =
   (Object.entries(LESSON_TYPE_LABELS) as [LessonType, string][])
     .map(([value, label]) => ({ value, label }));
+
+// ===== Вид строки в «Зарплате» =====
+// Оплачиваются не только уроки, но и отменённые занятия — у них свои эндпоинты,
+// поэтому вид строки различаем явно.
+export const PAYROLL_KIND_LABELS: Record<PayrollKind, string> = {
+  lesson:       'Урок',
+  cancellation: 'Отмена',
+};
+
+export const PAYROLL_KIND_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'lesson',       label: 'Уроки' },
+  { value: 'cancellation', label: 'Отмены' },
+];
 
 // ===== Тип строки во вкладке «Уроки» карточки ученика =====
 // Отдельный набор, а не LESSON_TYPE_LABELS: тот описывает сырой lessons.lesson_type

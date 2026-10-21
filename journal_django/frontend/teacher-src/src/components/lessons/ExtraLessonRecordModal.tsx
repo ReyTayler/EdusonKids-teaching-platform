@@ -3,6 +3,7 @@ import { Modal } from '../ui/Modal';
 import { ApiError, EXTRA_LESSON_ALREADY_RECORDED, REQUEST_TIMEOUT } from '@shared/lib/api';
 import { useToast } from '@shared/components/ui/Toast';
 import { Checkbox } from '@shared/components/form/Checkbox';
+import { formatMoney } from '../../lib/money';
 import { TextInput } from '@shared/components/form/TextInput';
 import { useExtraLesson, useRecordExtraLesson } from '../../hooks/useExtraLesson';
 
@@ -49,7 +50,7 @@ export function ExtraLessonRecordModal({ assignmentId, onClose }: { assignmentId
       { id: assignmentId, body: { record_url: recordUrl.trim() || undefined, present } },
       {
         onSuccess: (result) => {
-          toast(`Доп.урок записан · ${result.payment} ₽`, 'ok');
+          toast(`Доп.урок записан · ${formatMoney(result.payment)}`, 'ok');
           onClose();
         },
         onError: (err) => {

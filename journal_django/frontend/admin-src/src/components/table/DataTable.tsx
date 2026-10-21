@@ -42,6 +42,9 @@ interface Props<T> {
    *  (напр. `.row--danger` на «Ждёт решения»). Возвращать undefined там, где
    *  подсветки нет: пустая строка добавила бы className="" на каждый <tr>. */
   rowClassName?: (row: T) => string | undefined;
+  /** Стабильный ключ строки. Без него ключом служит индекс — для списков, где id
+   *  уникален только вместе с типом строки (зарплата: урок и отмена), нужен свой. */
+  rowKey?: (row: T) => string | number;
   /** Действия в тулбаре фильтров. Основные действия страницы — в PageHeader. */
   headerActions?: ReactNode;
   /** Содержимое липкой колонки действий у правого края строки (кнопка
@@ -68,7 +71,7 @@ interface Props<T> {
  * они делали её двухэтажной, требовали sticky-привязки к магической высоте
  * (`top: 37px`) и сжимали поля ввода до ширины колонки.
  */
-export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, headerActions, rowAction, roomy, serverPagination, isLoading }: Props<T>) {
+export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, rowKey, headerActions, rowAction, roomy, serverPagination, isLoading }: Props<T>) {
   // Колонка действий не входит в `columns`, но занимает ячейку в каждой строке —
   // пустое состояние обязано растянуться и на неё, иначе «Ничего не найдено»
   // окажется прижатым влево, а справа повиснет пустая липкая ячейка.
@@ -168,7 +171,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, h
                   </tr>
                 ) : data.map((row, i) => (
                   <tr
-                    key={i}
+                    key={rowKey ? rowKey(row) : i}
                     className={rowClassName?.(row)}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                     style={rowStyle}
@@ -229,7 +232,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, h
               </tr>
             ) : filtered.map((row, i) => (
               <tr
-                key={i}
+                key={rowKey ? rowKey(row) : i}
                 className={rowClassName?.(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 style={rowStyle}

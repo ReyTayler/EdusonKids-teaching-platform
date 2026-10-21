@@ -298,13 +298,13 @@ def test_excluded_students_are_explained(client, make_lesson, student_fixture):
 
     row = client.get(f'{URL}?month=2026-07').json()['rows'][0]
 
-    assert row['excludedNote'] == '1 ученик не учтён в оплате: бесплатное занятие'
+    assert row['excludedNote'] == '1 ученик не учтён в счёте «пришли из»: бесплатное занятие'
 
 
 def test_paid_free_student_is_not_explained_as_excluded(client, make_lesson, student_fixture):
     """
     Урок по правилу 2026-09-28: бесплатный ученик оплачен преподавателю
-    (present_count=1) — подписи «не учтён в оплате» быть не должно.
+    (present_count=1) — подписи «не учтён в счёте» быть не должно.
     """
     lesson_id = make_lesson(date='2026-07-03', payment='500.00', total=1, present=1)
     with connection.cursor() as cur:

@@ -7,8 +7,6 @@ import { useGroupsAll } from '../../hooks/useGroups';
 import { useMemberships } from '../../hooks/useMemberships';
 import { useApiError } from '../../hooks/useApiError';
 import { useToast } from '../../components/ui/Toast';
-import { useAuth } from '../../hooks/useAuth';
-import { canSeeLessonPayroll, type Role } from '../../lib/permissions';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/form/Field';
 import { TextInput } from '../../components/form/TextInput';
@@ -16,7 +14,6 @@ import { NumberInput } from '../../components/form/NumberInput';
 import { DateInput } from '../../components/form/DateInput';
 import { SelectInput } from '../../components/form/SelectInput';
 import { Checkbox } from '../../components/form/Checkbox';
-import { calcPayment } from '../../lib/pricing';
 import type { LessonType } from '../../lib/types';
 
 interface Props { onClose: () => void; }
@@ -28,8 +25,6 @@ export default function LessonFormModal({ onClose }: Props) {
   const { data: groups = [] } = useGroupsAll();
   const { toast } = useToast();
   const showError = useApiError();
-  const { me } = useAuth();
-  const canSeePayroll = canSeeLessonPayroll(me?.role as Role);
 
   const [lessonDate, setLessonDate] = useState(new Date().toISOString().slice(0, 10));
   const [groupId, setGroupId] = useState<string>('');
@@ -38,18 +33,11 @@ export default function LessonFormModal({ onClose }: Props) {
   const [lessonType, setLessonType] = useState<LessonType>('regular');
   const [originalTeacherId, setOriginalTeacherId] = useState<string>('');
   const [recordUrl, setRecordUrl] = useState('');
-  const [payment, setPayment] = useState('0');
-  const [penalty, setPenalty] = useState('0');
 
   const { data: members = [] } = useMemberships(groupId ? { group_id: Number(groupId) } : { group_id: 0 });
   const [present, setPresent] = useState<Record<number, boolean>>({});
 
-  const toggle = (sid: number) => setPresent((p) => {
-    const next = { ...p, [sid]: !(sid in p ? p[sid] : true) };
-    const presentCount = members.filter((m) => (m.student_id in next ? next[m.student_id] : true)).length;
-    setPayment(String(calcPayment(members.length, presentCount, false)));
-    return next;
-  });
+  const toggle = (sid: number) => setPresent((p) => ({ ...p, [sid]: !(sid in p ? p[sid] : true) }));
 
   const isPresent = (sid: number) => sid in present ? present[sid] : true;
 
@@ -60,7 +48,6 @@ export default function LessonFormModal({ onClose }: Props) {
       return;
     }
     const attendance = members.map((m) => ({ student_id: m.student_id, present: isPresent(m.student_id) }));
-    const presentCount = attendance.filter((a) => a.present).length;
     try {
       const created = await muts.create.mutateAsync({
         lesson_date: lessonDate,
@@ -74,16 +61,6 @@ export default function LessonFormModal({ onClose }: Props) {
           ? Number(originalTeacherId) : null,
         submitted_by_token: 'admin-imported',
         attendance,
-        ...(canSeePayroll
-          ? {
-              payroll: {
-                total_students: members.length,
-                present_count: presentCount,
-                payment: Number(payment) || 0,
-                penalty: Number(penalty) || 0,
-              },
-            }
-          : {}),
       });
       toast('Урок создан', 'ok');
       onClose();
@@ -159,17 +136,10 @@ export default function LessonFormModal({ onClose }: Props) {
               </div>
             ))}
 
-            {canSeePayroll && (
-              <>
-                <h4 className="memberships__title">Зарплата</h4>
-                <div className="memberships__row">
-                  <div>Оплата ₽</div>
-                  <NumberInput step={0.01} value={payment} onChange={(e) => setPayment(e.target.value)} />
-                  <div>Штраф ₽</div>
-                  <NumberInput step={0.01} value={penalty} onChange={(e) => setPenalty(e.target.value)} />
-                </div>
-              </>
-            )}
+            {/* Сумму не вводим: зарплату считает сервер по ставкам школы. */}
+            <p className="memberships__note">
+              Зарплату посчитает система.
+            </p>
           </>
         )}
       </form>

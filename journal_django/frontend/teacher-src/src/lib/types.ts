@@ -117,7 +117,8 @@ export interface LessonFeedbackPayload {
 }
 
 export type SubmitResult =
-  | { success: true; payment: number; penalty: number; lessonNumber: number }
+  // payment/penalty — строки ('500.00'): точный Decimal, форматировать через lib/money.
+  | { success: true; payment: string; penalty: string; lessonNumber: number }
   // code — машинный код отказа: 'roster_stale' (состав группы изменился), 'ambiguous_name'.
   | { success: false; error: string; code?: 'roster_stale' | 'ambiguous_name' };
 
@@ -256,47 +257,54 @@ export interface CalendarResponse {
  * lib/money.ts, а не Number() + toFixed по месту.
  */
 export type PayrollRuleCode =
-  | 'per_student'
-  | 'small_group_full'
-  | 'small_group_partial'
-  | 'half_lesson'
-  | 'extra_flat'
-  | 'extra_individual'
-  | 'none'
-  | 'adjusted';
+  | 'calc'      // посчитано движком по ставкам школы
+  | 'manual';   // сумму изменил администратор
 
 export interface PayrollRule {
   code: PayrollRuleCode;
-  /** Короткая формула для строки урока: '4 × 200 ₽'. */
+  /** Короткая сумма для строки: '800.00 ₽'. */
   text: string;
-  /** Правило словами: 'группа от 3 человек — 200 ₽ за каждого пришедшего'. */
+  /** Пояснение словами. */
   note: string;
 }
 
 export type PayrollLessonKind =
   | 'regular' | 'substitution' | 'reschedule' | 'extra' | 'burned';
 
+/** Строка зарплаты: урок или оплаченная отмена занятия. */
 export interface PayrollEntry {
-  lessonId: number;
+  /** null у отмены. */
+  lessonId: number | null;
+  /** null у урока. Ключ строки — lessonId ?? 'c' + cancellationId. */
+  cancellationId: number | null;
   date: string;             // 'YYYY-MM-DD'
+  /** 'HH:MM:SS' — только у отмены. */
+  time: string | null;
   group: string;
   direction: string | null;
   directionColor: string | null;
-  lessonNumber: string;
-  kind: PayrollLessonKind;
-  durationMinutes: number;
-  totalStudents: number;
-  presentCount: number;
+  /** null у отмены. */
+  lessonNumber: string | null;
+  kind: PayrollLessonKind | 'cancellation';
+  durationMinutes: number | null;
+  totalStudents: number | null;
+  presentCount: number | null;
   payment: string;          // начислено
   penalty: string;          // удержано
-  net: string;              // к выплате за этот урок
+  net: string;              // к выплате за эту строку
   rule: PayrollRule;
+  /** Как посчитано: «Групповой урок · Python · ставка с 01.06.2026 — 500 ₽». */
+  ruleNote: string;
   /** Почему удержали; null — штрафа нет. */
   penaltyNote: string | null;
-  /** Почему headcount меньше группы (бесплатные/непл. пропуски); null — все учтены. */
+  /** Почему счёт «пришли из» неполный; null — все учтены. */
   excludedNote: string | null;
-  /** Сумму правил администратор — формулой она не объясняется. */
+  /** Дубль isManual: сервер ещё отдаёт, фронт не читает. */
   adjusted: boolean;
+  isManual: boolean;
+  /** Сумма по расчёту — до ручной правки. */
+  calcPayment: string;
+  calcPenalty: string;
 }
 
 export interface MyPayrollResponse {
@@ -304,6 +312,8 @@ export interface MyPayrollResponse {
   monthLabel: string;       // 'Июль 2026'
   totals: {
     lessons: number;
+    /** Оплаченные отмены занятий — отдельным числом. */
+    cancellations: number;
     presences: number;
     payment: string;
     penalty: string;

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { PayrollEntry, PayrollSummaryRow, Paginated } from '../lib/types';
+import type { PayrollEntry, PayrollKind, PayrollSummaryRow, Paginated } from '../lib/types';
 
 interface Filter { teacher_id?: number; date_from?: string; date_to?: string; }
 
@@ -52,16 +52,33 @@ export function usePayrollSummary(filter: Filter = {}) {
   });
 }
 
+/** Правка/сброс суммы. Урок и отмена — РАЗНЫЕ эндпоинты: слать правку отмены на
+ *  /payroll/<id> нельзя, id в этих таблицах пересекаются и изменился бы чужой урок. */
+export interface PayrollTarget { kind: PayrollKind; id: number; }
+
+function payrollUrl(t: PayrollTarget): string {
+  return t.kind === 'cancellation'
+    ? `/api/admin/payroll/cancellations/${t.id}`
+    : `/api/admin/payroll/${t.id}`;
+}
+
 export function usePayrollMutations() {
   const qc = useQueryClient();
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['payroll'] });
+    qc.invalidateQueries({ queryKey: ['lessons'] });
+    // Статистика преподавателя содержит заработок — после правки устаревает.
+    qc.invalidateQueries({ queryKey: ['teacher-stats'] });
+  };
   return {
     update: useMutation({
-      mutationFn: ({ id, body }: { id: number; body: Partial<PayrollEntry> }) =>
-        api<PayrollEntry>('PATCH', `/api/admin/payroll/${id}`, body),
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: ['payroll'] });
-        qc.invalidateQueries({ queryKey: ['lessons'] });
-      },
+      mutationFn: ({ target, body }: { target: PayrollTarget; body: { payment?: number | string; penalty?: number | string } }) =>
+        api<unknown>('PATCH', payrollUrl(target), body),
+      onSuccess: refresh,
+    }),
+    reset: useMutation({
+      mutationFn: (target: PayrollTarget) => api<unknown>('POST', `${payrollUrl(target)}/reset`),
+      onSuccess: refresh,
     }),
   };
 }

@@ -26,6 +26,7 @@ import AccountsPage from './pages/accounts/AccountsPage';
 import ChangelogListPage from './pages/changelog/ChangelogListPage';
 import NotificationsPage from './pages/notifications/NotificationsPage';
 import SyncPage from './pages/sync/SyncPage';
+import SettingsPage from './pages/settings/SettingsPage';
 import RenewalsPage from './pages/renewals/RenewalsPage';
 import TasksPage from './pages/tasks/TasksPage';
 import RenewalStagesSettings from './pages/renewals/RenewalStagesSettings';
@@ -88,6 +89,7 @@ export function App() {
             {/* Уведомления — системный раздел: бэкенд (IsAdminOrSuperAdmin) менеджеру
                 отдаёт 403, поэтому и роут закрыт на admin/superadmin. */}
             <Route path="/admin/notifications" element={<RequireRole roles={['admin','superadmin']}><NotificationsPage /></RequireRole>} />
+            <Route path="/admin/settings" element={<RequireRole roles={['superadmin']}><SettingsPage /></RequireRole>} />
             <Route path="/admin/sync" element={<RequireRole roles={['superadmin']}><SyncPage /></RequireRole>} />
 
             <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />

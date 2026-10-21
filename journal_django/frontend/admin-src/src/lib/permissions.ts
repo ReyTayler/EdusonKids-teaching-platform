@@ -9,6 +9,7 @@ export const canSeeAudit = isSuper;
 export const canSeePayroll = isSuper;
 export const canSeeChangelog = isAdminUp; // журнал изменений — только admin/superadmin (не manager)
 export const canSeeSync = isSuper;
+export const canSeeSettings = isSuper;
 export const canSeeArchive = isSuper;
 // Починка плана группы (/plan/health, /plan/resync) — только суперадмин: бэк
 // сам зажимает это IsSuperAdmin (разбор рассогласований план↔факт — операция

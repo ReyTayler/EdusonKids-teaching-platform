@@ -328,6 +328,7 @@ def personal_rates_queryset(*, teacher_id: Optional[int], group_id: Optional[int
         group_name=F('group__name'),
         direction_id=F('group__direction_id'),
         direction_name=F('group__direction__name'),
+        direction_color=F('group__direction__color'),
         created_by_name=Coalesce(NullIf('created_by__full_name', Value('')),
                                  'created_by__email', output_field=TextField()),
     ).order_by(primary, 'teacher__name', 'group__name',

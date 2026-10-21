@@ -8,6 +8,7 @@ export function useTeachers(includeInactive = false) {
   return useQuery({
     queryKey: [...KEY, { includeInactive }],
     queryFn: () => api<Teacher[]>('GET', `/api/admin/teachers${includeInactive ? '?include_inactive=1' : ''}`),
+    staleTime: 60_000,
   });
 }
 

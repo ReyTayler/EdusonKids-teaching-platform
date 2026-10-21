@@ -17,6 +17,7 @@
 @import './pages/reports.css';
 @import './pages/notifications.css';
 @import './pages/feedback.css';
+@import './pages/settings.css';
 /* Shared презентационный календарь (GroupDetailPage вкладка «Расписание»,
    см. shared/calendar/CalendarView.tsx) — те же классы, что и teacher-src,
    которая импортирует этот же файл через alias '@shared/shared/calendar/*'. */

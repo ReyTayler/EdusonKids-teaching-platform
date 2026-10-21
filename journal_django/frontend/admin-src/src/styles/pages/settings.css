@@ -1,0 +1,52 @@
+/* Настройки → Мотивация. Таблицы — в .table-wrap со своей горизонтальной
+   прокруткой, чтобы узкий экран не растягивал страницу. */
+.settings-tab { display: flex; flex-direction: column; gap: var(--space-8); padding-top: var(--space-4); }
+
+.settings-section { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.settings-section__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+}
+.settings-section__title { margin: 0; font-size: var(--fs-xl); font-weight: 600; color: var(--text); }
+.settings-section__lead { margin: 0; font-size: var(--fs-sm); color: var(--text3); }
+.settings-subtitle {
+  margin: var(--space-4) 0 0;
+  font-size: var(--fs-2xs); font-weight: 500; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text3);
+}
+
+.settings-warn {
+  padding: var(--space-3) var(--space-4);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r);
+  color: var(--warn);
+  font-size: var(--fs-sm);
+}
+
+.settings-table td, .settings-table th { white-space: nowrap; }
+.settings-table .settings-note { white-space: normal; min-width: 160px; }
+.settings-muted { color: var(--text3); }
+
+.settings-summary {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-sm); color: var(--text);
+}
+
+.settings-actions { display: flex; gap: var(--space-2); }
+.settings-block { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.settings-inline { display: flex; align-items: flex-start; gap: var(--space-3); flex-wrap: wrap; }
+.settings-inline > .field { flex: 1 1 140px; min-width: 0; }
+
+/* Поля сумм внутри таблиц модалки: подписи нет (она в шапке столбца). */
+.settings-table .field label:empty,
+.settings-inline .field label:empty { display: none; }
+.settings-table .field input { min-width: 140px; }
+
+.settings-filters__field { width: 220px; max-width: 100%; }
+
+@media (max-width: 640px) {
+  .settings-filters__field { width: 100%; }
+}

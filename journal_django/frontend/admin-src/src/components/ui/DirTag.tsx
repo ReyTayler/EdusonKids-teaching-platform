@@ -2,12 +2,17 @@ import type { CSSProperties } from 'react';
 import { directionColor } from '../../lib/direction-color';
 import type { Direction } from '../../lib/types';
 
-interface Props { name?: string | null; direction?: Direction | null; }
+interface Props {
+  name?: string | null;
+  direction?: Direction | null;
+  /** Готовый цвет (#RRGGBB) из данных, когда целого направления под рукой нет. */
+  color?: string | null;
+}
 
-export function DirTag({ name, direction }: Props) {
+export function DirTag({ name, direction, color: given }: Props) {
   const label = direction?.name || name || '';
   if (!label) return null;
-  const color = directionColor(direction || label);
+  const color = given ? directionColor(given) : directionColor(direction || label);
   // Цвет направления — из данных (его задаёт администратор), поэтому приходит
   // переменной --chip-c; заливку, рамку и «чернильный» текст бейджа строит CSS
   // (.dir-tag) через color-mix. Прежнее `${color}55` дописывало альфу к строке и

@@ -322,6 +322,7 @@ def test_personal_rate_create_recalculates_group(motivation_admin_client, db_sch
     assert body['teacher_name'] == db_school['t1'].name
     assert body['group_name'] == db_school['group'].name
     assert body['direction_name'] == db_school['direction'].name
+    assert 'direction_color' in body
     assert _payment(first) == D('600.00')
     assert _payment(second) == D('750.00')
 

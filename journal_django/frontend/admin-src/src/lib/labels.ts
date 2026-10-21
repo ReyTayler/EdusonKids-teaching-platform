@@ -1,4 +1,4 @@
-import type { LessonType, RegistrySegment, RegistryStatus, Role, StudentLessonKind } from './types';
+import type { CancelMode, LessonType, PenaltyMode, PersonalRateKind, RegistrySegment, RegistryStatus, Role, StudentLessonKind } from './types';
 
 // Статуса ученика больше нет (спека 2026-07-25): его «статус» — стадия последней
 // сделки продления, подписи стадий приходят с бэка (useRenewalStages).
@@ -385,3 +385,21 @@ export const FEEDBACK_LABELS = {
   errorHint: 'Это сбой загрузки, а не отсутствие отзывов. Попробуйте ещё раз.',
   retry: 'Повторить',
 } as const;
+
+// ===== Настройки → Мотивация =====
+
+export const CANCEL_MODE_LABELS: Record<CancelMode, string> = {
+  percent: '% от ставки',
+  fixed:   'Фикс, ₽',
+};
+
+export const PENALTY_MODE_LABELS: Record<PenaltyMode, string> = {
+  per_lesson:  'за урок',
+  per_student: 'за каждого пришедшего',
+};
+
+export const PERSONAL_RATE_KIND_LABELS: Record<PersonalRateKind, string> = {
+  fixed:        'Вместо ставки',
+  plus_fixed:   'Надбавка, ₽',
+  plus_percent: 'Надбавка, %',
+};

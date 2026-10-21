@@ -650,3 +650,86 @@ export interface AttendanceDashboardRow {
   /** Итого списано = обычные + доп.уроки + сгоревшие. Бесплатные не входят. */
   billed: string;
 }
+
+// ===== Мотивация: ставки школы и персональные ставки (Настройки → Мотивация) =====
+// Деньги и проценты приходят строками ('600.00') — точный Decimal, арифметики над ними нет.
+
+export type CancelMode = 'percent' | 'fixed';
+export type PenaltyMode = 'per_lesson' | 'per_student';
+export type PersonalRateKind = 'fixed' | 'plus_fixed' | 'plus_percent';
+
+export interface RateVersionDirection {
+  direction_id: ID;
+  direction_name: string;
+  /** null — для направления не задано, действует ставка по умолчанию. */
+  group_rate: string | null;
+  individual_rate: string | null;
+}
+
+export interface RateVersion {
+  id: ID;
+  effective_from: string;
+  is_current: boolean;
+  group_rate: string;
+  individual_rate: string;
+  cancel_mode: CancelMode;
+  cancel_value: string;
+  penalty_enabled: boolean;
+  penalty_mode: PenaltyMode;
+  penalty_amount: string;
+  created_by: ID | null;
+  created_by_name: string | null;
+  created_at: string;
+  directions: RateVersionDirection[];
+}
+
+export interface RateVersionsResponse {
+  results: RateVersion[];
+  /** Уроки, для которых нет ни одной версии ставок (раньше самой ранней). */
+  no_rate: { lessons: number; earliest: string | null };
+  directions: { id: ID; name: string; color: string | null }[];
+}
+
+export interface RateVersionPayload {
+  effective_from: string;
+  group_rate: string;
+  individual_rate: string;
+  cancel_mode: CancelMode;
+  cancel_value: string;
+  penalty_enabled: boolean;
+  penalty_mode: PenaltyMode;
+  penalty_amount: string;
+  directions: { direction_id: ID; group_rate: string | null; individual_rate: string | null }[];
+}
+
+/** Ответ мутаций: сколько начислений пересчитал сервер. */
+export interface RecalculatedInfo { recalculated: number }
+
+export interface PersonalRate {
+  id: ID;
+  teacher_id: ID;
+  teacher_name: string;
+  group_id: ID;
+  group_name: string;
+  direction_id: ID | null;
+  direction_name: string | null;
+  direction_color: string | null;
+  /** Номера уроков — строки ('10.0'); null/null — ставка на все уроки группы. */
+  lesson_from: string | null;
+  lesson_to: string | null;
+  kind: PersonalRateKind;
+  value: string;
+  note: string;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface PersonalRatePayload {
+  teacher_id: ID;
+  group_id: ID;
+  lesson_from?: string | null;
+  lesson_to?: string | null;
+  kind: PersonalRateKind;
+  value: string;
+  note?: string;
+}

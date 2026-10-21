@@ -46,14 +46,24 @@ export function PersonalRateDialog({ editing, onClose }: Props) {
     () => (teachers.data ?? []).map((t) => ({ value: String(t.id), label: t.name, muted: !t.active })),
     [teachers.data],
   );
-  // Доступны все группы (замена в чужой группе — законный случай), но группы
-  // выбранного преподавателя идут первыми.
+  // Только группы выбранного преподавателя (решение владельца 2026-10-21); без
+  // преподавателя список пуст. Группа уже сохранённой ставки остаётся в списке,
+  // даже если сейчас её ведёт другой, — иначе поле при правке было бы пустым.
   const groupOptions = useMemo(() => {
-    const mine = (g: { teacher_id: number }) => (teacherId && String(g.teacher_id) === teacherId ? 0 : 1);
-    return [...(groups.data ?? [])]
-      .sort((a, b) => mine(a) - mine(b))
+    if (!teacherId) return [];
+    return (groups.data ?? [])
+      .filter((g) => String(g.teacher_id) === teacherId
+        || (editing && String(editing.teacher_id) === teacherId && g.id === editing.group_id))
       .map((g) => ({ value: String(g.id), label: g.name, muted: !g.active }));
-  }, [groups.data, teacherId]);
+  }, [groups.data, teacherId, editing]);
+
+  // Сменили преподавателя — выбранная группа, которой нет в его списке, сбрасывается.
+  const pickTeacher = (id: string) => {
+    setTeacherId(id);
+    const keep = (groups.data ?? []).some((g) => String(g.id) === groupId
+      && (String(g.teacher_id) === id || (editing && String(editing.teacher_id) === id && g.id === editing.group_id)));
+    if (!keep) setGroupId('');
+  };
 
   const pending = create.isPending || update.isPending;
 
@@ -104,10 +114,11 @@ export function PersonalRateDialog({ editing, onClose }: Props) {
 
         <Field label="Преподаватель" required error={fe.teacher_id} full>
           <Combobox value={teacherId} options={teacherOptions} placeholder="Выберите преподавателя"
-            aria-label="Преподаватель" onChange={setTeacherId} />
+            aria-label="Преподаватель" onChange={pickTeacher} />
         </Field>
         <Field label="Группа" required error={fe.group_id} full>
-          <Combobox value={groupId} options={groupOptions} placeholder="Выберите группу"
+          <Combobox value={groupId} options={groupOptions}
+            placeholder={teacherId ? 'Выберите группу преподавателя' : 'Сначала выберите преподавателя'}
             aria-label="Группа" onChange={setGroupId} />
         </Field>
 

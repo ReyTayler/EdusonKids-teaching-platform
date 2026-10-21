@@ -35,6 +35,23 @@ export function useGroupsAll(includeInactive = false) {
   });
 }
 
+/**
+ * Группы одного преподавателя (вместе с архивными) — серверный фильтр
+ * filter[teacher_id]. Без преподавателя запрос не идёт.
+ */
+export function useTeacherGroups(teacherId: number | null) {
+  return useQuery({
+    queryKey: [...KEY, 'by-teacher', teacherId],
+    queryFn: () => {
+      const qs = new URLSearchParams({ sort_by: 'name', sort_dir: 'asc', include_inactive: '1' });
+      qs.set('filter[teacher_id]', String(teacherId));
+      return fetchAllPages<Group>('/api/admin/groups', qs);
+    },
+    enabled: teacherId != null,
+    staleTime: 60_000,
+  });
+}
+
 // ──────────────────────────────────────────────────────
 // Для GroupsListPage (server-side pagination).
 // ──────────────────────────────────────────────────────

@@ -155,7 +155,22 @@ class PersonalRateWriteSerializer(serializers.Serializer):
             raise serializers.ValidationError({'lesson_to': [motivation.RANGE_BOTH_OR_NONE]})
         if lesson_from is not None and lesson_from > lesson_to:
             raise serializers.ValidationError({'lesson_to': [motivation.RANGE_ORDER]})
+        self._check_group_of_teacher(attrs)
         return attrs
+
+    def _check_group_of_teacher(self, attrs):
+        """Персональная ставка — только в группе, которую ведёт преподаватель
+        (решение владельца 2026-10-21; фронт сужает список, это — авторитетная
+        проверка). При правке проверяется, только если меняется преподаватель или
+        группа: ставка, чью группу позже передали другому, правится как есть."""
+        from apps.groups.models import Group
+        inst = self.instance
+        teacher_id = attrs.get('teacher_id', getattr(inst, 'teacher_id', None))
+        group_id = attrs.get('group_id', getattr(inst, 'group_id', None))
+        if inst is not None and teacher_id == inst.teacher_id and group_id == inst.group_id:
+            return
+        if not Group.objects.filter(id=group_id, teacher_id=teacher_id).exists():
+            raise serializers.ValidationError({'group_id': [motivation.GROUP_NOT_OF_TEACHER]})
 
 
 class CancellationPayUpdateSerializer(serializers.Serializer):

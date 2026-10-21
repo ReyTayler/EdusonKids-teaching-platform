@@ -8,7 +8,7 @@ import { TextInput } from '../../components/form/TextInput';
 import { SelectInput } from '../../components/form/SelectInput';
 import { useToast } from '../../components/ui/Toast';
 import { useTeachers } from '../../hooks/useTeachers';
-import { useGroupsAll } from '../../hooks/useGroups';
+import { useTeacherGroups } from '../../hooks/useGroups';
 import { usePersonalRateMutations } from '../../hooks/useMotivation';
 import { PERSONAL_RATE_KIND_LABELS } from '../../lib/labels';
 import type { PersonalRate, PersonalRateKind, PersonalRatePayload } from '../../lib/types';
@@ -28,10 +28,10 @@ export function PersonalRateDialog({ editing, onClose }: Props) {
   const { toast } = useToast();
   const { create, update } = usePersonalRateMutations();
   const teachers = useTeachers(true);
-  const groups = useGroupsAll(true);
 
   const [teacherId, setTeacherId] = useState(editing ? String(editing.teacher_id) : '');
   const [groupId, setGroupId] = useState(editing ? String(editing.group_id) : '');
+  const groups = useTeacherGroups(teacherId ? Number(teacherId) : null);
   const [allLessons, setAllLessons] = useState(editing ? editing.lesson_from == null && editing.lesson_to == null : true);
   const [from, setFrom] = useState(toField(editing?.lesson_from));
   const [to, setTo] = useState(toField(editing?.lesson_to));
@@ -46,23 +46,25 @@ export function PersonalRateDialog({ editing, onClose }: Props) {
     () => (teachers.data ?? []).map((t) => ({ value: String(t.id), label: t.name, muted: !t.active })),
     [teachers.data],
   );
-  // Только группы выбранного преподавателя (решение владельца 2026-10-21); без
-  // преподавателя список пуст. Группа уже сохранённой ставки остаётся в списке,
-  // даже если сейчас её ведёт другой, — иначе поле при правке было бы пустым.
+  // Только группы выбранного преподавателя (решение владельца 2026-10-21) — их
+  // отдаёт сервер (filter[teacher_id]); он же отклонит чужую группу. Группа уже
+  // сохранённой ставки остаётся в списке, даже если сейчас её ведёт другой, —
+  // иначе поле при правке было бы пустым (сервер такую неизменённую пару пускает).
   const groupOptions = useMemo(() => {
     if (!teacherId) return [];
-    return (groups.data ?? [])
-      .filter((g) => String(g.teacher_id) === teacherId
-        || (editing && String(editing.teacher_id) === teacherId && g.id === editing.group_id))
-      .map((g) => ({ value: String(g.id), label: g.name, muted: !g.active }));
+    const options = (groups.data ?? []).map((g) => ({ value: String(g.id), label: g.name, muted: !g.active }));
+    if (editing && String(editing.teacher_id) === teacherId
+        && !options.some((o) => o.value === String(editing.group_id))) {
+      options.unshift({ value: String(editing.group_id), label: editing.group_name, muted: true });
+    }
+    return options;
   }, [groups.data, teacherId, editing]);
 
-  // Сменили преподавателя — выбранная группа, которой нет в его списке, сбрасывается.
+  // Сменили преподавателя — выбранная группа сбрасывается (у другого она не в списке;
+  // своя группа сохранённой ставки возвращается вместе с её преподавателем).
   const pickTeacher = (id: string) => {
     setTeacherId(id);
-    const keep = (groups.data ?? []).some((g) => String(g.id) === groupId
-      && (String(g.teacher_id) === id || (editing && String(editing.teacher_id) === id && g.id === editing.group_id)));
-    if (!keep) setGroupId('');
+    setGroupId(editing && String(editing.teacher_id) === id ? String(editing.group_id) : '');
   };
 
   const pending = create.isPending || update.isPending;

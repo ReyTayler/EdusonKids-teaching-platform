@@ -16,6 +16,8 @@ from decimal import Decimal
 
 import pytest
 
+from apps.groups.models import Group
+from apps.payroll import motivation
 from apps.payroll.models import CancellationPay, Payroll, PayRateVersion, PersonalRate
 from apps.payroll.tests.conftest import (  # noqa: F401 — фикстура db_school
     D, db_lesson, db_marker, db_school, db_version, recalc_group,
@@ -384,11 +386,28 @@ def test_personal_rate_all_plus_ranges_allowed(motivation_admin_client, db_schoo
         resp = motivation_admin_client.post(PERSONAL, _personal_body(
             db_school, lesson_from=lesson_from, lesson_to=lesson_to), format='json')
         assert resp.status_code == 201, resp.json()
-    # Другой преподаватель в той же группе пересечений не создаёт.
+
+
+def test_personal_rate_rejects_group_of_other_teacher(motivation_admin_client, db_school):
+    """Группу ведёт t1 — ставку t2 в ней завести нельзя (решение владельца 2026-10-21)."""
     resp = motivation_admin_client.post(PERSONAL, _personal_body(
-        db_school, teacher_id=db_school['t2'].id, lesson_from='1', lesson_to='4'),
-        format='json')
-    assert resp.status_code == 201
+        db_school, teacher_id=db_school['t2'].id), format='json')
+
+    assert resp.status_code == 400
+    assert resp.json()['details']['group_id'] == [motivation.GROUP_NOT_OF_TEACHER]
+    assert not PersonalRate.objects.filter(teacher=db_school['t2']).exists()
+
+
+def test_personal_rate_edit_kept_after_group_reassigned(motivation_admin_client, db_school):
+    """Группу передали другому преподавателю — старую ставку можно править (пара не меняется)."""
+    rate_id = motivation_admin_client.post(PERSONAL, _personal_body(db_school),
+                                           format='json').json()['id']
+    Group.objects.filter(id=db_school['group'].id).update(teacher=db_school['t2'])
+
+    resp = motivation_admin_client.patch(f'{PERSONAL}/{rate_id}', {'value': '777'}, format='json')
+
+    assert resp.status_code == 200, resp.json()
+    assert PersonalRate.objects.get(id=rate_id).value == D('777.00')
 
 
 def test_personal_rate_patch_into_overlap_rejected(motivation_admin_client, db_school):
@@ -420,8 +439,9 @@ def test_personal_rates_list_filter_sort_paginate(motivation_admin_client, db_sc
     for lesson_from, lesson_to in (('5', '8'), (None, None), ('1', '4')):
         motivation_admin_client.post(PERSONAL, _personal_body(
             db_school, lesson_from=lesson_from, lesson_to=lesson_to), format='json')
-    motivation_admin_client.post(PERSONAL, _personal_body(db_school, teacher_id=db_school['t2'].id),
-                           format='json')
+    # Ставка t2 в группе t1 через API теперь невозможна — заводим как старую запись.
+    PersonalRate.objects.create(teacher=db_school['t2'], group=db_school['group'],
+                                kind='fixed', value=D('100'))
 
     resp = motivation_admin_client.get(PERSONAL, {'teacher': db_school['t1'].id,
                                             'sort_by': 'lesson_from', 'page_size': 2})
@@ -782,6 +802,8 @@ def test_personal_rate_patch_teacher_recalculates(motivation_admin_client, db_sc
     rate_id = motivation_admin_client.post(PERSONAL, _personal_body(db_school),
                                            format='json').json()['id']
     assert _payment(lesson) == D('1000.00')
+    # Ставку можно перевести только на преподавателя, который ведёт группу.
+    Group.objects.filter(id=db_school['group'].id).update(teacher=db_school['t2'])
 
     resp = motivation_admin_client.patch(f'{PERSONAL}/{rate_id}',
                                          {'teacher_id': db_school['t2'].id}, format='json')

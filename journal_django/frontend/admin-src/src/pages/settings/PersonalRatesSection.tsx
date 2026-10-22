@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { usePersonalRates, usePersonalRateMutations } from '../../hooks/useMotivation';
 import { useTeachers } from '../../hooks/useTeachers';
 import { useGroupsAll } from '../../hooks/useGroups';
 import { Combobox } from '../../components/form/Combobox';
+import { Switch } from '../../components/form/Switch';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { ActionMenu } from '../../components/ui/ActionMenu';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -10,11 +11,12 @@ import { DirTag } from '../../components/ui/DirTag';
 import { BlockLoading } from '../../components/ui/Skeleton';
 import { useToast } from '../../components/ui/Toast';
 import { useApiError } from '../../hooks/useApiError';
+import { fmtDate } from '../../lib/format';
 import { Paginator } from '../../components/table/Paginator';
 import { PERSONAL_RATE_KIND_LABELS } from '../../lib/labels';
 import type { PersonalRate } from '../../lib/types';
 import { PersonalRateDialog } from './PersonalRateDialog';
-import { lessonsRangeText, personalValueText, savedMessage } from './motivationFormat';
+import { lessonsRangeText, periodText, personalValueText, savedMessage, toggleMessage } from './motivationFormat';
 
 type DialogState = { editing: PersonalRate | null } | null;
 
@@ -26,11 +28,14 @@ export function PersonalRatesSection() {
   const [pageSize, setPageSize] = useState(50);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [deleting, setDeleting] = useState<PersonalRate | null>(null);
+  const [historyOpen, setHistoryOpen] = useState<Set<number>>(new Set());
+  // Id ставки, чей переключатель сейчас ждёт ответа сервера.
+  const [toggling, setToggling] = useState<number | null>(null);
 
   const q = usePersonalRates({
     teacher, group, page, page_size: pageSize, sort_by: 'teacher', sort_dir: 'asc',
   });
-  const { remove } = usePersonalRateMutations();
+  const { remove, activate, deactivate } = usePersonalRateMutations();
   const { toast } = useToast();
   const apiError = useApiError();
   const teachers = useTeachers(true);
@@ -59,6 +64,21 @@ export function PersonalRatesSection() {
   };
 
   const rows = q.data?.rows ?? [];
+
+  // Без модалки подтверждения: действие обратимо тем же переключателем и меняет только будущее.
+  const toggle = (r: PersonalRate, next: boolean) => {
+    setToggling(r.id);
+    (next ? activate : deactivate).mutate(r.id, {
+      onSuccess: (res) => toast(toggleMessage(next, res.recalculated), 'ok'),
+      onError: (e) => apiError(e, next ? 'Не удалось включить ставку' : 'Не удалось выключить ставку'),
+      onSettled: () => setToggling(null),
+    });
+  };
+  const toggleHistory = (id: number) => setHistoryOpen((prev) => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
 
   return (
     <section className="settings-section" aria-labelledby="personal-rates-title">
@@ -105,31 +125,85 @@ export function PersonalRatesSection() {
             <table className="settings-table">
               <thead>
                 <tr>
-                  <th>Преподаватель</th><th>Группа</th><th>Направление</th><th>Уроки</th>
-                  <th>Вид</th><th>Значение</th><th>Примечание</th><th aria-label="Действия" />
+                  <th>Активна</th><th>Преподаватель</th><th>Группа</th><th>Направление</th><th>Период</th>
+                  <th>Уроки</th><th>Вид</th><th>Значение</th><th>Примечание</th><th aria-label="Действия" />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.teacher_name}</td>
-                    <td>{r.group_name}</td>
-                    <td>{r.direction_name ? <DirTag name={r.direction_name} color={r.direction_color} /> : '—'}</td>
-                    <td>{lessonsRangeText(r)}</td>
-                    <td>{PERSONAL_RATE_KIND_LABELS[r.kind]}</td>
-                    <td>{personalValueText(r)}</td>
-                    <td className="settings-note">{r.note || '—'}</td>
-                    <td>
-                      <ActionMenu
-                        label="Действия со ставкой"
-                        items={[
-                          { label: 'Изменить', onSelect: () => setDialog({ editing: r }) },
-                          { label: 'Удалить', danger: true, onSelect: () => setDeleting(r) },
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const expanded = historyOpen.has(r.id);
+                  return (
+                    <Fragment key={r.id}>
+                      <tr className={r.is_active ? undefined : 'is-inactive'}>
+                        <td className="settings-toggle-cell">
+                          <Switch
+                            checked={r.is_active}
+                            disabled={toggling === r.id}
+                            aria-label={`Ставка «${r.teacher_name} — ${r.group_name}» активна`}
+                            onChange={(next) => toggle(r, next)}
+                          />
+                        </td>
+                        <td>{r.teacher_name}</td>
+                        <td>
+                          <div className="settings-group-cell">
+                            {r.group_name}
+                            {r.group_of_other_teacher && (
+                              <span className="settings-flag">Группу ведёт другой преподаватель</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>{r.direction_name ? <DirTag name={r.direction_name} color={r.direction_color} /> : '—'}</td>
+                        <td>
+                          <div className="settings-period">
+                            {r.is_active
+                              ? periodText(r.valid_from, r.valid_until)
+                              : `не действует с ${fmtDate(r.valid_until)}`}
+                            {r.terms.length > 1 && (
+                              <button type="button" className="settings-link" aria-expanded={expanded}
+                                onClick={() => toggleHistory(r.id)}>
+                                {expanded ? 'Скрыть историю' : `История (${r.terms.length})`}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td>{lessonsRangeText(r)}</td>
+                        <td>{PERSONAL_RATE_KIND_LABELS[r.kind]}</td>
+                        <td>{personalValueText(r)}</td>
+                        <td className="settings-note">{r.note || '—'}</td>
+                        <td>
+                          <ActionMenu
+                            label="Действия со ставкой"
+                            items={[
+                              { label: 'Изменить', onSelect: () => setDialog({ editing: r }) },
+                              { label: 'Удалить', danger: true, onSelect: () => setDeleting(r) },
+                            ]}
+                          />
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr className="settings-history-row">
+                          <td colSpan={10}>
+                            <table className="settings-history">
+                              <thead>
+                                <tr><th>Период</th><th>Уроки</th><th>Вид</th><th>Значение</th></tr>
+                              </thead>
+                              <tbody>
+                                {r.terms.map((t) => (
+                                  <tr key={t.id}>
+                                    <td>{periodText(t.valid_from, t.valid_until)}</td>
+                                    <td>{lessonsRangeText(t)}</td>
+                                    <td>{PERSONAL_RATE_KIND_LABELS[t.kind]}</td>
+                                    <td>{personalValueText(t)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -147,7 +221,7 @@ export function PersonalRatesSection() {
       {deleting && (
         <ConfirmModal
           title="Удалить персональную ставку?"
-          message={`Ставка «${deleting.teacher_name} — ${deleting.group_name}» будет удалена, начисления пересчитаются по ставкам школы.`}
+          message={`Ставка «${deleting.teacher_name} — ${deleting.group_name}»: она перестанет действовать с сегодняшнего дня и исчезнет из списка. Прошлые начисления по ней не изменятся.`}
           confirmLabel="Удалить"
           danger
           isPending={remove.isPending}

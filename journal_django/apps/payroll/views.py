@@ -13,7 +13,9 @@
 «Настройки → Мотивация» (apps/payroll/motivation.py):
   GET/POST     /api/admin/payroll/rate-versions, PATCH/DELETE …/<id>
   GET/POST     /api/admin/payroll/personal-rates, PATCH/DELETE …/<id>
+  POST         /api/admin/payroll/personal-rates/<id>/deactivate | …/activate
 Ответ мутации ставок несёт `recalculated` — число изменённых начислений.
+Изменения ставок действуют с сегодняшнего дня по МСК и прошлое не меняют (§8).
 
 Сортировка списков — только из whitelist: мусор в sort_by/sort_dir → 400.
 """
@@ -269,7 +271,7 @@ class PersonalRateListView(APIView):
         )
         paginator = StandardPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
-        return paginator.get_paginated_response(page)
+        return paginator.get_paginated_response(motivation.attach_terms(page))
 
     def post(self, request: Request) -> Response:
         serializer = PersonalRateWriteSerializer(data=request.data)
@@ -279,13 +281,14 @@ class PersonalRateListView(APIView):
 
 
 class PersonalRateDetailView(APIView):
-    """PATCH — исправить персональную ставку; DELETE — удалить."""
+    """PATCH — исправить параметры (с сегодняшнего дня) или примечание;
+    DELETE — удалить (с сегодняшнего дня, прошлое остаётся по ставке).
+    Удалённая ставка — 404."""
 
     permission_classes = [IsSuperAdmin]
 
     def patch(self, request: Request, pk: int) -> Response:
-        from apps.payroll.models import PersonalRate
-        instance = PersonalRate.objects.filter(id=pk).first()
+        instance = motivation.personal_rate_state(pk)
         if instance is None:
             raise _not_found()
         serializer = PersonalRateWriteSerializer(instance, data=request.data, partial=True)
@@ -297,6 +300,25 @@ class PersonalRateDetailView(APIView):
 
     def delete(self, request: Request, pk: int) -> Response:
         result = motivation.delete_personal_rate(pk)
+        if result is None:
+            raise _not_found()
+        return Response(result)
+
+
+class PersonalRateToggleView(APIView):
+    """POST …/personal-rates/<id>/deactivate | …/activate — переключатель
+    «включена / выключена» с сегодняшнего дня. Отдельные действия, а не PATCH
+    is_active: у переключения свои последствия для истории периодов (закрыть /
+    открыть период) и своя метка в журнале изменений. Повтор — 200 без
+    изменений (recalculated = 0): двойной клик не должен давать ошибку."""
+
+    permission_classes = [IsSuperAdmin]
+    toggle = ''  # 'activate' | 'deactivate' — задаётся в urls.py через as_view
+
+    def post(self, request: Request, pk: int) -> Response:
+        handler = (motivation.activate_personal_rate if self.toggle == 'activate'
+                   else motivation.deactivate_personal_rate)
+        result = handler(pk)
         if result is None:
             raise _not_found()
         return Response(result)

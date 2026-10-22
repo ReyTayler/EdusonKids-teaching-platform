@@ -108,16 +108,27 @@ class MarkerInput:
 
 @dataclass(frozen=True)
 class PersonalRateInput:
+    """Период персональной ставки (PersonalRateTerm, поправка §8).
+
+    Действует на дату d, если valid_from ≤ d < valid_until; None — без границы.
+    Пустой период (valid_from == valid_until) не действует ни на одну дату."""
+
     teacher_id: int
     group_id: int
     lesson_from: Decimal | None
     lesson_to: Decimal | None
     kind: str
     value: Decimal
+    valid_from: datetime.date | None = None
+    valid_until: datetime.date | None = None
 
     @property
     def is_all_lessons(self) -> bool:
         return self.lesson_from is None and self.lesson_to is None
+
+    def covers(self, day: datetime.date) -> bool:
+        return ((self.valid_from is None or self.valid_from <= day)
+                and (self.valid_until is None or day < self.valid_until))
 
 
 @dataclass(frozen=True)
@@ -230,9 +241,12 @@ def _apply_personal(base: Decimal, rate: PersonalRateInput,
 
 
 def _own_rates(personal_rates: Iterable[PersonalRateInput], teacher_id: int,
-               group_id: int) -> list[PersonalRateInput]:
-    # Персональная ставка действует, только когда занятие ведёт её преподаватель (§1.6).
-    return [r for r in personal_rates if r.teacher_id == teacher_id and r.group_id == group_id]
+               group_id: int, day: datetime.date) -> list[PersonalRateInput]:
+    # Персональная ставка действует, только когда занятие ведёт её преподаватель (§1.6),
+    # и только периодами, действующими на дату занятия (§8): правка ставки сегодня
+    # не меняет начислений за прошлые даты ни при каком пересчёте.
+    return [r for r in personal_rates
+            if r.teacher_id == teacher_id and r.group_id == group_id and r.covers(day)]
 
 
 def _pick_lesson_rate(rates: list[PersonalRateInput],
@@ -267,7 +281,8 @@ def lesson_pay(lesson: LessonInput, card: RateCard | None,
                                 lesson.is_individual)
     notes = [note]
     personal = _pick_lesson_rate(
-        _own_rates(personal_rates, lesson.teacher_id, lesson.group_id), lesson.lesson_number)
+        _own_rates(personal_rates, lesson.teacher_id, lesson.group_id, lesson.lesson_date),
+        lesson.lesson_number)
     if personal is not None:
         amount, personal_note = _apply_personal(amount, personal)
         notes.append(personal_note)
@@ -301,7 +316,8 @@ def cancellation_pay(marker: MarkerInput, card: RateCard | None,
                               marker.is_individual)
     notes = [note]
     # У отмены нет номера урока — применима только ставка «все уроки» (§1.7).
-    personal = next((r for r in _own_rates(personal_rates, marker.teacher_id, marker.group_id)
+    personal = next((r for r in _own_rates(personal_rates, marker.teacher_id, marker.group_id,
+                                           marker.scheduled_date)
                      if r.is_all_lessons), None)
     if personal is not None:
         base, personal_note = _apply_personal(base, personal, exact=True)

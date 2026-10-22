@@ -11,7 +11,7 @@ import { useApiError } from '../../hooks/useApiError';
 import { fmtDate, fmtDateTime, fmtRub, todayMSK } from '../../lib/format';
 import type { RateVersion } from '../../lib/types';
 import { RateVersionDialog } from './RateVersionDialog';
-import { addDaysISO, cancelText, penaltyText, savedMessage } from './motivationFormat';
+import { cancelText, penaltyText, savedMessage } from './motivationFormat';
 
 type DialogState = { kind: 'create' } | { kind: 'edit'; version: RateVersion } | null;
 
@@ -46,13 +46,9 @@ export function SchoolRatesSection() {
   const nextVersion = current ? null
     : results.reduce<RateVersion | null>(
       (m, v) => (!m || v.effective_from < m.effective_from ? v : m), null);
-  // Новые ставки по умолчанию — со следующего дня: уже прошедшие дни школа
-  // отработала по прежним ставкам, и менять их задним числом надо осознанно
-  // (админ вправе выбрать любую дату). Если ставок ещё нет — с самого раннего
-  // урока без ставки, чтобы сразу посчитать всю историю.
-  const defaultDate = current
-    ? addDaysISO(todayMSK(), 1)
-    : (no_rate.earliest ?? todayMSK());
+  // Ставки действуют только с сегодняшнего дня: прошлые начисления не меняются
+  // (решение владельца), поэтому и для первой версии дата по умолчанию — сегодня.
+  const defaultDate = todayMSK();
 
   const dirRate = (v: RateVersion, id: number) => v.directions.find((d) => d.direction_id === id);
 
@@ -77,7 +73,6 @@ export function SchoolRatesSection() {
         <div className="settings-warn" role="status">
           Уроков без ставки: {no_rate.lessons}
           {no_rate.earliest && ` (самый ранний — ${fmtDate(no_rate.earliest)})`}.
-          {no_rate.earliest && ` Задайте ставки с даты не позже ${fmtDate(no_rate.earliest)}, чтобы посчитать всю историю.`}
         </div>
       )}
 
@@ -152,13 +147,20 @@ export function SchoolRatesSection() {
                       <td>{v.created_by_name || '—'}</td>
                       <td>{fmtDateTime(v.created_at)}</td>
                       <td>
-                        <ActionMenu
-                          label="Действия с версией"
-                          items={[
-                            { label: 'Исправить', onSelect: () => setDialog({ kind: 'edit', version: v }) },
-                            { label: 'Удалить', danger: true, onSelect: () => setDeleting(v) },
-                          ]}
-                        />
+                        {v.editable ? (
+                          <ActionMenu
+                            label="Действия с версией"
+                            items={[
+                              { label: 'Исправить', onSelect: () => setDialog({ kind: 'edit', version: v }) },
+                              { label: 'Удалить', danger: true, onSelect: () => setDeleting(v) },
+                            ]}
+                          />
+                        ) : (
+                          // Начавшуюся версию править нельзя: объясняем, а не прячем молча.
+                          <span className="settings-muted" tabIndex={0} role="img"
+                            title="Версия уже действует — задайте новую с сегодняшнего дня"
+                            aria-label="Версия уже действует — задайте новую с сегодняшнего дня">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}

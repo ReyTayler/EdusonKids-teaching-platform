@@ -8,6 +8,8 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' |
   value?: string; // 'YYYY-MM-DD' or ''
   onChange?: (e: { target: { value: string } }) => void;
   placeholder?: string;
+  /** Самая ранняя допустимая дата 'YYYY-MM-DD': ранние дни в календаре недоступны, вписанные вручную отклоняются. */
+  min?: string;
 }
 
 // Дни недели сверху grid'а — начинаем с понедельника (русская конвенция).
@@ -91,7 +93,7 @@ function buildMonthGrid(y: number, m: number): Array<{ y: number; m: number; d: 
   return grid;
 }
 
-export function DateInput({ value, onChange, placeholder, disabled, className, ...rest }: Props) {
+export function DateInput({ value, onChange, placeholder, disabled, className, min, ...rest }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
@@ -154,7 +156,7 @@ export function DateInput({ value, onChange, placeholder, disabled, className, .
     // не дожидаясь blur (подсвечивается в календаре, доступно форме сразу).
     if (masked.replace(/\D/g, '').length === 8) {
       const parsed = parseTyped(masked);
-      if (parsed) onChange?.({ target: { value: fmtISO(parsed.y, parsed.m, parsed.d) } });
+      if (parsed && !(min && fmtISO(parsed.y, parsed.m, parsed.d) < min)) onChange?.({ target: { value: fmtISO(parsed.y, parsed.m, parsed.d) } });
     }
   };
 
@@ -171,7 +173,7 @@ export function DateInput({ value, onChange, placeholder, disabled, className, .
       return;
     }
     const parsed = parseTyped(trimmed);
-    if (parsed) {
+    if (parsed && !(min && fmtISO(parsed.y, parsed.m, parsed.d) < min)) {
       const iso = fmtISO(parsed.y, parsed.m, parsed.d);
       if (iso !== value) onChange?.({ target: { value: iso } });
       setText(fmtDisplay(iso));
@@ -263,18 +265,21 @@ export function DateInput({ value, onChange, placeholder, disabled, className, .
             {grid.map((c, i) => {
               const isToday = c.y === today.y && c.m === today.m && c.d === today.d;
               const isSelected = valuePart && c.y === valuePart.y && c.m === valuePart.m && c.d === valuePart.d;
+              const tooEarly = !!min && fmtISO(c.y, c.m, c.d) < min;
               const cls = [
                 'date-input__day',
                 !c.inMonth && 'is-muted',
                 isToday && 'is-today',
                 isSelected && 'is-selected',
+                tooEarly && 'is-disabled',
               ].filter(Boolean).join(' ');
               return (
                 <button
                   type="button"
                   key={i}
                   className={cls}
-                  onMouseDown={(e) => { e.preventDefault(); emit(fmtISO(c.y, c.m, c.d)); }}
+                  disabled={tooEarly}
+                  onMouseDown={(e) => { e.preventDefault(); if (!tooEarly) emit(fmtISO(c.y, c.m, c.d)); }}
                 >{c.d}</button>
               );
             })}
@@ -283,6 +288,7 @@ export function DateInput({ value, onChange, placeholder, disabled, className, .
             <button
               type="button"
               className="date-input__action"
+              disabled={!!min && fmtISO(today.y, today.m, today.d) < min}
               onClick={() => emit(fmtISO(today.y, today.m, today.d))}
             >Сегодня</button>
             {value && (

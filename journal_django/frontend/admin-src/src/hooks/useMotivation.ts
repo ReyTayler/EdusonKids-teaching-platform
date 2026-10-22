@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type {
-  Paginated, PersonalRate, PersonalRatePayload, RateVersion, RateVersionPayload,
+  Paginated, PersonalRate, PersonalRatePayload, PersonalRateUpdatePayload, RateVersion, RateVersionPayload,
   RateVersionsResponse, RecalculatedInfo,
 } from '../lib/types';
 
@@ -83,13 +83,24 @@ export function usePersonalRateMutations() {
       ...opts,
     }),
     update: useMutation({
-      mutationFn: ({ id, body }: { id: number; body: Partial<PersonalRatePayload> }) =>
+      mutationFn: ({ id, body }: { id: number; body: PersonalRateUpdatePayload }) =>
         api<PersonalRate & RecalculatedInfo>('PATCH', `/api/admin/payroll/personal-rates/${id}`, body),
       ...opts,
     }),
     remove: useMutation({
       mutationFn: (id: number) =>
         api<RecalculatedInfo>('DELETE', `/api/admin/payroll/personal-rates/${id}`),
+      ...opts,
+    }),
+    // Идемпотентны на сервере; отдают строку и число пересчитанных начислений.
+    deactivate: useMutation({
+      mutationFn: (id: number) =>
+        api<PersonalRate & RecalculatedInfo>('POST', `/api/admin/payroll/personal-rates/${id}/deactivate`),
+      ...opts,
+    }),
+    activate: useMutation({
+      mutationFn: (id: number) =>
+        api<PersonalRate & RecalculatedInfo>('POST', `/api/admin/payroll/personal-rates/${id}/activate`),
       ...opts,
     }),
   };

@@ -8,7 +8,8 @@ DateSafeJSONRenderer.
 
 Слой «Мотивации» (спека docs/specs/2026-10-20-eduson-motivation-payroll-design.md, §2):
   PayRateVersion / PayRateDirection — датированные ставки школы;
-  PersonalRate — персональные ставки «преподаватель × группа × уроки»;
+  PersonalRate / PersonalRateTerm — персональные ставки «преподаватель × группа»
+    и их периоды действия с параметрами (поправка §8: правки не меняют прошлое);
   CancellationPay — начисление за отменённое занятие (1:1 с маркером отмены).
 Правил расчёта здесь нет — только данные и их инварианты в БД: движок пишет
 строки bulk-операциями мимо full_clean, поэтому деньги ≥ 0, диапазоны и режимы
@@ -18,15 +19,21 @@ from __future__ import annotations
 
 import pghistory
 from django.contrib.postgres.constraints import ExclusionConstraint
-from django.contrib.postgres.fields import DecimalRangeField, RangeBoundary, RangeOperators
+from django.contrib.postgres.fields import (
+    DateRangeField,
+    DecimalRangeField,
+    RangeBoundary,
+    RangeOperators,
+)
 from django.db import models
 from django.utils import timezone
 
 # Имена ограничений персональных ставок — по ним сервис узнаёт нарушение
 # (apps/payroll/motivation.py) и отвечает 400 с понятным текстом.
-PERSONAL_ALL_LESSONS_UNIQUE = 'payroll_personal_rates_all_lessons_uniq'
-PERSONAL_RANGES_EXCLUDE = 'payroll_personal_rates_ranges_excl'
-PERSONAL_RANGE_CHECK = 'payroll_personal_rates_range_check'
+PERSONAL_ALL_EXCLUDE = 'payroll_personal_terms_all_excl'
+PERSONAL_RANGES_EXCLUDE = 'payroll_personal_terms_ranges_excl'
+PERSONAL_RANGE_CHECK = 'payroll_personal_terms_range_check'
+PERSONAL_PERIOD_CHECK = 'payroll_personal_terms_period_check'
 
 
 class NumRange(models.Func):
@@ -34,6 +41,18 @@ class NumRange(models.Func):
 
     function = 'NUMRANGE'
     output_field = DecimalRangeField()
+
+
+class TermPeriod(models.Func):
+    """daterange(valid_from, valid_until, '[)') — период действия терма;
+    NULL-граница бесконечна. Без аргументов: выражение одно на оба EXCLUDE."""
+
+    function = 'DATERANGE'
+    output_field = DateRangeField()
+
+    def __init__(self, **extra):
+        super().__init__('valid_from', 'valid_until', RangeBoundary(
+            inclusive_lower=True, inclusive_upper=False), **extra)
 
 
 @pghistory.track(
@@ -204,6 +223,12 @@ class PayRateDirection(models.Model):
         ]
 
 
+class PersonalRateKind(models.TextChoices):
+    FIXED = 'fixed', 'Вместо ставки'
+    PLUS_FIXED = 'plus_fixed', 'Надбавка, ₽'
+    PLUS_PERCENT = 'plus_percent', 'Надбавка, %'
+
+
 @pghistory.track(
     pghistory.InsertEvent(),
     pghistory.UpdateEvent(),
@@ -211,24 +236,22 @@ class PayRateDirection(models.Model):
 )
 class PersonalRate(models.Model):
     """
-    Персональная ставка: преподаватель × группа × номера уроков (§1.6).
+    Персональная ставка — сущность «преподаватель × группа» (§1.6, поправка §8).
 
-    lesson_from/lesson_to — диапазон номеров урока курса (numeric 5,1, как
-    Lesson.lesson_number: у 45-минутных групп номера дробные); оба NULL — «все
-    уроки группы». Непересечение у пары преподаватель × группа держит БД, а не
-    сервис (гонку двух вставок без строк для лока сервис не закрыл бы):
-      * не больше одной ставки «все уроки» — частичный UNIQUE;
-      * диапазоны не пересекаются — EXCLUDE USING gist по numrange '[]'
-        (только строки с диапазоном). «Все уроки» + диапазон — законно:
-        диапазон точнее и побеждает (§1.6).
-    Сервис переводит нарушение (по имени ограничения) в 400 с текстом.
-    Без дат: действует, пока существует.
+    Сами параметры (уроки, вид, значение) живут в периодах PersonalRateTerm:
+    правка, выключение и удаление ставки действуют только с сегодняшнего дня,
+    поэтому прежние параметры не перезаписываются, а закрываются датой — прошлые
+    начисления при любом последующем пересчёте считаются по ним же. Колонок
+    параметров здесь нет намеренно: два источника правды разошлись бы.
+
+    is_active — переключатель «включена / выключена» (у включённой последний
+    период открыт, у выключенной закрыт). deleted_at — мягкое удаление: ставка
+    скрыта из списка, а её закрытые периоды продолжают считать прошлое.
+    Преподаватель и группа неизменны: у истории другой смысл, для другой пары
+    заводят новую ставку.
     """
 
-    class Kind(models.TextChoices):
-        FIXED = 'fixed', 'Вместо ставки'
-        PLUS_FIXED = 'plus_fixed', 'Надбавка, ₽'
-        PLUS_PERCENT = 'plus_percent', 'Надбавка, %'
+    Kind = PersonalRateKind
 
     id = models.AutoField(primary_key=True)
     # CASCADE: жёсткое удаление преподавателя уносит его персональные ставки —
@@ -244,12 +267,10 @@ class PersonalRate(models.Model):
         # Покрыт префиксом составного payroll_personal_group_tch_idx.
         db_index=False,
     )
-    lesson_from = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
-    lesson_to = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
-    kind = models.TextField(choices=Kind.choices)
-    # fixed / plus_fixed — рубли; plus_percent — проценты от ставки формата.
-    value = models.DecimalField(max_digits=10, decimal_places=2)
     note = models.TextField(blank=True, default='')
+    # db_default: таблица уже с данными — NOT NULL-колонке нужен DEFAULT в БД.
+    is_active = models.BooleanField(default=True, db_default=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         'accounts.Account', on_delete=models.SET_NULL, null=True, blank=True,
         db_column='created_by_id', related_name='+',
@@ -260,10 +281,79 @@ class PersonalRate(models.Model):
         managed = True
         db_table = 'payroll_personal_rates'
         indexes = [
-            # Движок грузит ставки по группам пересчёта, сервис лочит пару
-            # преподаватель × группа — оба предиката начинаются с group.
+            # Список фильтрует по группе и преподавателю.
             models.Index(fields=['group', 'teacher'],
                          name='payroll_personal_group_tch_idx'),
+        ]
+
+
+@pghistory.track(
+    pghistory.InsertEvent(),
+    pghistory.UpdateEvent(),
+    pghistory.DeleteEvent(),
+)
+class PersonalRateTerm(models.Model):
+    """
+    Период действия персональной ставки (поправка владельца §8).
+
+    Действует на дату d, если valid_from ≤ d < valid_until; NULL-граница —
+    без границы (valid_from NULL — «с начала», так мигрированы ставки до
+    поправки). valid_until НЕ включительно: закрытие «сегодня» значит, что
+    сегодняшние уроки уже считаются без этого периода. Пустой период
+    (valid_from = valid_until) допустим: так хранятся параметры ставки,
+    созданной и выключенной в один день, — иначе при включении их неоткуда
+    было бы взять. Пустой период не действует ни на одну дату и ни с чем не
+    пересекается.
+
+    lesson_from/lesson_to — диапазон номеров урока курса (numeric 5,1, как
+    Lesson.lesson_number); оба NULL — «все уроки группы».
+
+    teacher и group — копия пары из ставки: по ним БД держит непересечение
+    периодов пары преподаватель × группа (EXCLUDE видит только свою строку).
+    Копию пишет только сервис (apps/payroll/motivation.py), пара у ставки
+    неизменна, поэтому расхождению взяться неоткуда. Непересечение:
+      * два периода «все уроки» не пересекаются по датам — EXCLUDE …_all_excl;
+      * два периода с диапазоном не пересекаются одновременно по урокам и по
+        датам — EXCLUDE …_ranges_excl. Так возможна замена «с даты — другая
+        ставка» на те же уроки.
+    «Все уроки» + диапазон на одни даты — законно: диапазон точнее и побеждает
+    (§1.6), поэтому «все уроки» с диапазоном одним ограничением не сравниваются.
+    """
+
+    Kind = PersonalRateKind
+
+    id = models.AutoField(primary_key=True)
+    rate = models.ForeignKey(
+        PersonalRate, on_delete=models.CASCADE,
+        db_column='rate_id', related_name='terms',
+    )
+    teacher = models.ForeignKey(
+        'teachers.Teacher', on_delete=models.CASCADE,
+        db_column='teacher_id', related_name='+',
+        # Покрыт gist-индексами ограничений непересечения.
+        db_index=False,
+    )
+    group = models.ForeignKey(
+        'groups.Group', on_delete=models.CASCADE,
+        db_column='group_id', related_name='+',
+        # Покрыт префиксом составного payroll_personal_term_grp_idx.
+        db_index=False,
+    )
+    valid_from = models.DateField(null=True, blank=True)
+    valid_until = models.DateField(null=True, blank=True)
+    lesson_from = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    lesson_to = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    kind = models.TextField(choices=PersonalRateKind.choices)
+    # fixed / plus_fixed — рубли; plus_percent — проценты от ставки формата.
+    value = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        managed = True
+        db_table = 'payroll_personal_rate_terms'
+        indexes = [
+            # Движок грузит периоды по группам пересчёта.
+            models.Index(fields=['group', 'teacher'],
+                         name='payroll_personal_term_grp_idx'),
         ]
         constraints = [
             # «Все уроки» (оба NULL) либо замкнутый диапазон from ≤ to, from ≥ 0.
@@ -276,21 +366,31 @@ class PersonalRate(models.Model):
                                lesson_from__gte=0, lesson_from__lte=models.F('lesson_to'))
                 ),
             ),
+            # ≤, а не <: пустой период законен (см. docstring).
             models.CheckConstraint(
-                name='payroll_personal_rates_kind_check',
+                name=PERSONAL_PERIOD_CHECK,
+                condition=(models.Q(valid_from__isnull=True) | models.Q(valid_until__isnull=True)
+                           | models.Q(valid_from__lte=models.F('valid_until'))),
+            ),
+            models.CheckConstraint(
+                name='payroll_personal_terms_kind_check',
                 condition=models.Q(kind__in=['fixed', 'plus_fixed', 'plus_percent']),
             ),
             models.CheckConstraint(
-                name='payroll_personal_rates_value_check',
+                name='payroll_personal_terms_value_check',
                 condition=models.Q(value__gte=0),
             ),
-            models.UniqueConstraint(
-                fields=['teacher', 'group'],
-                condition=models.Q(lesson_from__isnull=True),
-                name=PERSONAL_ALL_LESSONS_UNIQUE,
-            ),
             # Равенство по teacher/group в gist-индексе — расширение btree_gist
-            # (миграция 0007, BtreeGistExtension).
+            # (миграция 0007). daterange(NULL, …) — граница бесконечна.
+            ExclusionConstraint(
+                name=PERSONAL_ALL_EXCLUDE,
+                expressions=[
+                    ('teacher', RangeOperators.EQUAL),
+                    ('group', RangeOperators.EQUAL),
+                    (TermPeriod(), RangeOperators.OVERLAPS),
+                ],
+                condition=models.Q(lesson_from__isnull=True),
+            ),
             ExclusionConstraint(
                 name=PERSONAL_RANGES_EXCLUDE,
                 expressions=[
@@ -299,6 +399,7 @@ class PersonalRate(models.Model):
                     (NumRange('lesson_from', 'lesson_to', RangeBoundary(
                         inclusive_lower=True, inclusive_upper=True)),
                      RangeOperators.OVERLAPS),
+                    (TermPeriod(), RangeOperators.OVERLAPS),
                 ],
                 condition=models.Q(lesson_from__isnull=False),
             ),

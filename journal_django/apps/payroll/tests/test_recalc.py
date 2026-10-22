@@ -17,6 +17,7 @@ from apps.payroll.tests.conftest import (
     db_lesson,
     db_marker,
     db_orphan,
+    db_personal,
     db_version,
     recalc_group,
 )
@@ -101,10 +102,9 @@ def test_recalculate_penalty_by_msk_day(db_school):
 
 
 def test_recalculate_personal_rate_only_for_its_teacher(db_school):
-    from apps.payroll.models import Payroll, PersonalRate
+    from apps.payroll.models import Payroll
     db_version(datetime.date(2026, 6, 1))
-    PersonalRate.objects.create(teacher=db_school['t2'], group=db_school['group'],
-                                kind='fixed', value=D('900'))
+    db_personal(db_school, teacher=db_school['t2'], kind='fixed', value='900')
     own = db_lesson(db_school, datetime.date(2026, 6, 10), 1, teacher=db_school['t2'])
     other = db_lesson(db_school, datetime.date(2026, 6, 17), 2, teacher=db_school['t1'])
     recalc_group(db_school)
@@ -191,10 +191,9 @@ def test_recalculate_filters_combine(db_school):
 
 
 def test_recalculate_cancellation_created_with_marker_teacher(db_school):
-    from apps.payroll.models import CancellationPay, PersonalRate
+    from apps.payroll.models import CancellationPay
     db_version(datetime.date(2026, 6, 1), db_school['direction'], D('500'))
-    PersonalRate.objects.create(teacher=db_school['t2'], group=db_school['group'],
-                                kind='plus_percent', value=D('20'))
+    db_personal(db_school, teacher=db_school['t2'], kind='plus_percent', value='20')
     marker = db_marker(db_school, datetime.date(2026, 6, 10), teacher=db_school['t2'])
     stats = recalculate(marker_ids=[marker.id])
     assert (stats['lessons'], stats['cancellations'], stats['created']) == (0, 1, 1)
@@ -443,10 +442,8 @@ def test_recalculate_ignores_non_marker_planned_lessons(db_school):
 
 
 def test_recalculate_query_count_does_not_grow(db_school, django_assert_max_num_queries):
-    from apps.payroll.models import PersonalRate
     db_version(datetime.date(2026, 6, 1), db_school['direction'], D('500'))
-    PersonalRate.objects.create(teacher=db_school['t1'], group=db_school['group'],
-                                kind='plus_fixed', value=D('100'))
+    db_personal(db_school, teacher=db_school['t1'], kind='plus_fixed', value='100')
     for i in range(30):
         db_lesson(db_school, datetime.date(2026, 6, 1) + datetime.timedelta(days=i), i + 1)
         db_marker(db_school, datetime.date(2026, 6, 1) + datetime.timedelta(days=i))
@@ -460,10 +457,9 @@ def test_substitute_on_cancelled_marker_moves_pay(db_school):
     # Замену поставили на уже отменённое занятие: начисление уходит заменяющему
     # (эффективный преподаватель) по его персональной ставке. Ручная сумма
     # исходного преподавателя к заменяющему не переходит — правка снимается.
-    from apps.payroll.models import CancellationPay, PersonalRate
+    from apps.payroll.models import CancellationPay
     db_version(datetime.date(2026, 6, 1))
-    PersonalRate.objects.create(teacher=db_school['t2'], group=db_school['group'],
-                                kind='fixed', value=D('1000'))
+    db_personal(db_school, teacher=db_school['t2'], kind='fixed', value='1000')
     marker = db_marker(db_school, datetime.date(2026, 6, 10))
     recalculate(marker_ids=[marker.id])
     CancellationPay.objects.filter(planned_lesson=marker).update(
@@ -478,11 +474,11 @@ def test_substitute_on_cancelled_marker_moves_pay(db_school):
 
 
 def test_rule_note_has_no_personal_data(db_school):
-    from apps.payroll.models import CancellationPay, Payroll, PersonalRate
+    from apps.payroll.models import CancellationPay, Payroll
     db_version(datetime.date(2026, 6, 1), db_school['direction'], D('500'),
                penalty_enabled=True, penalty_amount=D('40'))
-    PersonalRate.objects.create(teacher=db_school['t1'], group=db_school['group'],
-                                kind='plus_fixed', value=D('100'), note='Пометка про Иванова')
+    db_personal(db_school, teacher=db_school['t1'], kind='plus_fixed', value='100',
+                note='Пометка про Иванова')
     lesson = db_lesson(db_school, datetime.date(2026, 6, 10), 1,
                         submitted_at=datetime.datetime(2026, 6, 12, 9, 0, tzinfo=UTC))
     db_marker(db_school, datetime.date(2026, 6, 17))

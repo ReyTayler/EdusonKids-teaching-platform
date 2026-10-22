@@ -711,6 +711,8 @@ export interface RateVersion {
   created_by_name: string | null;
   created_at: string;
   directions: RateVersionDirection[];
+  /** Править и удалять можно только версии, которые ещё не начали действовать. */
+  editable: boolean;
 }
 
 export interface RateVersionsResponse {
@@ -752,7 +754,33 @@ export interface PersonalRate {
   note: string;
   created_by_name: string | null;
   created_at: string;
+  /** Группу сейчас ведёт другой преподаватель (ставка осталась от прежнего). */
+  group_teacher_id: ID | null;
+  group_of_other_teacher: boolean;
+  /** Выключенная ставка не действует с сегодняшнего дня. */
+  is_active: boolean;
+  term_id: ID;
+  /** Начало текущего (у выключенной — последнего) периода; null — с начала. */
+  valid_from: string | null;
+  /** Конец периода (не включительно); null — бессрочно. */
+  valid_until: string | null;
+  /** История периодов, от старых к новым. */
+  terms: PersonalRateTerm[];
 }
+
+export interface PersonalRateTerm {
+  id: ID;
+  valid_from: string | null;
+  valid_until: string | null;
+  lesson_from: string | null;
+  lesson_to: string | null;
+  kind: PersonalRateKind;
+  value: string;
+}
+
+/** Правка ставки: преподаватель и группа не меняются, шлются только параметры и примечание. */
+export type PersonalRateUpdatePayload =
+  Partial<Pick<PersonalRatePayload, 'lesson_from' | 'lesson_to' | 'kind' | 'value' | 'note'>>;
 
 export interface PersonalRatePayload {
   teacher_id: ID;

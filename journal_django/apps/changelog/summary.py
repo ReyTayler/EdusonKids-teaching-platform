@@ -176,6 +176,7 @@ _ENTITY_RU = {
     'lesson_feedback': 'Отзыв по уроку',
     'pay_rate_version': 'Ставки школы', 'pay_rate_direction': 'Ставки направления',
     'personal_rate': 'Персональная ставка', 'cancellation_pay': 'Начисление за отмену',
+    'personal_rate_term': 'Период персональной ставки',
 }
 
 
@@ -241,6 +242,8 @@ FIELD_RU = {
     'penalty_amount': 'размер штрафа',
     'version_id': 'версия ставок', 'planned_lesson_id': 'занятие',
     'lesson_from': 'с урока', 'lesson_to': 'по урок', 'kind': 'вид', 'value': 'значение',
+    'valid_from': 'действует с', 'valid_until': 'действует до (не включительно)',
+    'is_active': 'включена', 'deleted_at': 'удалена', 'rate_id': 'персональная ставка',
     'created_by_id': 'кто создал',
 }
 

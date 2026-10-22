@@ -68,9 +68,19 @@ export function PersonalRateDialog({ editing, onClose }: Props) {
   };
 
   const pending = create.isPending || update.isPending;
+  // Выключенная ставка: уроки, вид и значение править нельзя (сервер ответит 400) — только примечание.
+  const locked = !!editing && !editing.is_active;
 
   const submit = () => {
     const fields: Record<string, string> = {};
+    if (editing && locked) {
+      // Только примечание: период не создаётся, параметры не шлём.
+      update.mutate({ id: editing.id, body: { note: note.trim() } }, {
+        onSuccess: (res) => { toast(savedMessage(res.recalculated), 'ok'); onClose(); },
+        onError: (e) => setErrors(parseServerErrors(e, FIELDS)),
+      });
+      return;
+    }
     if (!teacherId) fields.teacher_id = 'Выберите преподавателя';
     if (!groupId) fields.group_id = 'Выберите группу';
     if (!norm(value)) fields.value = 'Укажите значение';
@@ -78,21 +88,21 @@ export function PersonalRateDialog({ editing, onClose }: Props) {
     if (!allLessons && !norm(to)) fields.lesson_to = 'Укажите урок';
     if (Object.keys(fields).length) { setErrors({ fields, directions: {}, general: '' }); return; }
 
-    const body: PersonalRatePayload = {
-      teacher_id: Number(teacherId),
-      group_id: Number(groupId),
+    // Правка: преподаватель и группа не меняются, на сервер идут только параметры и примечание.
+    const params: Omit<PersonalRatePayload, 'teacher_id' | 'group_id'> = {
       lesson_from: allLessons ? null : norm(from),
       lesson_to: allLessons ? null : norm(to),
       kind,
       value: norm(value),
       note: note.trim(),
     };
+    const body: PersonalRatePayload = { teacher_id: Number(teacherId), group_id: Number(groupId), ...params };
     const onSuccess = (res: { recalculated?: number }) => {
       toast(savedMessage(res.recalculated), 'ok');
       onClose();
     };
     const onError = (e: unknown) => setErrors(parseServerErrors(e, FIELDS));
-    if (editing) update.mutate({ id: editing.id, body }, { onSuccess, onError });
+    if (editing) update.mutate({ id: editing.id, body: params }, { onSuccess, onError });
     else create.mutate(body, { onSuccess, onError });
   };
 
@@ -114,37 +124,59 @@ export function PersonalRateDialog({ editing, onClose }: Props) {
       <div className="modal-form">
         {errors.general && <div className="field-error">{errors.general}</div>}
 
-        <Field label="Преподаватель" required error={fe.teacher_id} full>
-          <Combobox value={teacherId} options={teacherOptions} placeholder="Выберите преподавателя"
-            aria-label="Преподаватель" onChange={pickTeacher} />
-        </Field>
-        <Field label="Группа" required error={fe.group_id} full>
-          <Combobox value={groupId} options={groupOptions}
-            placeholder={teacherId ? 'Выберите группу преподавателя' : 'Сначала выберите преподавателя'}
-            aria-label="Группа" onChange={setGroupId} />
-        </Field>
+        {editing ? (
+          <>
+            <p className="field-hint">
+              Изменения действуют с сегодняшнего дня, прошлые начисления не меняются.
+            </p>
+            <Field label="Преподаватель" full>
+              <TextInput value={editing.teacher_name} readOnly disabled aria-label="Преподаватель" />
+            </Field>
+            <Field label="Группа" full>
+              <TextInput value={editing.group_name} readOnly disabled aria-label="Группа" />
+            </Field>
+            {locked && (
+              <p className="field-hint field-hint--warn">
+                Ставка выключена. Включите её переключателем в списке, чтобы изменить уроки, вид или значение;
+                здесь можно поправить только примечание.
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <Field label="Преподаватель" required error={fe.teacher_id} full>
+              <Combobox value={teacherId} options={teacherOptions} placeholder="Выберите преподавателя"
+                aria-label="Преподаватель" onChange={pickTeacher} />
+            </Field>
+            <Field label="Группа" required error={fe.group_id} full>
+              <Combobox value={groupId} options={groupOptions}
+                placeholder={teacherId ? 'Выберите группу преподавателя' : 'Сначала выберите преподавателя'}
+                aria-label="Группа" onChange={setGroupId} />
+            </Field>
+          </>
+        )}
 
         <div className="settings-block">
-          <Checkbox label="Все уроки группы" checked={allLessons}
+          <Checkbox label="Все уроки группы" checked={allLessons} disabled={locked}
             onChange={(e) => setAllLessons(e.target.checked)} />
           {!allLessons && (
             <div className="settings-inline">
               <Field label="С урока" required error={fe.lesson_from}>
-                <NumberInput min={0.5} step="0.5" value={from} onChange={(e) => setFrom(e.target.value)} />
+                <NumberInput min={0.5} step="0.5" value={from} disabled={locked} onChange={(e) => setFrom(e.target.value)} />
               </Field>
               <Field label="По урок" required error={fe.lesson_to}>
-                <NumberInput min={0.5} step="0.5" value={to} onChange={(e) => setTo(e.target.value)} />
+                <NumberInput min={0.5} step="0.5" value={to} disabled={locked} onChange={(e) => setTo(e.target.value)} />
               </Field>
             </div>
           )}
         </div>
 
         <Field label="Вид" required error={fe.kind}>
-          <SelectInput options={KIND_OPTIONS} value={kind}
+          <SelectInput options={KIND_OPTIONS} value={kind} disabled={locked}
             onChange={(e) => setKind(e.target.value as PersonalRateKind)} />
         </Field>
         <Field label={kind === 'plus_percent' ? 'Значение, %' : 'Значение, ₽'} required error={fe.value}>
-          <NumberInput min={0} step="0.01" value={value} onChange={(e) => setValue(e.target.value)} />
+          <NumberInput min={0} step="0.01" value={value} disabled={locked} onChange={(e) => setValue(e.target.value)} />
         </Field>
         <Field label="Примечание" error={fe.note} full>
           <TextInput value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />

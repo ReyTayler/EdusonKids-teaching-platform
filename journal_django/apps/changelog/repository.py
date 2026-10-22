@@ -119,16 +119,18 @@ def get_operation(context_id) -> Optional[dict]:
                 'pgh_data', 'pgh_diff')
     )
     has_forbidden = False
+    forbidden_entities: list[str] = []
     if not ev_rows:
         revertable = False
     # Один набор bulk-имён на всю операцию — и для summary, и для описаний событий.
     lookups = _build_lookups(ev_rows)
     for ev in ev_rows:
         cfg = registry.TRACKED.get(ev['pgh_obj_model'])
+        ev['entity'] = registry.entity_of(ev['pgh_obj_model']) or ev['pgh_obj_model']
         if cfg is None or not cfg.revertable:
             revertable = False
             has_forbidden = True
-        ev['entity'] = registry.entity_of(ev['pgh_obj_model']) or ev['pgh_obj_model']
+            forbidden_entities.append(ev['entity'])
         human = humanize.humanize_event(ev, lookups)
         events.append({
             'model': ev['pgh_obj_model'],
@@ -158,7 +160,7 @@ def get_operation(context_id) -> Optional[dict]:
         'reverted': reverted,
         'not_revertable_reason': humanize.not_revertable_reason(
             has_events=bool(ev_rows), has_forbidden=has_forbidden,
-            is_revert=is_revert, reverted=reverted,
+            is_revert=is_revert, reverted=reverted, forbidden_entities=forbidden_entities,
         ),
         'events': events,
     }

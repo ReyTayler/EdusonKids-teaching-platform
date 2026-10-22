@@ -177,3 +177,13 @@ def test_rate_version_changes_money_vs_percent():
     assert changes['ставка группового'] == (f'800{_N}₽', f'900{_N}₽')
     assert '₽' not in changes['размер оплаты отмены'][1]
     assert changes['оплата отмены'] == ('Фиксированная сумма', 'Процент от ставки')
+
+
+def test_not_revertable_reason_names_forbidden_entities():
+    """Причина называет реальные неоткатываемые данные, а не всегда «учётки»."""
+    reason = humanize.not_revertable_reason(
+        has_events=True, has_forbidden=True, is_revert=False, reverted=False,
+        forbidden_entities=['personal_rate', 'personal_rate_term', 'personal_rate'],
+    )
+    assert reason == ('она затрагивает неоткатываемые данные '
+                      '(персональные ставки, периоды персональных ставок)')

@@ -58,6 +58,7 @@ _TITLE_FK_FIELDS = {
     'attendance':     {'student_id', 'lesson_id'},
     'lesson_feedback': {'group_id'},
     'personal_rate':   {'teacher_id', 'group_id'},
+    'personal_rate_term': {'teacher_id', 'group_id'},
     'cancellation_pay': {'teacher_id', 'group_id'},
     'pay_rate_direction': {'direction_id'},
 }
@@ -221,6 +222,11 @@ def humanize_title(ev: dict, lk: summary.Lookups) -> str:
     if entity == 'personal_rate':
         return (f'Персональная ставка {lk.teacher(data.get("teacher_id"))}'
                 f' — {lk.group(data.get("group_id"))}')
+    if entity == 'personal_rate_term':
+        start = data.get('valid_from')
+        since = f' с {_fmt_date(start)}' if start else ''
+        return (f'Период персональной ставки {lk.teacher(data.get("teacher_id"))}'
+                f' — {lk.group(data.get("group_id"))}{since}')
     if entity == 'lesson_feedback':
         return f'Отзыв по уроку — {lk.group(data.get("group_id"))}, {data.get("lesson_date")}'
     if entity == 'schedule_slot':
@@ -327,19 +333,36 @@ def humanize_event(ev: dict, lk: summary.Lookups) -> dict:
 # Причина неоткатываемости (для верхнего уровня деталей операции)
 # ---------------------------------------------------------------------------
 
+# Неоткатываемые сущности (registry: revertable=False) — во множественном числе
+# для причины «затрагивает неоткатываемые данные (…)».
+FORBIDDEN_RU = {
+    'account': 'учётки',
+    'notification_settings': 'настройки уведомлений',
+    'telegram_recipient': 'получатели в Telegram',
+    'pay_rate_version': 'ставки школы',
+    'pay_rate_direction': 'ставки направлений',
+    'personal_rate': 'персональные ставки',
+    'personal_rate_term': 'периоды персональных ставок',
+}
+
+
 def not_revertable_reason(*, has_events: bool, has_forbidden: bool,
-                          is_revert: bool, reverted: bool) -> Optional[str]:
+                          is_revert: bool, reverted: bool,
+                          forbidden_entities=()) -> Optional[str]:
     """
     Причина, почему операция не откатывается, либо None (если откат доступен).
 
     Возвращается придаточным-фрагментом: фронт показывает его в шаблоне
     «Эта операция не может быть отменена: {reason}.» (без точки в самом тексте).
     Смысл согласован с RevertForbidden-сообщениями revert.py.
+    forbidden_entities — сущности, из-за которых откат запрещён (по порядку
+    появления в операции); без них — прежняя подпись про учётки.
     """
     if not has_events:
         return 'она не содержит изменений данных'
     if has_forbidden:
-        return 'она затрагивает неоткатываемые данные (учётки)'
+        names = list(dict.fromkeys(FORBIDDEN_RU.get(e, e) for e in forbidden_entities))
+        return f'она затрагивает неоткатываемые данные ({", ".join(names) or "учётки"})'
     if is_revert:
         return 'операции отката не откатываются'
     if reverted:

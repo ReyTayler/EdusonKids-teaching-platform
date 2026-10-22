@@ -178,8 +178,11 @@ def revert_context(context_id) -> dict:
         ml for ml, _ in events if not registry.TRACKED[ml].revertable
     })
     if forbidden:
+        # Текст — для человека (тост на фронте): русские подписи сущностей.
+        from apps.changelog.humanize import FORBIDDEN_RU
+        names = [FORBIDDEN_RU.get(registry.TRACKED[ml].entity, ml) for ml in forbidden]
         raise RevertForbidden(
-            'Откат недоступен: операция затрагивает ' + ', '.join(forbidden),
+            'Откат недоступен: операция затрагивает ' + ', '.join(names),
         )
 
     inserts = [(ml, ev) for ml, ev in events if ev.pgh_label == 'insert']

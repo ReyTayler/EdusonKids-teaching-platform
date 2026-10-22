@@ -1,5 +1,5 @@
 import { ApiError } from '../../lib/api';
-import { fmtRub } from '../../lib/format';
+import { fmtDate, fmtRub, todayMSK } from '../../lib/format';
 import { PENALTY_MODE_LABELS } from '../../lib/labels';
 import type { PersonalRate, RateVersion } from '../../lib/types';
 
@@ -105,3 +105,14 @@ export const norm = (s: string): string => s.trim();
 /** Число из строки Decimal без хвоста нулей для поля ввода: '600.00' -> '600'. */
 export const toField = (v: string | null | undefined): string =>
   (v == null || v === '' ? '' : String(Number(v)));
+
+/** Начало/конец периода ставки: null в начале — «с начала», null в конце — бессрочно. */
+export function periodText(from: string | null, until: string | null): string {
+  const start = from ? `с ${fmtDate(from)}` : 'с начала';
+  return until ? `${start} по ${fmtDate(addDaysISO(until, -1))}` : start;
+}
+
+/** Тост после включения/выключения: ставка действует с сегодняшнего дня. */
+export function toggleMessage(active: boolean, recalculated: number | undefined): string {
+  return `Ставка ${active ? 'включена' : 'выключена'} с ${fmtDate(todayMSK())}. ${savedMessage(recalculated)}`;
+}

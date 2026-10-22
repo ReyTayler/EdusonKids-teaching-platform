@@ -25,6 +25,7 @@ from apps.payroll.models import (
     PayRateVersion,
     Payroll,
     PersonalRate,
+    PersonalRateTerm,
 )
 
 pytestmark = pytest.mark.django_db
@@ -152,31 +153,50 @@ def test_direction_rows_cascade_with_version(school):
 
 
 # ---------------------------------------------------------------------------
-# PersonalRate
+# PersonalRate + PersonalRateTerm (поправка §8: параметры — в периодах)
 # ---------------------------------------------------------------------------
 
-def _personal(school, **overrides) -> PersonalRate:
+def _personal(school, *, valid_from=None, valid_until=None, **overrides) -> PersonalRate:
+    """Ставка с одним периодом; overrides — параметры периода и пара."""
+    teacher_id = overrides.pop('teacher_id', school['teacher_id'])
+    group_id = overrides.pop('group_id', school['group_id'])
+    rate = PersonalRate.objects.create(teacher_id=teacher_id, group_id=group_id)
+    _term(rate, valid_from=valid_from, valid_until=valid_until, **overrides)
+    return rate
+
+
+def _term(rate, **overrides) -> PersonalRateTerm:
     fields = {
-        'teacher_id': school['teacher_id'],
-        'group_id': school['group_id'],
-        'kind': PersonalRate.Kind.FIXED,
-        'value': Decimal('1200.00'),
+        'rate': rate, 'teacher_id': rate.teacher_id, 'group_id': rate.group_id,
+        'kind': PersonalRateTerm.Kind.FIXED, 'value': Decimal('1200.00'),
     }
     fields.update(overrides)
-    return PersonalRate.objects.create(**fields)
+    return PersonalRateTerm.objects.create(**fields)
 
 
-def test_personal_rate_all_lessons(school):
+def test_personal_rate_defaults(school):
     r = _personal(school)
     r.refresh_from_db()
-    assert r.lesson_from is None and r.lesson_to is None
-    assert r.note == ''
+    assert (r.note, r.is_active, r.deleted_at) == ('', True, None)
+    term = r.terms.get()
+    assert term.lesson_from is None and term.lesson_to is None
+    assert term.valid_from is None and term.valid_until is None
+
+
+def test_personal_rate_is_active_has_db_default(school):
+    """is_active NOT NULL c DEFAULT true в самой БД: строки, существовавшие до
+    миграции 0008, и INSERT без этой колонки получают «включена»."""
+    with connection.cursor() as cur:
+        cur.execute('INSERT INTO payroll_personal_rates (teacher_id, group_id, note, created_at) '
+                    'VALUES (%s, %s, %s, now()) RETURNING is_active',
+                    [school['teacher_id'], school['group_id'], ''])
+        assert cur.fetchone()[0] is True
 
 
 def test_personal_rate_range_ok_including_single_lesson(school):
     r = _personal(school, lesson_from=Decimal('10'), lesson_to=Decimal('15.5'))
-    r.refresh_from_db()
-    assert (r.lesson_from, r.lesson_to) == (Decimal('10.0'), Decimal('15.5'))
+    term = r.terms.get()
+    assert (term.lesson_from, term.lesson_to) == (Decimal('10.0'), Decimal('15.5'))
     # Диапазон из одного урока (from == to) — допустим.
     assert _personal(school, lesson_from=Decimal('3'), lesson_to=Decimal('3')).pk
 
@@ -199,6 +219,14 @@ def test_personal_rate_negative_from_rejected(school):
                        lesson_from=Decimal('-1'), lesson_to=Decimal('2'))
 
 
+def test_personal_term_period_inverted_rejected_empty_allowed(school):
+    d = datetime.date
+    _assert_db_rejects(_personal, school=school,
+                       valid_from=d(2031, 3, 10), valid_until=d(2031, 3, 9))
+    # Пустой период — параметры ставки, выключенной в день создания.
+    assert _personal(school, valid_from=d(2031, 3, 10), valid_until=d(2031, 3, 10)).pk
+
+
 def test_personal_rate_deleted_with_group(school):
     from apps.groups.models import Group
     group = Group.objects.create(
@@ -210,6 +238,7 @@ def test_personal_rate_deleted_with_group(school):
     rate = _personal(school, group_id=group.pk)
     group.delete()
     assert not PersonalRate.objects.filter(pk=rate.pk).exists()
+    assert not PersonalRateTerm.objects.filter(rate_id=rate.pk).exists()
 
 
 def test_personal_rate_deleted_with_teacher(school):
@@ -220,6 +249,7 @@ def test_personal_rate_deleted_with_teacher(school):
     rate = _personal(school, teacher_id=teacher.pk)
     teacher.delete()
     assert not PersonalRate.objects.filter(pk=rate.pk).exists()
+    assert not PersonalRateTerm.objects.filter(rate_id=rate.pk).exists()
 
 
 def test_personal_rate_negative_value_and_unknown_kind_rejected(school):

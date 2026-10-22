@@ -119,7 +119,9 @@ class RateVersionWriteSerializer(serializers.Serializer):
 
 
 class PersonalRateWriteSerializer(serializers.Serializer):
-    """Вход POST/PATCH персональной ставки. PATCH — partial=True, instance — текущая."""
+    """Вход POST/PATCH персональной ставки. PATCH — partial=True, instance —
+    текущее состояние ставки (motivation.personal_rate_state): пара
+    преподаватель × группа и параметры текущего (последнего) периода."""
 
     teacher_id = serializers.IntegerField(min_value=1)
     group_id = serializers.IntegerField(min_value=1)
@@ -146,30 +148,33 @@ class PersonalRateWriteSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         inst = self.instance
+        if inst is not None:
+            # Пара неизменна (§8): история периодов относится к ней, у другой
+            # пары другой смысл — для неё заводят новую ставку.
+            for name in ('teacher_id', 'group_id'):
+                if name in attrs and attrs[name] != inst[name]:
+                    raise serializers.ValidationError({name: [motivation.PAIR_IMMUTABLE]})
+                attrs.pop(name, None)
         # При partial default=None не подставляется — берём текущие значения.
-        lesson_from = attrs['lesson_from'] if 'lesson_from' in attrs else getattr(
-            inst, 'lesson_from', None)
-        lesson_to = attrs['lesson_to'] if 'lesson_to' in attrs else getattr(
-            inst, 'lesson_to', None)
+        lesson_from = attrs['lesson_from'] if 'lesson_from' in attrs else (
+            inst['lesson_from'] if inst else None)
+        lesson_to = attrs['lesson_to'] if 'lesson_to' in attrs else (
+            inst['lesson_to'] if inst else None)
         if (lesson_from is None) != (lesson_to is None):
             raise serializers.ValidationError({'lesson_to': [motivation.RANGE_BOTH_OR_NONE]})
         if lesson_from is not None and lesson_from > lesson_to:
             raise serializers.ValidationError({'lesson_to': [motivation.RANGE_ORDER]})
-        self._check_group_of_teacher(attrs)
+        if inst is None:
+            self._check_group_of_teacher(attrs)
         return attrs
 
     def _check_group_of_teacher(self, attrs):
-        """Персональная ставка — только в группе, которую ведёт преподаватель
+        """Новая персональная ставка — только в группе, которую ведёт преподаватель
         (решение владельца 2026-10-21; фронт сужает список, это — авторитетная
-        проверка). При правке проверяется, только если меняется преподаватель или
-        группа: ставка, чью группу позже передали другому, правится как есть."""
+        проверка). Ставку, чью группу позже передали другому, можно править,
+        выключать и включать — список помечает её group_of_other_teacher."""
         from apps.groups.models import Group
-        inst = self.instance
-        teacher_id = attrs.get('teacher_id', getattr(inst, 'teacher_id', None))
-        group_id = attrs.get('group_id', getattr(inst, 'group_id', None))
-        if inst is not None and teacher_id == inst.teacher_id and group_id == inst.group_id:
-            return
-        if not Group.objects.filter(id=group_id, teacher_id=teacher_id).exists():
+        if not Group.objects.filter(id=attrs['group_id'], teacher_id=attrs['teacher_id']).exists():
             raise serializers.ValidationError({'group_id': [motivation.GROUP_NOT_OF_TEACHER]})
 
 

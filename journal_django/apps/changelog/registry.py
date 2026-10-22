@@ -63,9 +63,16 @@ TRACKED: dict[str, TrackedModel] = {
     # «Мотивация» (спека 2026-10-20): ставки школы → ставки направлений версии;
     # персональные ставки после групп (20); начисление за отмену — после маркера
     # отмены (planned_lesson, 30), как Payroll после урока.
-    'payroll.PayRateVersion':         TrackedModel('pay_rate_version', True, 10),
-    'payroll.PayRateDirection':       TrackedModel('pay_rate_direction', True, 15),
-    'payroll.PersonalRate':           TrackedModel('personal_rate', True, 30),
+    # Ставки НЕ откатываются (решение координатора 2026-10-22): откат вернул бы
+    # прошлые параметры задним числом мимо правил §8 («изменения ставок не
+    # меняют прошлое») и мимо прав — откатывает admin, а ставки правит только
+    # superadmin; пересчёт начислений откат к тому же не запускает. История
+    # остаётся видна, изменить ставку — только через «Мотивацию».
+    'payroll.PayRateVersion':         TrackedModel('pay_rate_version', False, 10),
+    'payroll.PayRateDirection':       TrackedModel('pay_rate_direction', False, 15),
+    'payroll.PersonalRate':           TrackedModel('personal_rate', False, 30),
+    # Период персональной ставки (поправка §8) — после самой ставки (30).
+    'payroll.PersonalRateTerm':       TrackedModel('personal_rate_term', False, 35),
     'payroll.CancellationPay':        TrackedModel('cancellation_pay', True, 50),
     # renewals: справочники воронки → сделки → активность (лог, не откатываем)
     'renewals.RenewalPipeline':       TrackedModel('renewal_pipeline', True, 20),

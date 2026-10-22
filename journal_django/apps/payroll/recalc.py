@@ -73,13 +73,18 @@ def load_rate_cards() -> list[RateCard]:
 
 
 def _load_personal(group_ids: set[int]) -> dict[int, list[PersonalRateInput]]:
-    """Персональные ставки групп пересчёта одним запросом, по группам."""
-    from apps.payroll.models import PersonalRate
+    """Периоды персональных ставок групп пересчёта одним запросом, по группам.
+
+    Все периоды, включая закрытые и периоды выключенных/удалённых ставок: какой
+    действует на дату занятия, решает движок (PersonalRateInput.covers) — так
+    прошлое считается по тем параметрам, что действовали тогда (поправка §8)."""
+    from apps.payroll.models import PersonalRateTerm
     by_group: dict[int, list[PersonalRateInput]] = {}
     if not group_ids:
         return by_group
-    for row in PersonalRate.objects.filter(group_id__in=group_ids).values(
-            'teacher_id', 'group_id', 'lesson_from', 'lesson_to', 'kind', 'value'):
+    for row in PersonalRateTerm.objects.filter(group_id__in=group_ids).values(
+            'teacher_id', 'group_id', 'lesson_from', 'lesson_to', 'kind', 'value',
+            'valid_from', 'valid_until'):
         by_group.setdefault(row['group_id'], []).append(PersonalRateInput(**row))
     return by_group
 
@@ -316,7 +321,8 @@ def _bind_by_day(unbound: list[dict], orphans: dict[tuple, list], current_by_mar
 
 def recalculate(*, lesson_ids=None, marker_ids=None, group_ids=None,
                 date_from: datetime.date | None = None,
-                date_to: datetime.date | None = None) -> dict:
+                date_to: datetime.date | None = None,
+                today: datetime.date | None = None) -> dict:
     """
     Пересчитать начисления за уроки и отмены. Фильтры комбинируются через AND;
     без фильтров — вся история.
@@ -330,13 +336,17 @@ def recalculate(*, lesson_ids=None, marker_ids=None, group_ids=None,
     охвата при любом пересчёте: group_ids, а при lesson_ids/marker_ids — группы
     этих строк; в пределах date_from/date_to. Прошлые сироты не трогаются.
 
+    today — «сегодня» по МСК вызывающей операции (мутации ставок читают его один
+    раз под своим локом): граница «прошлые / будущие сироты» тогда совпадает с
+    границей самой операции и через полночь не расходится. None — msk_now().
+
     Возвращает {'lessons', 'cancellations', 'created', 'updated', 'deleted',
     'changed'}: lessons/cancellations — сколько уроков и маркеров рассмотрено;
     created/updated/deleted — строк Payroll + CancellationPay; changed — их сумма.
     """
     return _run(
         lesson_ids=lesson_ids, marker_ids=marker_ids, group_ids=group_ids,
-        date_from=date_from, date_to=date_to,
+        date_from=date_from, date_to=date_to, today=today,
         with_lessons=not (lesson_ids is None and marker_ids is not None),
         with_markers=not (marker_ids is None and lesson_ids is not None),
     )
@@ -365,14 +375,16 @@ def recalculate_cancellations(*, marker_ids=None, group_ids=None,
 
 
 def _run(*, lesson_ids, marker_ids, group_ids, date_from, date_to,
-         with_lessons: bool, with_markers: bool, from_today: bool = False) -> dict:
+         with_lessons: bool, with_markers: bool, from_today: bool = False,
+         today: datetime.date | None = None) -> dict:
     from apps.lessons.models import Lesson
     from apps.payroll.models import CancellationPay
 
     by_ids = lesson_ids is not None or marker_ids is not None
     # Одно «сегодня» на весь пересчёт: иначе на границе суток выборка сирот и
     # их удаление разошлись бы.
-    today = msk_now().date()
+    if today is None:
+        today = msk_now().date()
     if from_today:
         date_from = today
 

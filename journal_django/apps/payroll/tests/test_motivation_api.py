@@ -15,12 +15,20 @@ import datetime
 from decimal import Decimal
 
 import pytest
+from django.utils import timezone
 
+from apps.core.utils.dates import msk_now
 from apps.groups.models import Group
 from apps.payroll import motivation
-from apps.payroll.models import CancellationPay, Payroll, PayRateVersion, PersonalRate
+from apps.payroll.models import (
+    CancellationPay,
+    Payroll,
+    PayRateVersion,
+    PersonalRate,
+    PersonalRateTerm,
+)
 from apps.payroll.tests.conftest import (  # noqa: F401 — фикстура db_school
-    D, db_lesson, db_marker, db_school, db_version, recalc_group,
+    D, db_lesson, db_marker, db_personal, db_school, db_version, recalc_group,
 )
 from conftest import make_auth_client
 
@@ -68,6 +76,7 @@ _ENDPOINTS = [
     ('patch', f'{VERSIONS}/1'), ('delete', f'{VERSIONS}/1'),
     ('get', PERSONAL), ('post', PERSONAL),
     ('patch', f'{PERSONAL}/1'), ('delete', f'{PERSONAL}/1'),
+    ('post', f'{PERSONAL}/1/deactivate'), ('post', f'{PERSONAL}/1/activate'),
     ('post', f'{BASE}/1/reset'),
     ('patch', f'{BASE}/cancellations/1'), ('post', f'{BASE}/cancellations/1/reset'),
 ]
@@ -340,27 +349,41 @@ def test_personal_rate_delete_recalculates_back(motivation_admin_client, db_scho
 
     assert resp.json() == {'recalculated': 1}
     assert _payment(lesson) == D('600.00')
-    assert not PersonalRate.objects.filter(id=rate_id).exists()
+    # Мягкое удаление (§8): строка и её периоды остаются — по ним считано прошлое.
+    rate = PersonalRate.objects.get(id=rate_id)
+    assert rate.deleted_at is not None and rate.is_active is False
+    assert rate.terms.get().valid_until == msk_now().date()
+    assert rate_id not in {r['id'] for r in motivation_admin_client.get(PERSONAL).json()['rows']}
 
 
-def test_personal_rate_patch_group_recalculates_both(motivation_admin_client, db_school):
-    from apps.groups.models import Group
-    from django.utils import timezone
-    db_version(d(2031, 1, 1))
-    other = Group.objects.create(
-        name='Тест Движок Группа 2', direction=db_school['direction'], teacher=db_school['t1'],
+@pytest.mark.parametrize('field', ['teacher_id', 'group_id'])
+def test_personal_rate_patch_pair_rejected(motivation_admin_client, db_school, field):
+    """Пара преподаватель × группа неизменна: у истории периодов другой смысл (§8)."""
+    other_group = Group.objects.create(
+        name='Тест Движок Группа 2', direction=db_school['direction'], teacher=db_school['t2'],
         is_individual=False, lesson_duration_minutes=90, active=True, created_at=timezone.now())
-    lesson = db_lesson(db_school, d(2031, 3, 2), 1)
     rate_id = motivation_admin_client.post(PERSONAL, _personal_body(db_school),
-                                     format='json').json()['id']
-    assert _payment(lesson) == D('1000.00')
+                                           format='json').json()['id']
+    new_value = {'teacher_id': db_school['t2'].id, 'group_id': other_group.id}[field]
 
-    resp = motivation_admin_client.patch(f'{PERSONAL}/{rate_id}', {'group_id': other.id},
-                                   format='json')
+    resp = motivation_admin_client.patch(f'{PERSONAL}/{rate_id}', {field: new_value},
+                                         format='json')
 
+    assert resp.status_code == 400
+    assert resp.json()['details'][field] == [motivation.PAIR_IMMUTABLE]
+    rate = PersonalRate.objects.get(id=rate_id)
+    assert (rate.teacher_id, rate.group_id) == (db_school['t1'].id, db_school['group'].id)
+
+
+def test_personal_rate_patch_same_pair_ignored(motivation_admin_client, db_school):
+    """Пара прислана как есть (форма шлёт всё) — не ошибка."""
+    rate_id = motivation_admin_client.post(PERSONAL, _personal_body(db_school),
+                                           format='json').json()['id']
+    resp = motivation_admin_client.patch(f'{PERSONAL}/{rate_id}', {
+        'teacher_id': db_school['t1'].id, 'group_id': db_school['group'].id, 'value': '900'},
+        format='json')
     assert resp.status_code == 200, resp.json()
-    assert resp.json()['recalculated'] == 1
-    assert _payment(lesson) == D('600.00')
+    assert resp.json()['value'] == '900.00'
 
 
 @pytest.mark.parametrize('existing,new', [
@@ -407,7 +430,8 @@ def test_personal_rate_edit_kept_after_group_reassigned(motivation_admin_client,
     resp = motivation_admin_client.patch(f'{PERSONAL}/{rate_id}', {'value': '777'}, format='json')
 
     assert resp.status_code == 200, resp.json()
-    assert PersonalRate.objects.get(id=rate_id).value == D('777.00')
+    assert resp.json()['value'] == '777.00'
+    assert resp.json()['group_of_other_teacher'] is True
 
 
 def test_personal_rate_patch_into_overlap_rejected(motivation_admin_client, db_school):
@@ -419,7 +443,7 @@ def test_personal_rate_patch_into_overlap_rejected(motivation_admin_client, db_s
     resp = motivation_admin_client.patch(f'{PERSONAL}/{second}', {'lesson_from': '3'}, format='json')
 
     assert resp.status_code == 400
-    assert PersonalRate.objects.get(id=second).lesson_from == D('5.0')
+    assert PersonalRateTerm.objects.get(rate_id=second).lesson_from == D('5.0')
 
 
 @pytest.mark.parametrize('overrides', [
@@ -440,8 +464,7 @@ def test_personal_rates_list_filter_sort_paginate(motivation_admin_client, db_sc
         motivation_admin_client.post(PERSONAL, _personal_body(
             db_school, lesson_from=lesson_from, lesson_to=lesson_to), format='json')
     # Ставка t2 в группе t1 через API теперь невозможна — заводим как старую запись.
-    PersonalRate.objects.create(teacher=db_school['t2'], group=db_school['group'],
-                                kind='fixed', value=D('100'))
+    db_personal(db_school, teacher=db_school['t2'], kind='fixed', value='100')
 
     resp = motivation_admin_client.get(PERSONAL, {'teacher': db_school['t1'].id,
                                             'sort_by': 'lesson_from', 'page_size': 2})
@@ -558,9 +581,8 @@ def _school_entries(db_school):
     db_marker(db_school, d(2031, 3, 4))
     recalc_group(db_school)
     # Ставка t1 «вместо ставки» на урок 2 — чтобы суммы различались для сортировки.
-    PersonalRate.objects.create(teacher=db_school['t1'], group=db_school['group'],
-                                lesson_from=D('2'), lesson_to=D('2'), kind='fixed',
-                                value=D('1000'))
+    db_personal(db_school, teacher=db_school['t1'], lesson_from='2', lesson_to='2',
+                kind='fixed', value='1000')
     recalc_group(db_school)
 
 
@@ -702,6 +724,8 @@ def test_lesson_card_payroll_has_rule_fields(motivation_admin_client, db_school)
     ('POST', PERSONAL, 'payroll.personal_rate_create'),
     ('PATCH', f'{PERSONAL}/3', 'payroll.personal_rate_update'),
     ('DELETE', f'{PERSONAL}/3', 'payroll.personal_rate_delete'),
+    ('POST', f'{PERSONAL}/3/deactivate', 'payroll.personal_rate_deactivate'),
+    ('POST', f'{PERSONAL}/3/activate', 'payroll.personal_rate_activate'),
     ('POST', f'{BASE}/3/reset', 'payroll.reset'),
     ('PATCH', f'{BASE}/3', 'payroll.update'),
     ('PATCH', f'{BASE}/cancellations/3', 'payroll.cancellation_update'),
@@ -772,17 +796,15 @@ def test_personal_range_check_violation_is_400_not_500(db_school):
 
 
 @pytest.mark.parametrize('first,second,constraint', [
-    ((None, None), (None, None), 'payroll_personal_rates_all_lessons_uniq'),
-    ((D('1'), D('5')), (D('4.5'), D('9')), 'payroll_personal_rates_ranges_excl'),
+    ((None, None), (None, None), 'payroll_personal_terms_all_excl'),
+    ((D('1'), D('5')), (D('4.5'), D('9')), 'payroll_personal_terms_ranges_excl'),
 ])
 def test_overlap_held_by_database(db_school, first, second, constraint):
     """Непересечение держит сама БД — и для записи мимо сервиса."""
     from django.db import IntegrityError, transaction
-    kwargs = {'teacher': db_school['t1'], 'group': db_school['group'], 'kind': 'fixed',
-              'value': D('1')}
-    PersonalRate.objects.create(lesson_from=first[0], lesson_to=first[1], **kwargs)
+    db_personal(db_school, lesson_from=first[0], lesson_to=first[1])
     with pytest.raises(IntegrityError) as exc, transaction.atomic():
-        PersonalRate.objects.create(lesson_from=second[0], lesson_to=second[1], **kwargs)
+        db_personal(db_school, lesson_from=second[0], lesson_to=second[1])
     assert exc.value.__cause__.diag.constraint_name == constraint
 
 
@@ -794,25 +816,6 @@ def test_overlap_text_names_conflicting_range(motivation_admin_client, db_school
     assert resp.status_code == 400
     assert resp.json()['details']['non_field_errors'] == [
         'Уроки 4.5–9 пересекаются с уже заданными 1–5 у этого преподавателя в этой группе.']
-
-
-def test_personal_rate_patch_teacher_recalculates(motivation_admin_client, db_school):
-    db_version(d(2031, 1, 1))
-    lesson = db_lesson(db_school, d(2031, 3, 2), 1)  # провёл t1
-    rate_id = motivation_admin_client.post(PERSONAL, _personal_body(db_school),
-                                           format='json').json()['id']
-    assert _payment(lesson) == D('1000.00')
-    # Ставку можно перевести только на преподавателя, который ведёт группу.
-    Group.objects.filter(id=db_school['group'].id).update(teacher=db_school['t2'])
-
-    resp = motivation_admin_client.patch(f'{PERSONAL}/{rate_id}',
-                                         {'teacher_id': db_school['t2'].id}, format='json')
-
-    assert resp.status_code == 200, resp.json()
-    assert resp.json()['teacher_name'] == db_school['t2'].name
-    # Ставка t2 на урок t1 не действует — урок обратно по ставке формата.
-    assert resp.json()['recalculated'] == 1
-    assert _payment(lesson) == D('600.00')
 
 
 def test_version_recalculated_counts_cancellations(motivation_admin_client, db_school):

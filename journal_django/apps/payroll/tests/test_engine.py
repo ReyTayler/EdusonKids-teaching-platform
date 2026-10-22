@@ -85,12 +85,13 @@ def _marker(**overrides) -> MarkerInput:
 
 
 def _personal(kind, value, lesson_from=None, lesson_to=None,
-              teacher_id=TEACHER, group_id=GROUP) -> PersonalRateInput:
+              teacher_id=TEACHER, group_id=GROUP, valid_from=None,
+              valid_until=None) -> PersonalRateInput:
     return PersonalRateInput(
         teacher_id=teacher_id, group_id=group_id,
         lesson_from=None if lesson_from is None else D(str(lesson_from)),
         lesson_to=None if lesson_to is None else D(str(lesson_to)),
-        kind=kind, value=D(str(value)),
+        kind=kind, value=D(str(value)), valid_from=valid_from, valid_until=valid_until,
     )
 
 
@@ -273,6 +274,37 @@ def test_cancellation_ignores_range_and_foreign_personal():
              _personal('fixed', 900, teacher_id=OTHER_TEACHER)]
     res = cancellation_pay(_marker(), _card(), rates)
     assert res.payment == D('250.00')
+
+
+# Периоды персональных ставок (поправка §8): действует период, содержащий дату
+# занятия — valid_from ≤ дата < valid_until; вне периода — ставка формата.
+_DAY = datetime.date(2026, 6, 10)
+
+
+@pytest.mark.parametrize('valid_from,valid_until,applies', [
+    (None, None, True),
+    (_DAY, None, True),                                   # начало включительно
+    (None, _DAY, False),                                  # конец НЕ включительно
+    (None, _DAY + datetime.timedelta(days=1), True),
+    (_DAY + datetime.timedelta(days=1), None, False),
+    (_DAY, _DAY, False),                                  # пустой период
+])
+def test_personal_term_period_bounds(valid_from, valid_until, applies):
+    rate = _personal('fixed', 900, valid_from=valid_from, valid_until=valid_until)
+    lesson = lesson_pay(_lesson(lesson_date=_DAY), _card(), [rate])
+    marker = cancellation_pay(_marker(scheduled_date=_DAY), _card(), [rate])
+    assert (lesson.payment == D('900.00')) is applies
+    assert (marker.payment == D('450.00')) is applies
+
+
+def test_personal_range_beats_all_lessons_only_within_dates():
+    """Диапазон побеждает «все уроки» среди периодов, действующих на дату;
+    закрытый диапазон уступает действующей «все уроки»."""
+    rates = [_personal('fixed', 900),
+             _personal('fixed', 1500, 1, 20, valid_until=_DAY)]
+    assert lesson_pay(_lesson(lesson_date=_DAY), _card(), rates).payment == D('900.00')
+    assert lesson_pay(_lesson(lesson_date=_DAY - datetime.timedelta(days=1)), _card(),
+                      rates).payment == D('1500.00')
 
 
 def test_cancellation_rounding_once():

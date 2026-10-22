@@ -13,6 +13,7 @@ import { fmtRub } from '../../lib/format';
 import type {
   CancelMode, PenaltyMode, RateVersion, RateVersionPayload, RateVersionsResponse,
 } from '../../lib/types';
+import { todayMSK } from '../../lib/format';
 import { norm, parseServerErrors, savedMessage, toField, type ServerErrors } from './motivationFormat';
 
 interface Props {
@@ -110,7 +111,8 @@ export function RateVersionDialog({ directions, base, editing, defaultDate, onCl
         {errors.general && <div className="field-error">{errors.general}</div>}
 
         <Field label="Действует с" required error={fe.effective_from} full>
-          <DateInput value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateInput value={date} min={todayMSK()} onChange={(e) => setDate(e.target.value)} />
+          <p className="field-hint">Начисления до этой даты не изменятся.</p>
         </Field>
 
         <div className="settings-block">
@@ -208,7 +210,7 @@ export function RateVersionDialog({ directions, base, editing, defaultDate, onCl
 
         {editing && (
           <p className="field-hint field-hint--warn">
-            Начисления периода, на который действует эта версия, пересчитаются.
+            Версия ещё не начала действовать, поэтому начисления за прошлое не изменятся.
           </p>
         )}
       </div>

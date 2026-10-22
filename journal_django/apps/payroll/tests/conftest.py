@@ -197,3 +197,21 @@ def db_orphan(school, day, time=datetime.time(15, 0), payment='300'):
 
 def recalc_group(school, **kwargs):
     return recalculate(group_ids=[school['group'].id], **kwargs)
+
+
+def db_personal(school, *, teacher=None, group=None, lesson_from=None, lesson_to=None,
+                kind='fixed', value='1000', note='', valid_from=None, valid_until=None,
+                is_active=True):
+    """Персональная ставка с одним периодом (по умолчанию «с начала, бессрочно» —
+    так выглядят ставки, мигрированные из времени до поправки §8)."""
+    from apps.payroll.models import PersonalRate, PersonalRateTerm
+    rate = PersonalRate.objects.create(teacher=teacher or school['t1'],
+                                       group=group or school['group'], note=note,
+                                       is_active=is_active)
+    PersonalRateTerm.objects.create(
+        rate=rate, teacher_id=rate.teacher_id, group_id=rate.group_id,
+        valid_from=valid_from, valid_until=valid_until,
+        lesson_from=None if lesson_from is None else D(str(lesson_from)),
+        lesson_to=None if lesson_to is None else D(str(lesson_to)),
+        kind=kind, value=D(str(value)))
+    return rate

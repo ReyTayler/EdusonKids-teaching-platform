@@ -50,3 +50,37 @@
 @media (max-width: 640px) {
   .settings-filters__field { width: 100%; }
 }
+
+/* Выключенная ставка: строка приглушена, но переключатель остаётся читаемым. */
+.settings-table tr.is-inactive > td:not(.settings-toggle-cell) { color: var(--text3); }
+.settings-table tr.is-inactive .dir-tag { opacity: 0.6; }
+/* 1px, а не 1%: процентная ширина в этой раскладке растягивает таблицу на тысячи пикселей (см. .col-actions). */
+.settings-toggle-cell { width: 1px; }
+
+/* Пометка «группу ведёт другой преподаватель» — компактный бейдж под названием группы. */
+.settings-flag {
+  display: inline-block;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-pill);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  white-space: normal;
+}
+.settings-group-cell { display: flex; flex-direction: column; align-items: flex-start; }
+
+/* Период и раскрывающаяся история периодов. */
+.settings-period { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.settings-link {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: var(--fs-xs); color: var(--info);
+}
+.settings-link:hover { text-decoration: underline; }
+.settings-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
+.settings-history-row > td { background: var(--bg); padding: var(--space-2) var(--space-4); }
+.settings-history { width: 100%; font-size: var(--fs-xs); }
+.settings-history th { font-weight: 600; text-align: left; color: var(--text3); padding-right: var(--space-4); }
+.settings-history td { padding-right: var(--space-4); }

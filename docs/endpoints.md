@@ -43,7 +43,7 @@
 | Метод | Путь | Назначение |
 |-------|------|------------|
 | GET | `/api/admin/changelog?page=&page_size=&filter[k]=v` | Лента операций `{rows,total,page,page_size}`; фильтры: `actor`, `operation`, `entity`, `entity_id`, `date_from`, `date_to` |
-| GET | `/api/admin/changelog/:context_id` | Детали операции: события с diff «было/стало» |
+| GET | `/api/admin/changelog/:context_id` | Детали операции: события с diff «было/стало». **Только superadmin** (IsSuperAdmin, решение владельца 2026-10-23); лента и откат — admin/superadmin |
 | POST | `/api/admin/changelog/:context_id/revert` | Откат операции целиком; 409 — конфликт (данные менялись позже), 400 — неоткатываемая (accounts/пустая); пишет `changelog_revert` в security_audit_log |
 
 ### Students (paginated)

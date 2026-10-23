@@ -144,6 +144,7 @@ RULES: list[tuple[str, re.Pattern, str]] = [
     # teacher SPA
     ('POST', re.compile(r'^/api/submitLesson$'), 'lesson.submit'),
     # auth-мутации данных (2FA-поля Account меняет сам пользователь)
+    ('POST', re.compile(r'^/api/auth/2fa/setup$'), 'account.twofa_setup'),
     ('POST', re.compile(r'^/api/auth/2fa/enable$'), 'account.twofa_enable'),
     ('POST', re.compile(r'^/api/auth/2fa/disable$'), 'account.twofa_disable'),
     ('POST', re.compile(r'^/api/auth/invite/accept$'), 'account.invite_accept'),

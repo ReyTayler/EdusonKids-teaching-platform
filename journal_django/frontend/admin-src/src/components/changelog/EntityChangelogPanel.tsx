@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useChangelogList } from '../../hooks/useChangelog';
+import { useAuth } from '../../hooks/useAuth';
+import { canOpenChangelogDetail, type Role } from '../../lib/permissions';
 import { DataTable, type Column } from '../table/DataTable';
 import { TableSkeleton } from '../ui/Skeleton';
 import { ChangelogDetailModal } from '../../pages/changelog/ChangelogDetailModal';
@@ -22,6 +24,8 @@ function buildQuery(page: number, entity: string, entityId: number): string {
 export function EntityChangelogPanel({ entity, entityId }: { entity: string; entityId: number }) {
   const [page, setPage] = useState(1);
   const [openedId, setOpenedId] = useState<string | null>(null);
+  const { me } = useAuth();
+  const canOpen = canOpenChangelogDetail(me?.role as Role);
 
   // Панель остаётся смонтированной при навигации между сущностями (Tabs
   // ключует панель по value таба «history», не по entityId) — сбрасываем
@@ -74,7 +78,7 @@ export function EntityChangelogPanel({ entity, entityId }: { entity: string; ent
         columns={columns}
         title="История изменений"
         isLoading={isFetching}
-        onRowClick={(r) => setOpenedId(r.id)}
+        onRowClick={canOpen ? (r) => setOpenedId(r.id) : undefined}
         serverPagination={{
           page,
           pageSize: PAGE_SIZE,

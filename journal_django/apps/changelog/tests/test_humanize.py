@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.changelog import humanize
+from apps.changelog import humanize, summary
 from apps.changelog.summary import Lookups
 
 _LK = Lookups(
@@ -11,7 +11,7 @@ _LK = Lookups(
     teachers={1: 'Пётр', 2: 'Мария'}, directions={5: 'Робототехника'},
 )
 
-_N = humanize._NARROW  # узкий неразрывный пробел (разделитель тысяч и перед ₽)
+_N = summary._NARROW  # узкий неразрывный пробел (разделитель тысяч и перед ₽)
 
 
 # ---------------------------------------------------------------------------

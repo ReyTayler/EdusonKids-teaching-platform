@@ -26,7 +26,6 @@ N+1 запрещён: Lookups (имена групп/учеников/препо
 from __future__ import annotations
 
 import re
-from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 from apps.changelog import registry, summary
@@ -42,7 +41,6 @@ MONEY_FIELDS = {'total_amount', 'unit_price', 'price', 'subscription_price', 'pe
 # day_of_week: конвенция проекта Вс=0 (JS getDay), проверена на реальных данных.
 DAY_OF_WEEK_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 
-_NARROW = ' '  # NARROW NO-BREAK SPACE — разделитель тысяч и перед знаком ₽
 
 # Технический шум: в insert/delete-снапшоте и в update прятать эти поля.
 _NOISE_FIELDS = {'created_at', 'updated_at', 'sheet_row'}
@@ -68,29 +66,9 @@ _TITLE_FK_FIELDS = {
 # Форматирование значений
 # ---------------------------------------------------------------------------
 
-def _money(value: Any) -> str:
-    """3600 → «3 600 ₽», 3600.50 → «3 600,50 ₽» (узкий пробел, копейки при наличии)."""
-    try:
-        d = Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError):
-        return str(value)
-    neg = d < 0
-    d = -d if neg else d
-    int_part = int(d)
-    grouped = f'{int_part:,}'.replace(',', _NARROW)
-    if d == int_part:
-        body = grouped
-    else:
-        cents = f'{d:.2f}'.split('.')[1]
-        body = f'{grouped},{cents}'
-    sign = '−' if neg else ''  # MINUS SIGN
-    return f'{sign}{body}{_NARROW}₽'
-
-
-def _fmt_date(value: Any) -> str:
-    """'2026-07-09' → '09.07.2026'."""
-    m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', str(value))
-    return f'{m.group(3)}.{m.group(2)}.{m.group(1)}' if m else str(value)
+# Деньги и даты форматирует summary (описания ленты) — здесь те же функции.
+_money = summary.money
+_fmt_date = summary.fmt_date
 
 
 def _fmt_datetime(value: Any) -> str:
@@ -170,6 +148,15 @@ def format_value(model_label: Optional[str], attname: str, value: Any,
 
     return str(value)
 
+
+def format_event_value(ev: dict, attname: str, value: Any, lk: summary.Lookups) -> str:
+    """format_value для поля события (модель — по pgh_obj_model или сущности)."""
+    return format_value(_model_label(ev), attname, value, lk)
+
+
+def event_field_order(ev: dict, keys) -> list[str]:
+    """Поля события в порядке объявления в модели (для описаний ленты)."""
+    return _ordered_attnames(_model_label(ev), {k: None for k in keys})
 
 # ---------------------------------------------------------------------------
 # title / changes / human

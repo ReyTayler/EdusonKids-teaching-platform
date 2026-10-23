@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useChangelogList } from '../../hooks/useChangelog';
 import { useListSearchParams } from '../../hooks/useListSearchParams';
 import { useAuth } from '../../hooks/useAuth';
-import { canRevertChangelog, type Role } from '../../lib/permissions';
+import { canOpenChangelogDetail, canRevertChangelog, type Role } from '../../lib/permissions';
 import { DataTable, type Column } from '../../components/table/DataTable';
 import { TableSkeleton } from '../../components/ui/Skeleton';
 import { SelectInput } from '../../components/form/SelectInput';
@@ -44,6 +44,8 @@ export default function ChangelogListPage() {
   const operation = getExtra('op') ?? '';
 
   const [openedId, setOpenedId] = useState<string | null>(null);
+  // Строка открывает детали только у суперадмина; остальным хватает описания.
+  const canOpen = canOpenChangelogDetail(me?.role as Role);
   const [reverting, setReverting] = useState<ChangelogOperation | null>(null);
 
   const query = buildQuery(page, pageSize, {
@@ -159,7 +161,7 @@ export default function ChangelogListPage() {
         columns={columns}
         title="Журнал изменений"
         isLoading={isFetching}
-        onRowClick={(r) => setOpenedId(r.id)}
+        onRowClick={canOpen ? (r) => setOpenedId(r.id) : undefined}
         serverPagination={{
           page,
           pageSize,

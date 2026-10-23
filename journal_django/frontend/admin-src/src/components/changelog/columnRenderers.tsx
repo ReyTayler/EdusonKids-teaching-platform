@@ -27,10 +27,12 @@ export function actionIcon(operation: string): ReactElement {
       operation === 'plan.permanent_change') return ACTION_ICONS.move;
   if (operation === 'plan.cancel') return ACTION_ICONS.cancel;
   if (operation === 'lesson.submit') return ACTION_ICONS.done;
-  if (operation.endsWith('.create') || operation === 'plan.extra' ||
+  // Хвост ключа после «.» или «_»: payroll.personal_rate_create — тоже создание.
+  if (/[._]create$/.test(operation) || operation === 'plan.extra' ||
       operation === 'plan.generate' || operation === 'payment.create') return ACTION_ICONS.create;
-  if (operation.endsWith('.delete')) return ACTION_ICONS.remove;
-  if (operation.endsWith('.update') || operation.startsWith('plan.')) return ACTION_ICONS.edit;
+  if (/[._]delete$/.test(operation)) return ACTION_ICONS.remove;
+  if (/[._](update|activate|deactivate|reset)$/.test(operation) ||
+      operation.startsWith('plan.')) return ACTION_ICONS.edit;
   return ACTION_ICONS.other;
 }
 

@@ -36,10 +36,18 @@ def _build_lookups(events: list[dict]) -> summary_mod.Lookups:
     """Bulk-имена для summary: по одному IN-запросу на тип, без N+1."""
     from apps.directions.models import Direction
     from apps.groups.models import Group
+    from apps.lessons.models import Lesson
+    from apps.renewals.models import RenewalStage
     from apps.students.models import Student
     from apps.teachers.models import Teacher
 
     ids = summary_mod.collect_lookup_ids(events)
+    lessons = {
+        row['id']: summary_mod.lesson_title(row['group__name'], row['lesson_number'],
+                                            row['lesson_date'])
+        for row in Lesson.objects.filter(id__in=ids['lessons'])
+        .values('id', 'group__name', 'lesson_number', 'lesson_date')
+    } if ids['lessons'] else {}
     return summary_mod.Lookups(
         groups=dict(Group.objects.filter(id__in=ids['groups'])
                     .values_list('id', 'name')) if ids['groups'] else {},
@@ -49,6 +57,9 @@ def _build_lookups(events: list[dict]) -> summary_mod.Lookups:
                       .values_list('id', 'name')) if ids['teachers'] else {},
         directions=dict(Direction.objects.filter(id__in=ids['directions'])
                         .values_list('id', 'name')) if ids['directions'] else {},
+        lessons=lessons,
+        renewal_stages=dict(RenewalStage.objects.filter(id__in=ids['renewal_stages'])
+                            .values_list('id', 'label')) if ids['renewal_stages'] else {},
     )
 
 

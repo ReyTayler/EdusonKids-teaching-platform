@@ -1,8 +1,9 @@
 """
 Views раздела «Журнал изменений» (/api/admin/changelog).
 
-RBAC: просмотр (лента, детали) и откат — только admin/superadmin
-(журнал изменений закрыт для manager).
+RBAC: лента и откат — admin/superadmin (журнал изменений закрыт для manager);
+детали операции (модалка с полями «было/стало») — только superadmin
+(решение владельца Eduson 2026-10-23).
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from rest_framework.views import APIView
 
 from apps.changelog import services
 from apps.changelog.revert import RevertConflict, RevertError, RevertForbidden
-from apps.core.permissions import IsAdminOrSuperAdmin
+from apps.core.permissions import IsAdminOrSuperAdmin, IsSuperAdmin
 
 
 def _parse_list_params(request: Request) -> dict:
@@ -41,7 +42,7 @@ class ChangelogListView(APIView):
 class ChangelogDetailView(APIView):
     """GET /api/admin/changelog/<uuid:context_id> — детали операции."""
 
-    permission_classes = [IsAdminOrSuperAdmin]
+    permission_classes = [IsSuperAdmin]
 
     def get(self, request: Request, context_id) -> Response:
         data = services.get_operation(context_id)

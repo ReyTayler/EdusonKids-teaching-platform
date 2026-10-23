@@ -577,7 +577,8 @@ def test_personal_rate_update_not_revertable(client, admin_client, db_school, cl
     context_id = _last_context('PersonalRateTerm')
     terms = _terms(rate_id)
 
-    detail = admin_client.get(f'/api/admin/changelog/{context_id}').json()
+    # Детали операции открывает только superadmin (client — superadmin).
+    detail = client.get(f'/api/admin/changelog/{context_id}').json()
     assert detail['operation'] == 'payroll.personal_rate_update'
     assert detail['revertable'] is False
     assert 'периоды персональных ставок' in detail['not_revertable_reason']

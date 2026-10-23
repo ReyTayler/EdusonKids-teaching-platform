@@ -61,10 +61,18 @@ def test_detail_revert_not_revertable(superadmin_client):
     assert data['not_revertable_reason'] == 'операции отката не откатываются'
 
 
-def test_detail_404(admin_client):
-    # Просмотр деталей разрешён admin (IsAdminOrSuperAdmin) — несуществующий uuid → 404.
-    resp = admin_client.get('/api/admin/changelog/00000000-0000-0000-0000-000000000000')
+def test_detail_404(superadmin_client):
+    # Несуществующий uuid → 404.
+    resp = superadmin_client.get('/api/admin/changelog/00000000-0000-0000-0000-000000000000')
     assert resp.status_code == 404
+
+
+def test_detail_rbac_admin_forbidden(admin_client, superadmin_client):
+    """Детали операции — только superadmin (решение владельца 2026-10-23);
+    admin видит ленту с описаниями, но модалку не открывает."""
+    _, ctx_id = _create_and_rename(superadmin_client)
+    assert admin_client.get('/api/admin/changelog?page_size=1').status_code == 200
+    assert admin_client.get(f'/api/admin/changelog/{ctx_id}').status_code == 403
 
 
 def test_detail_rbac_manager_forbidden(manager_client):

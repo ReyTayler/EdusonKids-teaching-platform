@@ -46,6 +46,9 @@ export const canRollbackExtraLesson = isAdminUp;
 export const canDeleteExtraLessonRequest = isAdminUp;
 export const canSeeLessonPayroll = isSuper;   // зарплата за урок
 export const canRevertChangelog = isAdminUp;
+// Детали операции (модалка «было/стало») — только суперадмин (решение владельца
+// 2026-10-23). Бэк: IsSuperAdmin на GET /api/admin/changelog/<id>.
+export const canOpenChangelogDetail = isSuper;
 export const canWriteRenewalStages = isSuper; // конфиг стадий воронки продлений (Фаза 6)
 // Воронки и стадии задач. Права админа и суперадмина уравнены (решение
 // заказчика 2026-08-27); бэк — ReadStaffWriteAdmin на пяти вьюхах воронок

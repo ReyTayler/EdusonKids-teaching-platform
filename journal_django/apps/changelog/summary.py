@@ -293,6 +293,7 @@ _ENTITY_MANY_RU = {
     'renewal_activity': 'записей ленты продлений', 'task_activity': 'записей ленты задач',
     'personal_rate_term': 'периодов ставки', 'pay_rate_direction': 'ставок направлений',
     'absence_resolution': 'пропусков', 'lesson_skip': 'неоплачиваемых пропусков',
+    'cancellation_reason': 'причин отмен', 'lesson_cancellation': 'отмен уроков',
 }
 
 
@@ -363,6 +364,10 @@ FIELD_RU = {
     'valid_from': 'действует с', 'valid_until': 'действует до (не включительно)',
     'is_active': 'включена', 'deleted_at': 'удалена', 'rate_id': 'персональная ставка',
     'created_by_id': 'кто создал',
+    # Причины отмены и записи об отменах (apps.cancellations)
+    'side': 'сторона', 'reason_id': 'причина', 'reason_text': 'причина',
+    'is_other': 'другая причина', 'notified_on': 'когда сообщили',
+    'compensation': 'компенсация', 'compensated': 'компенсация', 'position': 'порядок',
     # Учётки
     'role': 'роль', 'twofa_method': 'способ 2FA', 'twofa_enabled': '2FA включена',
     'twofa_confirmed_at': '2FA подтверждена',
@@ -558,6 +563,90 @@ def _payment_diff(ev: dict) -> str:
     return text
 
 
+# --- Причины отмены и записи об отменах (apps.cancellations) ---
+#
+# Флаг compensation причины и снимок compensated записи решают, заплатят ли
+# преподавателю за отмену, — это мотивация (В3 плана 2026-10-23). Ленту видит
+# admin, поэтому фразы ленты (with_flag=False) флага не называют вовсе, как
+# описания ставок — сумм. С флагом — только describe_event для модалки деталей,
+# которую отдаёт лишь superadmin.
+
+_SIDE_RU = {'teacher': 'Преподаватель', 'client': 'Клиент'}
+
+# Свободный текст «Другой причины» в ленту не выносим: может содержать ПДн
+# (имя клиента), а полный текст есть во вкладке группы.
+_OTHER_REASON_RU = 'Другая причина'
+
+# Предел длины названия причины в строке ленты; полный текст — во вкладке группы.
+_REASON_TEXT_LIMIT = 100
+
+
+def _side_ru(side: Any) -> str:
+    return _SIDE_RU.get(side, str(side or '?'))
+
+
+def _clip(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[:limit] + '…'
+
+
+def _yes_no(value: Any) -> str:
+    return 'да' if value else 'нет'
+
+
+def _lesson_cancellation_phrase(data: dict, lk: Lookups, *, with_flag: bool) -> str:
+    """«Отменено занятие ПИ1012 10.11.2026 18:00 — Клиент: Заболел»."""
+    reason = (_OTHER_REASON_RU if data.get('is_other')
+              else _clip(str(data.get('reason_text') or '?'), _REASON_TEXT_LIMIT))
+    text = (f'Отменено занятие {lk.group(data.get("group_id"))} '
+            f'{_fmt_dt(data.get("lesson_date"), data.get("scheduled_time"))} — '
+            f'{_side_ru(data.get("side"))}: {reason}')
+    if with_flag:
+        text += f'; компенсация: {_yes_no(data.get("compensated"))}'
+    return text
+
+
+def _reason_ident(data: dict) -> str:
+    return f'«{data.get("name") or "?"}» ({_side_ru(data.get("side"))})'
+
+
+def _cancellation_reason_phrase(ev: dict, lk: Lookups, *, with_flag: bool) -> str:
+    """Создание / правка / удаление причины отмены.
+
+    Удаление мягкое (UPDATE deleted_at), поэтому без этой ветки generic-фолбэк
+    описал бы его как «удалена: — → дата»."""
+    data = ev.get('pgh_data') or {}
+    diff = ev.get('pgh_diff') or {}
+    label = ev['pgh_label']
+    ident = _reason_ident(data)
+    if label == 'insert':
+        flag = f', компенсация: {_yes_no(data.get("compensation"))}' if with_flag else ''
+        return f'Новая причина отмены {ident}{flag}'
+    if label == 'delete' or (diff.get('deleted_at') or [None, None])[1]:
+        return f'Причина отмены {ident} удалена'
+    if with_flag:
+        return f'Причина отмены {ident}: {_diff_text(ev, lk)}'
+    if 'name' in diff:
+        old, new = diff['name']
+        return (f'Переименована причина отмены «{old}» → «{new}» '
+                f'({_side_ru(data.get("side"))})')
+    return f'Изменена причина отмены {ident}'
+
+
+def _cancellation_feed_phrase(ev: dict, lk: Lookups) -> Optional[str]:
+    """Фраза ленты для событий отмен — без флага компенсации; None — не они."""
+    entity = ev.get('entity')
+    if entity == 'cancellation_reason':
+        return _cancellation_reason_phrase(ev, lk, with_flag=False)
+    if entity == 'lesson_cancellation':
+        data = ev.get('pgh_data') or {}
+        if ev['pgh_label'] == 'insert':
+            return _lesson_cancellation_phrase(data, lk, with_flag=False)
+        verb = 'удалена' if ev['pgh_label'] == 'delete' else 'изменена'
+        return (f'Запись об отмене {lk.group(data.get("group_id"))} '
+                f'{_fmt_dt(data.get("lesson_date"), data.get("scheduled_time"))} {verb}')
+    return None
+
+
 def describe_event(ev: dict, lk: Lookups) -> str:
     """
     Человекочитаемое описание ОДНОГО события (для модалки деталей).
@@ -670,6 +759,13 @@ def describe_event(ev: dict, lk: Lookups) -> str:
             return f'Удалена оплата отмены {who}'
         manual = ' (вручную)' if data.get('is_manual') else ''
         return f'Оплата отмены {who}: {_payment_diff(ev)}{manual}'
+
+    # --- Причины отмены и записи об отменах: с флагом компенсации (модалка
+    # деталей — только superadmin; лента идёт через _cancellation_feed_phrase) ---
+    if entity == 'cancellation_reason':
+        return _cancellation_reason_phrase(ev, lk, with_flag=True)
+    if entity == 'lesson_cancellation' and label == 'insert':
+        return _lesson_cancellation_phrase(data, lk, with_flag=True)
 
     # --- Ставки школы ---
     if entity == 'pay_rate_version':
@@ -866,16 +962,30 @@ def _sum_plan_resync(op, by_entity, lk):
 
 
 def _sum_plan_cancel(op, by_entity, lk):
+    """«Отменено занятие ПИ1012 10.11.2026 18:00 — Клиент: Заболел».
+
+    Об оплате отмены — ни слова: при compensated=False строка начисления тоже
+    вставляется (с нулём), и фраза «начислена оплата» была бы ложной, а
+    правильная выдала бы решение о компенсации (мотивация, только superadmin)."""
+    record = _first(by_entity, 'lesson_cancellation', 'insert')
+    if record is not None:
+        return _lesson_cancellation_phrase(record.get('pgh_data') or {}, lk, with_flag=False)
+    # Отмена без записи о причине (до фичи причин): маркер — вставка строки
+    # плана без seq со статусом cancelled (scheduling.repository.cancel_lesson).
     for ev in by_entity.get('planned_lesson', ()):
-        if 'status' in (ev.get('pgh_diff') or {}):
-            data = ev.get('pgh_data') or {}
-            text = (f'Отмена занятия {lk.group(data.get("group_id"))} '
-                    f'№{_fmt_num(data.get("lesson_number"))} '
-                    f'({_fmt_dt(data.get("scheduled_date"), data.get("scheduled_time"))})')
-            if _first(by_entity, 'cancellation_pay', 'insert') is not None:
-                text += '; начислена оплата за отмену'  # сумма конфиденциальна
-            return text
+        data = ev.get('pgh_data') or {}
+        diff = ev.get('pgh_diff') or {}
+        is_marker = (ev['pgh_label'] == 'insert' and data.get('seq') is None
+                     and data.get('status') == 'cancelled')
+        if is_marker or (diff.get('status') or [None, None])[1] == 'cancelled':
+            return (f'Отменено занятие {lk.group(data.get("group_id"))} '
+                    f'{_fmt_dt(data.get("scheduled_date"), data.get("scheduled_time"))}')
     return None
+
+
+def _sum_cancellation_reason(op, by_entity, lk):
+    ev = _first(by_entity, 'cancellation_reason')
+    return _cancellation_reason_phrase(ev, lk, with_flag=False) if ev is not None else None
 
 
 # --- Уроки ---
@@ -1226,6 +1336,9 @@ _BUILDERS: dict[str, Callable[[str, dict, Lookups], Optional[str]]] = {
     'plan.generate': _sum_plan_generate,
     'plan.resync': _sum_plan_resync,
     'plan.cancel': _sum_plan_cancel,
+    'cancellation_reason.create': _sum_cancellation_reason,
+    'cancellation_reason.update': _sum_cancellation_reason,
+    'cancellation_reason.delete': _sum_cancellation_reason,
     'lesson.submit': _sum_lesson,
     'lesson.create': _sum_lesson,
     'lesson.update': _sum_lesson,
@@ -1303,5 +1416,10 @@ def build_summary(operation: str, events: list[dict], lk: Lookups) -> str:
     if ev['entity'] in MOTIVATION_ENTITIES:
         # describe_event показывает суммы — он для модалки суперадмина, не для ленты.
         return _motivation_phrase(ev, lk)
+    cancellation = _cancellation_feed_phrase(ev, lk)
+    if cancellation is not None:
+        # То же для флага компенсации: describe_event его называет.
+        return cancellation + _others_tail(
+            {e: [x for x in evs if x is not ev] for e, evs in by_entity.items()})
     return (describe_event(ev, lk)
             + _others_tail({e: [x for x in evs if x is not ev] for e, evs in by_entity.items()}))

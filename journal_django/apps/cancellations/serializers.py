@@ -11,7 +11,7 @@ import unicodedata
 
 from rest_framework import serializers
 
-from apps.cancellations.models import CancellationSide
+from apps.cancellations.models import CancellationSide, LessonCancellation
 from apps.scheduling.serializers import StrictSerializer
 
 # Потолок позиции: справочник — единицы строк, а значение вне int32 БД отвергла
@@ -65,3 +65,33 @@ class ReasonUpdateSerializer(StrictSerializer):
 
     def validate_name(self, value: str) -> str:
         return _validate_name(value)
+
+
+class GroupCancellationRowSerializer(serializers.ModelSerializer):
+    """Строка вкладки группы «Отмены уроков» (read-only).
+
+    compensated не отдаётся ни одной роли (В3): колонки компенсации во вкладке
+    нет, а флаг решает о деньгах преподавателя. reason_text у «Другой причины» —
+    полный текст: вкладку читают менеджеры, а не преподаватель."""
+
+    # '%H:%M', как время урока в плане группы: секунды у слота всегда нулевые.
+    scheduled_time = serializers.TimeField(format='%H:%M', read_only=True)
+    teacher_name = serializers.CharField(source='teacher.name', read_only=True,
+                                         allow_null=True, default=None)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LessonCancellation
+        fields = [
+            'id', 'lesson_date', 'scheduled_time', 'side', 'reason_text', 'is_other',
+            'notified_on', 'teacher_id', 'teacher_name', 'created_at', 'created_by_name',
+        ]
+        read_only_fields = fields
+
+    def get_created_by_name(self, obj: LessonCancellation) -> str | None:
+        # Учётку удалили → SET NULL → имени нет. Без full_name — email, как в
+        # остальных местах, где показывается автор действия.
+        author = obj.created_by
+        if author is None:
+            return None
+        return author.full_name or author.email

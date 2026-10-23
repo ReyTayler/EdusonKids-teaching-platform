@@ -59,6 +59,9 @@ _TITLE_FK_FIELDS = {
     'personal_rate_term': {'teacher_id', 'group_id'},
     'cancellation_pay': {'teacher_id', 'group_id'},
     'pay_rate_direction': {'direction_id'},
+    # reason_id — ссылка на справочник; в снимке записи уже есть reason_text
+    # (название на момент отмены), а «причина: #4» читателю ничего не говорит.
+    'lesson_cancellation': {'group_id', 'reason_id'},
 }
 
 
@@ -220,6 +223,11 @@ def humanize_title(ev: dict, lk: summary.Lookups) -> str:
         return f'Слот расписания {lk.group(data.get("group_id"))}'
     if entity == 'account':
         return f'Учётка {data.get("email") or f"#{obj_id}"}'
+    if entity == 'cancellation_reason':
+        return f'Причина отмены {summary._reason_ident(data)}'
+    if entity == 'lesson_cancellation':
+        when = summary._fmt_dt(data.get('lesson_date'), data.get('scheduled_time'))
+        return f'Отмена урока «{lk.group(data.get("group_id"))}», {when}'
 
     return f'{summary._ENTITY_RU.get(entity, entity or "Запись")} #{obj_id}'
 

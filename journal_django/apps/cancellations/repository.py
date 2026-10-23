@@ -201,3 +201,23 @@ def soft_delete(pk: int) -> bool:
     QuerySet.update() обходит auto_now, поэтому updated_at ставим явно."""
     now = timezone.now()
     return _active().filter(pk=pk).update(deleted_at=now, updated_at=now) > 0
+
+
+# Поля строки вкладки группы. compensated сюда не входит намеренно (В3): флаг —
+# часть мотивации, а вкладку читают manager/admin.
+_GROUP_TAB_FIELDS = ('id', 'lesson_date', 'scheduled_time', 'side', 'reason_text',
+                     'is_other', 'notified_on', 'teacher_id', 'created_at', 'created_by_id',
+                     'teacher__name', 'created_by__full_name', 'created_by__email')
+
+
+def list_for_group(group_id: int):
+    """Отмены группы для вкладки «Отмены уроков» — новые сверху.
+
+    Порядок совпадает с составным lesson_cancel_group_date_idx; id DESC —
+    детерминированный тай-брейк для одинаковых даты и времени, иначе страницы
+    пагинации поедут. Имена преподавателя и автора — select_related, без N+1.
+    Отмены до фичи (маркер без записи) сюда не попадают по построению."""
+    return (LessonCancellation.objects.filter(group_id=group_id)
+            .select_related('teacher', 'created_by')
+            .only(*_GROUP_TAB_FIELDS)
+            .order_by('-lesson_date', '-scheduled_time', '-id'))

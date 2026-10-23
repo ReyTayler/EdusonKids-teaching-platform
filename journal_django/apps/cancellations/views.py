@@ -6,21 +6,29 @@ API справочника причин отмены: /api/admin/cancellation-re
   PATCH  '/<id>' → 200 Row | 404 (нет или удалена)
   DELETE '/<id>' → 204 | 404 — мягкое удаление
 
+Вкладка группы «Отмены уроков» (маршрут — apps/groups/urls.py, рядом с планом):
+  GET /api/admin/groups/<pk>/cancellations → StandardPagination {rows,total,page,page_size},
+      порядок фиксирован (lesson_date, scheduled_time, id — DESC); 404 — нет группы.
+
 Права: чтение — manager/admin/superadmin (форма отмены урока), запись — только
 superadmin (ReadStaffWriteSuperAdmin). Ключ compensation в Row — только для
 superadmin: он решает о деньгах преподавателя (правило мотивации, В3).
 """
 from __future__ import annotations
 
-from rest_framework import status
+from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.cancellations import services
-from apps.cancellations.serializers import ReasonCreateSerializer, ReasonUpdateSerializer
-from apps.core.permissions import ReadStaffWriteSuperAdmin
+from apps.cancellations import repository, services
+from apps.cancellations.serializers import (
+    GroupCancellationRowSerializer, ReasonCreateSerializer, ReasonUpdateSerializer,
+)
+from apps.core.pagination import StandardPagination
+from apps.core.permissions import IsManagerOrAdmin, ReadStaffWriteSuperAdmin
+from apps.groups.models import Group
 
 
 def _nothing_to_change() -> Response:
@@ -70,3 +78,23 @@ class CancellationReasonDetailView(APIView):
         if not services.delete_reason(pk):
             raise NotFound({'error': 'Not found'})
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class GroupCancellationListView(generics.ListAPIView):
+    """Отмены уроков группы, новые сверху. Только чтение: правки отмены нет
+    (решение владельца), ошибка в деньгах чинится ручной суммой в «Зарплате».
+
+    Сортировки из query-строки нет: порядок фиксирован, whitelist не нужен."""
+    permission_classes = [IsManagerOrAdmin]
+    pagination_class = StandardPagination
+    serializer_class = GroupCancellationRowSerializer
+
+    def list(self, request: Request, *args, **kwargs) -> Response:
+        # Пустая страница у несуществующей группы выглядела бы как «отмен не
+        # было» — опечатка в id должна давать 404, как у карточки группы.
+        if not Group.objects.filter(pk=self.kwargs['pk']).exists():
+            raise NotFound({'error': 'Not found'})
+        return super().list(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return repository.list_for_group(self.kwargs['pk'])

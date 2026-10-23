@@ -187,3 +187,29 @@ def test_not_revertable_reason_names_forbidden_entities():
     )
     assert reason == ('она затрагивает неоткатываемые данные '
                       '(персональные ставки, периоды персональных ставок)')
+
+
+@pytest.mark.django_db
+def test_cancellation_entities_titles_and_changes():
+    """Причина отмены и запись об отмене: человеческие заголовки вместо «#id»;
+    в снимке записи нет дубля группы и ссылки на причину (её текст — reason_text)."""
+    reason = {'entity': 'cancellation_reason', 'pgh_obj_model': 'cancellations.CancellationReason',
+              'pgh_label': 'insert', 'pgh_obj_id': '4',
+              'pgh_data': {'id': 4, 'side': 'client', 'name': 'Заболел', 'compensation': True,
+                           'position': 0, 'deleted_at': None}, 'pgh_diff': {}}
+    assert humanize.humanize_title(reason, _LK) == 'Причина отмены «Заболел» (Клиент)'
+
+    record = {'entity': 'lesson_cancellation',
+              'pgh_obj_model': 'cancellations.LessonCancellation',
+              'pgh_label': 'insert', 'pgh_obj_id': '3',
+              'pgh_data': {'id': 3, 'group_id': 7, 'lesson_date': '2026-11-10',
+                           'scheduled_time': '18:00:00', 'teacher_id': 1, 'side': 'client',
+                           'reason_id': 4, 'reason_text': 'Заболел', 'is_other': False,
+                           'notified_on': '2026-11-10', 'compensated': False},
+              'pgh_diff': {}}
+    assert humanize.humanize_title(record, _LK) == 'Отмена урока «ПИ1012», 10.11.2026 18:00'
+    changes = {c['label']: c['new'] for c in humanize.humanize_changes(record, _LK)}
+    assert 'группа' not in changes
+    assert changes['причина'] == 'Заболел'
+    assert changes['сторона'] == 'Клиент'
+    assert changes['компенсация'] == 'нет'  # детали — только superadmin

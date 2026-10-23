@@ -383,6 +383,10 @@ def _assert_no_amounts(text):
     ('other', [_ev('payroll', 'update', {'teacher_id': 1, 'lesson_id': 50, 'payment': 700.0},
                    {'payment': [600.0, 700.0]})]),
     ('payroll.recalculate', _payrolls(3)),
+    ('cancellation_reason.update', [
+        _ev('cancellation_reason', 'update', {'side': 'client', 'name': 'Заболел',
+                                              'compensation': False},
+            {'compensation': [True, False]})]),
 ])
 def test_feed_never_shows_motivation_amounts(operation, events):
     _assert_no_amounts(build_summary(operation, events, _RLK))
@@ -403,3 +407,118 @@ def test_admin_cannot_revert_motivation_operation(admin_client, superadmin_clien
     assert 'суперадмину' in resp.json()['error']
     super_row = superadmin_client.get('/api/admin/changelog?page_size=1').json()['rows'][0]
     assert super_row['revertable'] is True
+
+
+
+# ---------------------------------------------------------------------------
+# Причины отмены и записи об отменах (B7): флаг компенсации — часть мотивации.
+# Ленту видит admin, поэтому ни флага, ни слова «компенсация» в ней нет;
+# детали операции (describe_event, модалка) отдаются только superadmin.
+# ---------------------------------------------------------------------------
+
+def _assert_no_compensation(text):
+    low = text.lower()
+    for word in ('компенс', 'compensat', 'начислена', 'оплат'):
+        assert word not in low, (word, text)
+    _assert_no_amounts(text)
+
+
+def _cancel_events(**rec):
+    record = {'group_id': 7, 'lesson_date': '2026-11-10', 'scheduled_time': '18:00:00',
+              'teacher_id': 1, 'side': 'client', 'reason_id': 4, 'reason_text': 'Заболел',
+              'is_other': False, 'notified_on': '2026-11-10', 'compensated': True,
+              'created_by_id': 9, **rec}
+    return [
+        _ev('planned_lesson', 'insert', {'group_id': 7, 'seq': None, 'lesson_number': None,
+                                         'scheduled_date': '2026-11-10',
+                                         'scheduled_time': '18:00:00', 'status': 'cancelled'},
+            obj_id=31),
+        _ev('planned_lesson', 'update', {'group_id': 7, 'seq': 5, 'lesson_number': 5,
+                                         'scheduled_date': '2026-12-15',
+                                         'scheduled_time': '18:00:00', 'status': 'pending'},
+            {'scheduled_date': ['2026-11-10', '2026-12-15']}, obj_id=12),
+        _ev('lesson_cancellation', 'insert', record, obj_id=3),
+        _ev('cancellation_pay', 'insert', {'teacher_id': 1, 'group_id': 7, 'payment': 600.0,
+                                           'lesson_date': '2026-11-10',
+                                           'scheduled_time': '18:00:00'}),
+    ]
+
+
+@pytest.mark.parametrize('compensated', [True, False])
+def test_plan_cancel_summary_names_side_and_reason(compensated):
+    out = build_summary('plan.cancel', _cancel_events(compensated=compensated), _RLK)
+    assert out == 'Отменено занятие ПИ1012 10.11.2026 18:00 — Клиент: Заболел'
+    _assert_no_compensation(out)
+
+
+def test_plan_cancel_summary_other_reason_hides_free_text():
+    events = _cancel_events(side='teacher', reason_id=None, is_other=True, notified_on=None,
+                            compensated=False, reason_text='Уехал к Ивановым на дачу')
+    out = build_summary('plan.cancel', events, _RLK)
+    assert out == 'Отменено занятие ПИ1012 10.11.2026 18:00 — Преподаватель: Другая причина'
+    assert 'Ивановым' not in out
+
+
+def test_plan_cancel_summary_long_reason_is_truncated():
+    out = build_summary('plan.cancel', _cancel_events(reason_text='Я' * 300), _RLK)
+    assert out.endswith('Клиент: ' + 'Я' * 100 + '…')
+
+
+def test_plan_cancel_summary_without_record_has_no_pay_phrase():
+    """Отмена до фичи причин (записи нет) — без ложной фразы про оплату."""
+    events = [e for e in _cancel_events() if e['entity'] != 'lesson_cancellation']
+    out = build_summary('plan.cancel', events, _RLK)
+    assert out == 'Отменено занятие ПИ1012 10.11.2026 18:00'
+    _assert_no_compensation(out)
+
+
+def _reason(label, diff=None, **data):
+    base = {'side': 'client', 'name': 'Заболел', 'compensation': True, 'position': 0,
+            'deleted_at': None, **data}
+    return [_ev('cancellation_reason', label, base, diff, obj_id=4)]
+
+
+@pytest.mark.parametrize('operation, events, expected', [
+    ('cancellation_reason.create', _reason('insert'),
+     'Новая причина отмены «Заболел» (Клиент)'),
+    ('cancellation_reason.update', _reason('update', {'compensation': [True, False]},
+                                           compensation=False),
+     'Изменена причина отмены «Заболел» (Клиент)'),
+    ('cancellation_reason.update', _reason('update', {'position': [0, 2]}, position=2),
+     'Изменена причина отмены «Заболел» (Клиент)'),
+    ('cancellation_reason.update',
+     _reason('update', {'name': ['Болен', 'Заболел'], 'compensation': [False, True]},
+             side='teacher'),
+     'Переименована причина отмены «Болен» → «Заболел» (Преподаватель)'),
+    ('cancellation_reason.delete',
+     _reason('update', {'deleted_at': [None, '2026-10-23T10:00:00+00:00']},
+             deleted_at='2026-10-23T10:00:00+00:00'),
+     'Причина отмены «Заболел» (Клиент) удалена'),
+])
+def test_cancellation_reason_summary(operation, events, expected):
+    out = build_summary(operation, events, _RLK)
+    assert out == expected
+    _assert_no_compensation(out)
+
+
+@pytest.mark.parametrize('events', [
+    _reason('update', {'compensation': [True, False]}, compensation=False),
+    _reason('insert'),
+    [_ev('lesson_cancellation', 'insert', _cancel_events()[2]['pgh_data'])],
+])
+def test_feed_fallback_never_shows_compensation(events):
+    """Незнакомая операция (без своего шаблона) идёт в generic-фолбэк — и там
+    флаг не должен просочиться через describe_event."""
+    _assert_no_compensation(build_summary('other', events, _RLK))
+
+
+def test_describe_event_for_superadmin_shows_compensation():
+    """Модалку деталей отдаёт только superadmin — ему флаг виден, как суммы ставок."""
+    rec = _cancel_events(compensated=False)[2]
+    assert describe_event(rec, _RLK) == (
+        'Отменено занятие ПИ1012 10.11.2026 18:00 — Клиент: Заболел; компенсация: нет')
+    flag = _reason('update', {'compensation': [True, False]}, compensation=False)[0]
+    assert describe_event(flag, _RLK) == (
+        'Причина отмены «Заболел» (Клиент): компенсация: да → нет')
+    deleted = _reason('update', {'deleted_at': [None, '2026-10-23T10:00:00+00:00']})[0]
+    assert describe_event(deleted, _RLK) == 'Причина отмены «Заболел» (Клиент) удалена'

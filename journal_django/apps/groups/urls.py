@@ -8,6 +8,7 @@ APPEND_SLASH=False — пути без trailing slash (зеркало Express/Ne
 """
 from django.urls import path
 
+from apps.cancellations.views import GroupCancellationListView
 from apps.groups.views import (
     GroupDetailView, GroupLessonSkipView, GroupListCreateView, GroupProgressView,
     GroupScheduleChangeView, GroupScheduleView,
@@ -46,4 +47,7 @@ urlpatterns = [
     path('/<int:pk>/plan/<int:lid>/reschedule', GroupPlanRescheduleView.as_view(), name='groups-plan-reschedule'),
     path('/<int:pk>/plan/<int:lid>/change-teacher', GroupPlanChangeTeacherView.as_view(), name='groups-plan-change-teacher'),
     path('/<int:pk>/plan/<int:lid>/cancel', GroupPlanCancelView.as_view(), name='groups-plan-cancel'),
+    # Вкладка «Отмены уроков»: записи LessonCancellation группы (read-only, RBAC
+    # IsManagerOrAdmin). Вьюха — в apps.cancellations, как план — в scheduling.
+    path('/<int:pk>/cancellations', GroupCancellationListView.as_view(), name='groups-cancellations'),
 ]

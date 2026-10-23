@@ -52,3 +52,15 @@ class PlanResyncBlocked(Exception):
         self.blocked_by: list[str] = list(blocked_by or [])
         self.orphan_facts: list[dict] = list(orphan_facts or [])
         super().__init__(message)
+
+
+class PlanLessonChanged(Exception):
+    """
+    Занятие изменилось после того, как клиент его увидел (перенесено/отменено).
+
+    Отмена переносит строку в конец курса со статусом pending, поэтому повторный
+    POST того же lid (двойной клик, две вкладки) иначе отменил бы уже ДРУГОЕ
+    занятие — новый последний урок курса — со вторым начислением. Клиент шлёт
+    дату занятия, как он его видел; расхождение с датой строки → 409.
+    Не наследует ValueError: тот во вьюхе маппится на 400.
+    """

@@ -9,6 +9,7 @@
      строка должна отсутствовать). Расхождение → RevertConflict.
   3. Применение в FK-безопасном порядке:
        a) undo-insert: удалить вставленные строки (дети раньше родителей);
+          каскад на неоткатываемые модели → RevertForbidden;
        b) undo-delete: вставить удалённые строки (родители раньше детей);
        c) undo-update: вернуть строке состояние ДО контекста (снапшот события,
           предшествующего первому update контекста).
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import pghistory
 from django.db import connection, transaction
+from django.db.models.deletion import Collector, ProtectedError, RestrictedError
 from pghistory.models import Context
 
 from apps.changelog import registry
@@ -153,6 +155,61 @@ def _fix_sequence(model) -> None:
         )
 
 
+def _forbidden_message(model_labels) -> str:
+    """Текст отказа для человека (тост на фронте): русские подписи сущностей."""
+    from apps.changelog.humanize import FORBIDDEN_RU
+    names = [FORBIDDEN_RU.get(registry.TRACKED[ml].entity, ml) for ml in sorted(model_labels)]
+    return 'Откат недоступен: операция затрагивает ' + ', '.join(names)
+
+
+def _referenced_message(blocking_objects) -> str:
+    """Отказ для PROTECT/RESTRICT: удалить строку мешают ссылки на неё.
+
+    Подписи — русские, из реестра журнала изменений; модель вне реестра в
+    текст не попадает (технический label вроде renewals.RenewalDeal человеку
+    ничего не скажет)."""
+    from apps.changelog.summary import entity_ru
+    names = []
+    for label in sorted({obj._meta.label for obj in blocking_objects}):
+        tracked = registry.TRACKED.get(label)
+        name = entity_ru(tracked.entity) if tracked else None
+        if name:
+            names.append(name[0].lower() + name[1:])
+    text = 'Откат недоступен: на удаляемые данные ссылаются другие записи'
+    return f'{text} ({", ".join(names)}).' if names else f'{text}.'
+
+
+def _delete_inserted(queryset) -> None:
+    """undo-insert одной строки — тем же коллектором, что и QuerySet.delete(),
+    но с проверкой ДО удаления.
+
+    Коллектор каскадит по on_delete=CASCADE на строки, которых в операции нет.
+    Среди них могут оказаться неоткатываемые модели (записи об отменах уроков
+    висят на группе CASCADE'ом): откат «создания группы» стёр бы их в обход
+    запрета revertable=False. Такой откат — RevertForbidden. PROTECT/RESTRICT
+    коллектор сообщает исключением — это тоже отказ с понятным текстом, а не 500.
+    SET NULL (field_updates) строку не удаляет и откат не блокирует: запись об
+    отмене переживает маркер."""
+    collector = Collector(using=queryset.db, origin=queryset)
+    try:
+        collector.collect(queryset)
+    except (ProtectedError, RestrictedError) as exc:
+        raise RevertForbidden(_referenced_message(exc.args[1])) from exc
+
+    hit = {model._meta.label for model, objs in collector.data.items() if objs}
+    # fast_deletes — ленивые QuerySet'ы каскада без сигналов: проверяем на
+    # непустоту только неоткатываемые, остальные не стоят лишнего запроса.
+    for qs in collector.fast_deletes:
+        ml = qs.model._meta.label
+        if ml in registry.TRACKED and not registry.TRACKED[ml].revertable and qs.exists():
+            hit.add(ml)
+    forbidden = {ml for ml in hit
+                 if ml in registry.TRACKED and not registry.TRACKED[ml].revertable}
+    if forbidden:
+        raise RevertForbidden(_forbidden_message(forbidden))
+    collector.delete()
+
+
 def revert_context(context_id, *, role: str | None = None) -> dict:
     """Откатить операцию целиком. Возвращает сводку; бросает Revert*-исключения.
 
@@ -185,12 +242,7 @@ def revert_context(context_id, *, role: str | None = None) -> dict:
         ml for ml, _ in events if not registry.TRACKED[ml].revertable
     })
     if forbidden:
-        # Текст — для человека (тост на фронте): русские подписи сущностей.
-        from apps.changelog.humanize import FORBIDDEN_RU
-        names = [FORBIDDEN_RU.get(registry.TRACKED[ml].entity, ml) for ml in forbidden]
-        raise RevertForbidden(
-            'Откат недоступен: операция затрагивает ' + ', '.join(names),
-        )
+        raise RevertForbidden(_forbidden_message(forbidden))
 
     inserts = [(ml, ev) for ml, ev in events if ev.pgh_label == 'insert']
     updates = [(ml, ev) for ml, ev in events if ev.pgh_label == 'update']
@@ -217,10 +269,12 @@ def revert_context(context_id, *, role: str | None = None) -> dict:
     with transaction.atomic(), pghistory.context(
         operation='changelog.revert', revert_of=str(context_id),
     ):
-        # a) удалить вставленное: дети раньше родителей
+        # a) удалить вставленное: дети раньше родителей. Каскад на
+        # неоткатываемые данные — отказ, а не тихое удаление (_delete_inserted);
+        # исключение откатывает всю транзакцию, включая уже удалённое.
         for ml, ev in sorted(inserts, key=lambda p: -registry.TRACKED[p[0]].topo):
             model = registry.tracked_model(ml)
-            model.objects.filter(**_identity_filter(ml, ev)).delete()
+            _delete_inserted(model.objects.filter(**_identity_filter(ml, ev)))
 
         # b) вернуть удалённое: родители раньше детей
         touched_models = set()

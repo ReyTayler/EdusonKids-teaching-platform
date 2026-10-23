@@ -33,6 +33,7 @@ def plan_group(group_with_group, payroll_rates):
     gid = group_with_group[0]
     with connection.cursor() as cur:
         cur.execute('DELETE FROM payroll_cancellations WHERE group_id = %s', [gid])
+        cur.execute('DELETE FROM lesson_cancellations WHERE group_id = %s', [gid])
         cur.execute('DELETE FROM planned_lessons WHERE group_id = %s', [gid])
         cur.execute('DELETE FROM lessons WHERE group_id = %s', [gid])
 
@@ -52,9 +53,7 @@ def _marker(gid, tid, day, time=datetime.time(18, 0)):
 def _cancel_row3(gid, tid):
     from apps.scheduling import repository
     row3 = PlannedLesson.objects.get(group_id=gid, seq=3)  # 21.07
-    repository.cancel_lesson(gid, from_date=datetime.date(2026, 7, 21),
-                             marker_time=datetime.time(18, 0), marker_teacher_id=tid,
-                             lesson_id=row3.id)
+    repository.cancel_lesson(gid, lesson_id=row3.id)
     return PlannedLesson.objects.get(group_id=gid, seq__isnull=True, status='cancelled')
 
 
@@ -91,6 +90,37 @@ def test_cancel_locks_plan_before_money_and_never_lessons(plan_group):
     assert plan_locks and money_locks
     assert max(plan_locks) < min(money_locks)
     assert not [sql for sql in locked if '"lessons"' in sql or 'FROM "payroll"' in sql]
+
+
+def test_cancel_with_record_locks_plan_then_record_then_money(plan_group):
+    """Отмена с причиной: запись LessonCancellation пишется после лока курса и
+    до локов начисления — порядок «план → запись отмены → деньги» (план B4).
+    Встречного порядка нет, значит нет и взаимной блокировки с пересчётом."""
+    from apps.cancellations.models import LessonCancellation
+    from apps.cancellations.rules import CancellationDraft
+    from apps.scheduling import repository
+    gid, tid = plan_group
+    row3 = PlannedLesson.objects.get(group_id=gid, seq=3)  # 21.07
+    draft = CancellationDraft(
+        lesson_date=datetime.date(2026, 7, 21), side='teacher', reason_id=None,
+        reason_name=None, reason_compensation=False, other_text='тест',
+        notified_on=None, created_by_id=None)
+    with CaptureQueriesContext(connection) as ctx:
+        repository.cancel_lesson(gid, lesson_id=row3.id, record=draft)
+    sqls = [q['sql'] for q in ctx.captured_queries]
+    plan_locks = [i for i, sql in enumerate(sqls) if 'FOR UPDATE' in sql
+                  and 'FROM "planned_lessons"' in sql and '"payroll_cancellations"' not in sql
+                  and '"lesson_cancellations"' not in sql]
+    record_ops = [i for i, sql in enumerate(sqls) if '"lesson_cancellations"' in sql
+                  and ('INSERT' in sql or 'FOR UPDATE' in sql)]
+    money_locks = [i for i, sql in enumerate(sqls) if 'FOR UPDATE' in sql
+                   and '"payroll_cancellations"' in sql]
+    assert plan_locks and record_ops and money_locks
+    assert min(plan_locks) < min(record_ops)
+    assert max(record_ops) < min(money_locks)
+    assert not [sql for sql in sqls if 'FOR UPDATE' in sql
+                and ('"lessons"' in sql or 'FROM "payroll"' in sql)]
+    assert LessonCancellation.objects.filter(group_id=gid).count() == 1
 
 
 def test_substitute_on_cancelled_marker_moves_pay_dropping_manual(plan_group):
@@ -222,10 +252,11 @@ def test_cancel_marker_without_teacher_creates_no_pay(plan_group):
     from apps.scheduling import repository
     gid, _ = plan_group
     row3 = PlannedLesson.objects.get(group_id=gid, seq=3)
-    repository.cancel_lesson(gid, from_date=datetime.date(2026, 7, 21),
-                             marker_time=datetime.time(18, 0), marker_teacher_id=None,
-                             lesson_id=row3.id)
-    assert PlannedLesson.objects.filter(group_id=gid, status='cancelled').exists()
+    # Занятие без преподавателя (В2): маркер наследует None из строки.
+    PlannedLesson.objects.filter(id=row3.id).update(teacher_id=None, substitute_teacher_id=None)
+    repository.cancel_lesson(gid, lesson_id=row3.id)
+    assert PlannedLesson.objects.filter(group_id=gid, status='cancelled',
+                                        teacher_id__isnull=True).exists()
     assert not CancellationPay.objects.filter(group_id=gid).exists()
 
 

@@ -1,5 +1,5 @@
 """
-Запросы справочника причин отмены.
+Запросы справочника причин отмены и запись об отмене урока.
 
 Справочник маленький (единицы строк на сторону) и ограничен экраном настроек,
 поэтому список читается целиком одним запросом, без пагинации — осознанное
@@ -11,7 +11,8 @@ from django.db.models import Max, Value
 from django.db.models.functions import Lower
 from django.utils import timezone
 
-from apps.cancellations.models import CancellationReason, CancellationSide
+from apps.cancellations.models import CancellationReason, CancellationSide, LessonCancellation
+from apps.cancellations.rules import CancellationDraft, is_compensated
 
 # Поля строки справочника для API; compensation вырезает services.serialize_reason
 # для не-superadmin.
@@ -39,8 +40,12 @@ def get_active(pk: int) -> CancellationReason | None:
 
 def get_active_for_update(pk: int) -> CancellationReason | None:
     """Под локом строки: правки одной причины сериализуются, проверка дубля
-    имени и запись видят одно и то же состояние этой строки."""
-    return _active().select_for_update().filter(pk=pk).first()
+    имени и запись видят одно и то же состояние этой строки.
+
+    FOR NO KEY UPDATE: ключ причины не меняется, а INSERT записи об отмене
+    берёт на строку причины FOR KEY SHARE (FK) — с NO KEY UPDATE они
+    совместимы, и правка справочника не тормозит отмены уроков."""
+    return _active().select_for_update(no_key=True).filter(pk=pk).first()
 
 
 def active_name_taken(side: str, name: str, *, exclude_id: int | None = None) -> bool:
@@ -71,6 +76,28 @@ def next_position(side: str) -> int:
 def create(*, side: str, name: str, compensation: bool) -> CancellationReason:
     return CancellationReason.objects.create(
         side=side, name=name, compensation=compensation, position=next_position(side),
+    )
+
+
+def create_for_marker(marker, draft: CancellationDraft) -> LessonCancellation:
+    """Запись об отмене для только что вставленного маркера.
+
+    Вызывается из scheduling.repository.cancel_lesson ВНУТРИ его транзакции:
+    после лока курса и INSERT маркера, до пересчёта начисления — порядок
+    «план → запись отмены → деньги». compensated — снимок решения по дате
+    маркера (спека §4); teacher — эффективный преподаватель маркера."""
+    return LessonCancellation.objects.create(
+        group_id=marker.group_id, lesson_date=marker.scheduled_date,
+        scheduled_time=marker.scheduled_time, teacher_id=marker.teacher_id,
+        planned_lesson=marker, side=draft.side, reason_id=draft.reason_id,
+        reason_text=draft.other_text if draft.is_other else draft.reason_name,
+        is_other=draft.is_other, notified_on=draft.notified_on,
+        compensated=is_compensated(
+            side=draft.side, is_other=draft.is_other,
+            reason_compensation=draft.reason_compensation,
+            notified_on=draft.notified_on, lesson_date=marker.scheduled_date,
+        ),
+        created_by_id=draft.created_by_id,
     )
 
 

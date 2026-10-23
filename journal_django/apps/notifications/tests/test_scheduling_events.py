@@ -112,7 +112,10 @@ def test_cancel_enqueues_cancelled(no_dispatch, planned_group):
     """
     setup, first = planned_group
 
-    plan = sched_services.cancel(setup['group_a'], first.id, None)
+    # Тело отмены с 2026-10-23 обязательно; request=None → запись без автора.
+    data = {'lesson_date': first.scheduled_date, 'side': 'teacher', 'other_text': 'тест',
+            'reason_id': None, 'notified_on': None}
+    plan = sched_services.cancel(setup['group_a'], first.id, data, None)
     assert plan is not None
 
     rows = list(NotificationMessage.objects

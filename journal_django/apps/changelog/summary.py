@@ -262,6 +262,11 @@ _ENTITY_RU = {
     'cancellation_reason': 'Причина отмены', 'lesson_cancellation': 'Отмена урока',
 }
 
+
+def entity_ru(entity: str) -> Optional[str]:
+    """Русская подпись сущности реестра («Сделка продления») или None."""
+    return _ENTITY_RU.get(entity)
+
 # Сущность → (как сказать о создании, как — об удалении): «Новая группа «ПИ1001»».
 _CREATED_DELETED_RU = {
     'direction': ('Новое направление', 'Удалено направление'),

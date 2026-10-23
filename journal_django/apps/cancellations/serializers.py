@@ -20,14 +20,19 @@ MAX_POSITION = 10000
 INVISIBLE_NAME = 'Название не может состоять из невидимых символов.'
 
 
+def drop_format_chars(value: str) -> str:
+    """Без невидимых символов форматирования (категория Unicode Cf — ​, ﻿, ⁠…).
+    Пробелы и переводы строк не трогает: многострочный текст остаётся собой."""
+    return ''.join(ch for ch in value if unicodedata.category(ch) != 'Cf')
+
+
 def normalize_reason_name(value: str) -> str:
     """Имя причины в каноническом виде: без невидимых символов форматирования
-    (категория Unicode Cf — ​, ﻿, ⁠…) и с одиночными пробелами.
+    и с одиночными пробелами.
 
     Иначе «Заболел  ребёнок» и «Заболел​ребёнок» обошли бы уникальность
     активных имён, хотя в форме неотличимы от уже существующей причины."""
-    visible = ''.join(ch for ch in value if unicodedata.category(ch) != 'Cf')
-    return ' '.join(visible.split())
+    return ' '.join(drop_format_chars(value).split())
 
 
 def _name_field(**kwargs) -> serializers.CharField:

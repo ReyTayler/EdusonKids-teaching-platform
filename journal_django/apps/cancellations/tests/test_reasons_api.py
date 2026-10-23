@@ -445,3 +445,20 @@ def test_precheck_agrees_with_unique_constraint(make_reason, existing, candidate
     except IntegrityError:
         db_rejects = True
     assert taken is db_rejects
+
+
+def test_update_locks_reason_without_key_lock(make_reason):
+    """Правка причины берёт FOR NO KEY UPDATE: он совместим с FOR KEY SHARE,
+    который ставит на причину INSERT записи об отмене (FK), — справочник не
+    блокирует отмены уроков."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from apps.cancellations import services
+
+    r = make_reason(name='Заболел')
+    with CaptureQueriesContext(connection) as ctx:
+        services.update_reason(r.id, {'compensation': False})
+    locks = [q['sql'] for q in ctx.captured_queries if 'FOR ' in q['sql']
+             and '"cancellation_reasons"' in q['sql']]
+    assert locks and all('FOR NO KEY UPDATE' in sql for sql in locks)

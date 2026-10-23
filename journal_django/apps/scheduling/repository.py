@@ -22,7 +22,9 @@ from apps.lessons.models import COURSE_LESSON_TYPES, Lesson
 from apps.memberships.models import GroupMembership
 from apps.teachers.models import Teacher
 from apps.scheduling import health, planner
-from apps.scheduling.exceptions import PlanHasRecordedLessons, PlanResyncBlocked
+from apps.scheduling.exceptions import (
+    PlanHasRecordedLessons, PlanLessonChanged, PlanResyncBlocked,
+)
 from apps.scheduling.models import PlannedLesson
 from apps.scheduling.occurrences import (
     CANCELLED, DONE, MOVED, OVERDUE, PENDING, Slot, _step_for, _walk,
@@ -1446,11 +1448,9 @@ def _renumber_persist(
 
 def cancel_lesson(
     group_id: int,
-    from_date: datetime.date,
     *,
-    marker_time: datetime.time,
-    marker_teacher_id: int | None,
     lesson_id: int,
+    record=None,
 ) -> list[dict]:
     """
     Отмена «в конец курса»: (1) на исходную дату вставляется НЕ-курсовой маркер
@@ -1469,6 +1469,18 @@ def cancel_lesson(
     (нет открытого слота у группы) — шаг (2) пропускается: строка остаётся на
     месте, перенумерация всё равно проходит (тот же fallback, что раньше у
     relay: «нельзя развернуть каденцию»). Абонемент/баланс не трогаем.
+
+    Дата, время и преподаватель маркера берутся из ЗАЛОЧЕННОЙ строки lesson_id,
+    а не от вызывающего: между ранним чтением строки и локом курса другой
+    менеджер мог поставить замену или сдвинуть время — маркер, запись и
+    начисление ушли бы прежнему преподавателю со старым временем.
+
+    record — CancellationDraft (apps.cancellations.rules) с проверенной причиной
+    отмены; None — отмена без записи (прежнее поведение: маркер без записи
+    платится). С record: дата залоченной строки обязана совпасть с
+    record.lesson_date (иначе PlanLessonChanged → 409), а запись
+    LessonCancellation создаётся сразу после маркера. Порядок блокировок:
+    план → запись отмены → деньги.
 
     Возвращает новый план (get_plan).
     """
@@ -1502,6 +1514,26 @@ def cancel_lesson(
         )
         if target is None:
             raise ValueError('Отменить можно только активную курсовую строку.')
+        # Решающая проверка — под локом курса (ранняя в services.cancel лишь
+        # дешёвый отказ до транзакции): строка уже переехала в конец курса,
+        # значит клиент отменяет занятие, которого на этой дате больше нет.
+        if record is not None and target.scheduled_date != record.lesson_date:
+            raise PlanLessonChanged('Занятие уже перенесено или отменено — обновите план.')
+        from_date = target.scheduled_date
+        marker_time = target.scheduled_time
+        # Эффективный преподаватель отменённой сессии: замена на дату, если была —
+        # зачёркнутое занятие и начисление достаются тому, кто реально должен был вести.
+        marker_teacher_id = target.substitute_teacher_id or target.teacher_id
+        # Второй страж двойной отмены: без свободного слота строка остаётся на
+        # месте, и сверка даты повтор не ловит. Две отмены одной группы
+        # сериализуются локом курса выше, поэтому чтение без своего лока не
+        # пропустит параллельную отмену того же занятия.
+        if PlannedLesson.objects.filter(
+            group_id=group_id, seq__isnull=True, status=CANCELLED,
+            scheduled_date=from_date, scheduled_time=marker_time,
+        ).exists():
+            raise ValueError('На это время уже есть отменённое занятие. '
+                             'Перенесите занятие на другое время и повторите.')
 
         # (1) Маркер отмены на исходной дате (seq=NULL): календарь показывает
         # зачёркнутое занятие. Несёт время/преподавателя отменённого занятия.
@@ -1511,6 +1543,11 @@ def cancel_lesson(
             teacher_id=marker_teacher_id, status=CANCELLED,
             created_at=now, updated_at=now,
         )
+        if record is not None:
+            # Локальный импорт: cancellations ссылается на scheduling (FK на
+            # маркер), обратная зависимость — только на время вызова.
+            from apps.cancellations import repository as cancellations_repository
+            cancellations_repository.create_for_marker(marker, record)
 
         # (2) Переносим саму отменённую строку в конец курса — на первый
         # свободный слот после текущей последней курсовой даты.

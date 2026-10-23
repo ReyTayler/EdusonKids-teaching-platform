@@ -107,6 +107,8 @@ def sched_setup(db):
         # raw-DELETE групп не каскадит, поэтому чистим детей явно и первыми.
         # Начисления за отмены создаёт сама операция отмены; FK держит группу.
         cur.execute('DELETE FROM payroll_cancellations WHERE group_id IN (%s,%s)', [group_a, group_b])
+        # Записи об отменах (cancel с причиной) держат группу по FK.
+        cur.execute('DELETE FROM lesson_cancellations WHERE group_id IN (%s,%s)', [group_a, group_b])
         cur.execute('DELETE FROM planned_lessons WHERE group_id IN (%s,%s)', [group_a, group_b])
         cur.execute('DELETE FROM group_memberships WHERE group_id IN (%s,%s)', [group_a, group_b])
         cur.execute('DELETE FROM lessons WHERE group_id IN (%s,%s)', [group_a, group_b])
@@ -147,6 +149,7 @@ def group_with_group(db):
     with connection.cursor() as cur:
         # Начисления за отмены создаёт сама операция отмены; FK держит группу.
         cur.execute("DELETE FROM payroll_cancellations WHERE group_id=%s", [gid])
+        cur.execute("DELETE FROM lesson_cancellations WHERE group_id=%s", [gid])
         cur.execute("DELETE FROM planned_lessons WHERE group_id=%s", [gid])
         cur.execute("DELETE FROM group_schedule_slots WHERE group_id=%s", [gid])
         cur.execute("DELETE FROM groups WHERE id=%s", [gid])

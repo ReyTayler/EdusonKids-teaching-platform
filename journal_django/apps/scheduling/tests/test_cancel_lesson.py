@@ -20,10 +20,7 @@ def test_cancel_moves_to_end_and_renumbers(group_with_group):
 
     gid, tid = group_with_group  # 4 pending вт: 07,14,21,28 июля; слот вторник
     row3 = PlannedLesson.objects.get(group_id=gid, seq=3)  # 21.07
-    repository.cancel_lesson(
-        gid, from_date=datetime.date(2026, 7, 21),
-        marker_time=datetime.time(18, 0), marker_teacher_id=tid, lesson_id=row3.id,
-    )
+    repository.cancel_lesson(gid, lesson_id=row3.id)
 
     assert PlannedLesson.objects.filter(
         group_id=gid, status='cancelled', scheduled_date='2026-07-21', seq__isnull=True,
@@ -49,10 +46,7 @@ def test_cancel_clears_substitution_on_moved_row(group_with_group):
     gid, tid = group_with_group
     row3 = PlannedLesson.objects.get(group_id=gid, seq=3)
     PlannedLesson.objects.filter(id=row3.id).update(substitute_teacher_id=tid)
-    repository.cancel_lesson(
-        gid, from_date=datetime.date(2026, 7, 21),
-        marker_time=datetime.time(18, 0), marker_teacher_id=tid, lesson_id=row3.id,
-    )
+    repository.cancel_lesson(gid, lesson_id=row3.id)
     moved = PlannedLesson.objects.get(id=row3.id)
     assert moved.substitute_teacher_id is None
     assert str(moved.scheduled_date) == '2026-08-04'
@@ -68,10 +62,7 @@ def test_cancel_preserves_done_rows_and_continues_numbering(group_with_group):
     PlannedLesson.objects.filter(id=row1.id).update(status='done')
     row3 = PlannedLesson.objects.get(group_id=gid, seq=3)  # 21.07 — отменяем
 
-    repository.cancel_lesson(
-        gid, from_date=datetime.date(2026, 7, 21),
-        marker_time=datetime.time(18, 0), marker_teacher_id=tid, lesson_id=row3.id,
-    )
+    repository.cancel_lesson(gid, lesson_id=row3.id)
 
     done = PlannedLesson.objects.get(id=row1.id)
     assert done.status == 'done'
@@ -89,14 +80,14 @@ def test_cancel_preserves_done_rows_and_continues_numbering(group_with_group):
 
 
 def test_cancel_marker_carries_marker_teacher_and_time(group_with_group):
+    """Маркер несёт время и преподавателя самой строки (под локом), а не
+    значения вызывающего: у строки нестандартное время 19:30."""
     from apps.scheduling import repository
 
     gid, tid = group_with_group
     row3 = PlannedLesson.objects.get(group_id=gid, seq=3)
-    repository.cancel_lesson(
-        gid, from_date=datetime.date(2026, 7, 21),
-        marker_time=datetime.time(19, 30), marker_teacher_id=tid, lesson_id=row3.id,
-    )
+    PlannedLesson.objects.filter(id=row3.id).update(scheduled_time=datetime.time(19, 30))
+    repository.cancel_lesson(gid, lesson_id=row3.id)
     marker = PlannedLesson.objects.get(
         group_id=gid, status='cancelled', scheduled_date='2026-07-21')
     assert marker.seq is None
@@ -118,10 +109,7 @@ def test_cancel_rejects_non_course_row(group_with_group):
         teacher_id=tid, status='cancelled', created_at=now, updated_at=now,
     )
     with pytest.raises(ValueError):
-        repository.cancel_lesson(
-            gid, from_date=datetime.date(2026, 7, 22),
-            marker_time=datetime.time(18, 0), marker_teacher_id=tid, lesson_id=marker.id,
-        )
+        repository.cancel_lesson(gid, lesson_id=marker.id)
 
 
 def test_cancel_no_open_slot_keeps_row_in_place_but_renumbers(group_with_group):
@@ -137,10 +125,7 @@ def test_cancel_no_open_slot_keeps_row_in_place_but_renumbers(group_with_group):
             [gid],
         )
     row3 = PlannedLesson.objects.get(group_id=gid, seq=3)
-    repository.cancel_lesson(
-        gid, from_date=datetime.date(2026, 7, 21),
-        marker_time=datetime.time(18, 0), marker_teacher_id=tid, lesson_id=row3.id,
-    )
+    repository.cancel_lesson(gid, lesson_id=row3.id)
     moved = PlannedLesson.objects.get(id=row3.id)
     # Не открытого слота — дата не изменилась.
     assert str(moved.scheduled_date) == '2026-07-21'

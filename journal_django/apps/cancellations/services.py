@@ -4,9 +4,13 @@
 Флаг compensation решает, заплатят ли преподавателю за отмену, то есть
 относится к мотивации: его видит и меняет только superadmin (правило владельца
 2026-10-23, В3 плана). Остальные роли получают строку без этого ключа.
+
+build_draft — проверка причины отмены урока до мутаций; саму запись создаёт
+repository.create_for_marker внутри транзакции scheduling.repository.cancel_lesson.
 """
 from __future__ import annotations
 
+import datetime
 from typing import Optional
 
 from django.db import IntegrityError, transaction
@@ -14,6 +18,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.cancellations import repository
 from apps.cancellations.models import CancellationReason
+from apps.cancellations.rules import CancellationDraft
 
 DUPLICATE_NAME = 'Такая причина уже есть.'
 NOTHING_TO_CHANGE = 'Нечего менять.'
@@ -22,6 +27,45 @@ _ACTIVE_NAME_CONSTRAINT = 'cancel_reason_active_name_uq'
 
 class CancellationInvalid(ValueError):
     """Бизнес-ошибка отмены урока (причина не найдена, другая сторона…) → 400."""
+
+
+REASON_NOT_FOUND = 'Причина не найдена или удалена.'
+REASON_WRONG_SIDE = 'Причина не относится к выбранной стороне.'
+
+
+def _as_date(value) -> datetime.date | None:
+    if value is None or isinstance(value, datetime.date):
+        return value
+    return datetime.date.fromisoformat(value)
+
+
+def build_draft(data: dict, account) -> CancellationDraft:
+    """Проверка причины отмены урока ДО мутаций (data — validated_data
+    PlanCancelSerializer: форма тела уже проверена).
+
+    Причину читаем без лока: мягкое удаление в ту же секунду безвредно (FK
+    PROTECT, снимок текста в записи), а лок причины добавил бы в отмену лишний
+    ресурс в порядке блокировок. CancellationInvalid (ValueError) → 400."""
+    reason_id = data.get('reason_id')
+    reason = None
+    if reason_id is not None:
+        reason = repository.get_active(reason_id)
+        if reason is None:
+            raise CancellationInvalid(REASON_NOT_FOUND)
+        if reason.side != data['side']:
+            raise CancellationInvalid(REASON_WRONG_SIDE)
+    return CancellationDraft(
+        lesson_date=_as_date(data['lesson_date']),
+        side=data['side'],
+        reason_id=reason.id if reason else None,
+        reason_name=reason.name if reason else None,
+        reason_compensation=reason.compensation if reason else False,
+        other_text=None if reason else data.get('other_text'),
+        notified_on=_as_date(data.get('notified_on')),
+        # request=None (команды, тесты сервиса) и аноним — без автора.
+        created_by_id=getattr(account, 'id', None)
+        if getattr(account, 'is_authenticated', False) else None,
+    )
 
 
 def serialize_reason(reason: CancellationReason, *, with_compensation: bool) -> dict:

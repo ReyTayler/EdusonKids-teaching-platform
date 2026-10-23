@@ -14,6 +14,7 @@ from apps.core.utils.dates import MSK, msk_now
 from apps.extra_lessons import repository as extra_lessons_repository
 from apps.extra_lessons.models import MAKEUP_DONE as EXTRA_DONE
 from apps.scheduling import health, repository
+from apps.scheduling.exceptions import PlanLessonChanged
 from apps.scheduling.occurrences import (
     CANCELLED, DONE, OVERDUE, PENDING, planned_status,
 )
@@ -534,13 +535,18 @@ def preview_permanent_change(group_id: int, from_seq: int, effective_from) -> li
         group_id, date_from=_to_date(effective_from), from_seq=from_seq)
 
 
-def cancel(group_id: int, lesson_id: int, request) -> list[dict] | None:
-    """Отмена (перенос отменённого урока в конец курса + перенумерация).
-    from_date выводится из даты занятия lid.
+def cancel(group_id: int, lesson_id: int, data: dict, request) -> list[dict] | None:
+    """Отмена с причиной (перенос отменённого урока в конец курса + перенумерация
+    + запись LessonCancellation). from_date выводится из даты занятия lid.
 
-    None → строки нет (404). ValueError → якорь не курсовой/активный (view → 400):
-    отмена определена только для курсовых строк в статусе pending/overdue; для
-    extra (seq IS NULL) и уже cancelled/moved операция не определена."""
+    data — validated_data PlanCancelSerializer: lesson_date, side, reason_id |
+    other_text, notified_on.
+
+    None → строки нет (404). ValueError (вкл. CancellationInvalid) → 400: якорь
+    не курсовой/активный (отмена определена только для курсовых строк в статусе
+    pending/overdue), причина не найдена/удалена/другой стороны, на ключе уже
+    есть маркер. PlanLessonChanged → 409: lesson_date клиента не совпал с датой
+    строки (занятие уже перенесено/отменено). Все проверки — до мутаций."""
     anchor = repository.get_plan_lesson(group_id, lesson_id)
     if anchor is None:
         return None
@@ -551,22 +557,21 @@ def cancel(group_id: int, lesson_id: int, request) -> list[dict] | None:
             'Отмена доступна только для активного занятия '
             '(не отменённого/проведённого).'
         )
-    from_date = anchor['scheduled_date']
-    # Маркер несёт ЭФФЕКТИВНОГО преподавателя отменённой сессии (замена на дату,
-    # если была) — чтобы зачёркнутое занятие попало в календарь того, кто реально
-    # должен был вести D, а не преподавателя контента.
-    marker_teacher_id = anchor['substitute_teacher_id'] or anchor['teacher_id']
+    # Ранний дешёвый отказ до транзакции; решающая сверка — под локом курса
+    # в repository.cancel_lesson.
+    if _to_date(data['lesson_date']) != anchor['scheduled_date']:
+        raise PlanLessonChanged('Занятие уже перенесено или отменено — обновите план.')
+    # Локальный импорт: cancellations зависит от scheduling (FK на маркер).
+    from apps.cancellations.services import build_draft
+    draft = build_draft(data, getattr(request, 'user', None))
     with transaction.atomic():
         # Контекст для текста берём ДО отмены: строка переедет в конец курса, а
         # хвост перенумеруется — после операции и дата, и номер были бы уже
         # другими. Отдельный запрос от anchor: тому нужен статус, этому —
         # названия группы и направления.
         notify_row = repository.notification_context(lesson_id)
-        plan = repository.cancel_lesson(
-            group_id, from_date,
-            marker_time=anchor['scheduled_time'],
-            marker_teacher_id=marker_teacher_id,
-            lesson_id=lesson_id,
-        )
+        # Дату, время и эффективного преподавателя маркера cancel_lesson берёт
+        # из строки под локом курса, а не из anchor, прочитанного без лока.
+        plan = repository.cancel_lesson(group_id, lesson_id=lesson_id, record=draft)
         _notify_cancelled(notify_row, course_end=_course_end_date(plan))
     return plan

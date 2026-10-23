@@ -67,6 +67,9 @@ def plan_group(db):
         cur.execute('DELETE FROM security_audit_log WHERE target_id = %s', [group_id])
         # Начисления за отмены создаёт сама операция отмены; FK держит группу.
         cur.execute('DELETE FROM payroll_cancellations WHERE group_id = %s', [group_id])
+        # Записи об отменах ссылаются на группу и учётку менеджера (её удаляет
+        # фикстура клиента сырым DELETE) — убираем до отложенной сверки FK.
+        cur.execute('DELETE FROM lesson_cancellations WHERE group_id = %s', [group_id])
         cur.execute('DELETE FROM planned_lessons WHERE group_id = %s', [group_id])
         cur.execute('DELETE FROM lessons WHERE group_id = %s', [group_id])
         cur.execute('DELETE FROM group_schedule_slots WHERE group_id = %s', [group_id])
@@ -87,6 +90,13 @@ def _get_plan(client, gid):
 
 def _by_seq(plan):
     return {r['seq']: r for r in plan if r['seq'] is not None}
+
+
+def _cancel_body(row, **over):
+    """Валидное тело отмены (с 2026-10-23 обязательно): дата занятия, как её
+    видит клиент, + сторона и «Другая причина»."""
+    return {'lesson_date': row['scheduled_date'], 'side': 'teacher',
+            'other_text': 'тест', **over}
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +367,7 @@ class TestSubstituteTeacher:
             {'new_teacher_id': sub}, format='json',
         )
         manager_client.post(
-            f'/api/admin/groups/{gid}/plan/{target["id"]}/cancel', {}, format='json',
+            f'/api/admin/groups/{gid}/plan/{target["id"]}/cancel', _cancel_body(target), format='json',
         )
         with connection.cursor() as cur:
             cur.execute(
@@ -380,7 +390,7 @@ class TestSubstituteTeacher:
             {'new_teacher_id': sub}, format='json',
         )
         after = manager_client.post(
-            f'/api/admin/groups/{gid}/plan/{target["id"]}/cancel', {}, format='json',
+            f'/api/admin/groups/{gid}/plan/{target["id"]}/cancel', _cancel_body(target), format='json',
         ).json()
         marker = next(r for r in after
                       if r['status'] == 'cancelled' and r['scheduled_date'] == marker_date)
@@ -685,7 +695,7 @@ class TestCancel:
         with connection.cursor() as cur:
             cur.execute("UPDATE planned_lessons SET status='done' WHERE id=%s", [done_row['id']])
 
-        resp = manager_client.post(f'/api/admin/groups/{gid}/plan/{anchor["id"]}/cancel', {}, format='json')
+        resp = manager_client.post(f'/api/admin/groups/{gid}/plan/{anchor["id"]}/cancel', _cancel_body(anchor), format='json')
         assert resp.status_code == 200
         after_list = resp.json()
         after = _by_seq(after_list)
@@ -716,9 +726,9 @@ class TestCancel:
         plan = _generate(manager_client, gid).json()
         by_seq = _by_seq(plan)
         # Курс: seq1..8 по понедельникам с 06-01.
-        manager_client.post(f'/api/admin/groups/{gid}/plan/{by_seq[3]["id"]}/cancel', {}, format='json')
+        manager_client.post(f'/api/admin/groups/{gid}/plan/{by_seq[3]["id"]}/cancel', _cancel_body(by_seq[3]), format='json')
         after = manager_client.post(
-            f'/api/admin/groups/{gid}/plan/{by_seq[1]["id"]}/cancel', {}, format='json',
+            f'/api/admin/groups/{gid}/plan/{by_seq[1]["id"]}/cancel', _cancel_body(by_seq[1]), format='json',
         ).json()
         # Полный календарь: курсовые (pending/overdue) + маркеры отмен, по дате.
         occupied = sorted(r['scheduled_date'] for r in after if r['status'] != 'done')
@@ -739,7 +749,7 @@ class TestCancel:
         plan = _generate(manager_client, gid).json()
         anchor = _by_seq(plan)[3]            # 2026-06-15
         resp = manager_client.post(
-            f'/api/admin/groups/{gid}/plan/{anchor["id"]}/cancel', {}, format='json',
+            f'/api/admin/groups/{gid}/plan/{anchor["id"]}/cancel', _cancel_body(anchor), format='json',
         )
         assert resp.status_code == 200
         markers = [r for r in resp.json() if r['status'] == 'cancelled']
@@ -754,7 +764,7 @@ class TestCancel:
         gid = plan_group['group_id']
         _generate(manager_client, gid)
         resp = manager_client.post(
-            f'/api/admin/groups/{gid}/plan/99999999/cancel', {}, format='json',
+            f'/api/admin/groups/{gid}/plan/99999999/cancel', _cancel_body({'scheduled_date': '2026-06-01'}), format='json',
         )
         assert resp.status_code == 404
 
@@ -765,10 +775,10 @@ class TestCancel:
         plan = _generate(manager_client, gid).json()
         by_seq = _by_seq(plan)
         # первая отмена: seq=5 (2026-06-29) → маркер cancelled на 06-29
-        manager_client.post(f'/api/admin/groups/{gid}/plan/{by_seq[5]["id"]}/cancel', {}, format='json')
+        manager_client.post(f'/api/admin/groups/{gid}/plan/{by_seq[5]["id"]}/cancel', _cancel_body(by_seq[5]), format='json')
         # вторая отмена более раннего seq=3 (2026-06-15)
         after = manager_client.post(
-            f'/api/admin/groups/{gid}/plan/{by_seq[3]["id"]}/cancel', {}, format='json',
+            f'/api/admin/groups/{gid}/plan/{by_seq[3]["id"]}/cancel', _cancel_body(by_seq[3]), format='json',
         ).json()
         markers = [r for r in after if r['status'] == 'cancelled']
         assert any(m['scheduled_date'] == '2026-06-29' for m in markers)  # прежний маркер на месте
@@ -780,12 +790,12 @@ class TestCancel:
         plan = _generate(manager_client, gid).json()
         anchor = _by_seq(plan)[3]
         after = manager_client.post(
-            f'/api/admin/groups/{gid}/plan/{anchor["id"]}/cancel', {}, format='json',
+            f'/api/admin/groups/{gid}/plan/{anchor["id"]}/cancel', _cancel_body(anchor), format='json',
         ).json()
         marker = next(r for r in after if r['status'] == 'cancelled')
         before = _get_plan(manager_client, gid)
         resp = manager_client.post(
-            f'/api/admin/groups/{gid}/plan/{marker["id"]}/cancel', {}, format='json',
+            f'/api/admin/groups/{gid}/plan/{marker["id"]}/cancel', _cancel_body(marker), format='json',
         )
         assert resp.status_code == 400
         after2 = _get_plan(manager_client, gid)
@@ -820,7 +830,11 @@ class TestAudit:
              'new_slots': [{'day_of_week': 3, 'start_time': '14:00'}]},
             format='json',
         )
-        manager_client.post(f'/api/admin/groups/{gid}/plan/{target["id"]}/cancel', {}, format='json')
+        # Строку выше переносили — отменяем по её актуальной дате.
+        current = next(r for r in _get_plan(manager_client, gid) if r['id'] == target['id'])
+        resp = manager_client.post(f'/api/admin/groups/{gid}/plan/{target["id"]}/cancel',
+                                   _cancel_body(current), format='json')
+        assert resp.status_code == 200, resp.content
 
         assert SecurityAuditLog.objects.count() == before
         # Скоуп по target_id: eduson_test общая и переживает прогоны, глобальный

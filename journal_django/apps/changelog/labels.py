@@ -170,6 +170,15 @@ def resolve_operation(method: str, url: str) -> str:
     return FALLBACK
 
 
+def is_motivation_operation(operation: str) -> bool:
+    """Операция зарплаты и «Мотивации» (ставки, начисления, их ручные правки).
+
+    Мотивация сотрудников конфиденциальна и управляется только superadmin
+    (решение владельца 2026-10-23): admin такие операции в ленте видит
+    формально, но не откатывает."""
+    return operation.startswith('payroll.')
+
+
 def rule_for_operation(operation: str):
     """Обратный поиск для фильтра ленты: operation → (method, regex) или None."""
     for rule_method, pattern, rule_operation in RULES:

@@ -153,13 +153,20 @@ def _fix_sequence(model) -> None:
         )
 
 
-def revert_context(context_id) -> dict:
-    """Откатить операцию целиком. Возвращает сводку; бросает Revert*-исключения."""
+def revert_context(context_id, *, role: str | None = None) -> dict:
+    """Откатить операцию целиком. Возвращает сводку; бросает Revert*-исключения.
+
+    role — роль того, кто откатывает: операции мотивации откатывает только
+    superadmin (labels.is_motivation_operation)."""
     ctx = Context.objects.filter(pk=context_id).values('metadata').first()
     if ctx is None:
         raise RevertError('Операция не найдена.')
 
     metadata = ctx['metadata'] or {}
+    from apps.changelog.labels import is_motivation_operation
+    from apps.changelog.repository import _operation_of
+    if role != 'superadmin' and is_motivation_operation(_operation_of(metadata)):
+        raise RevertForbidden('Откат операций зарплаты и мотивации доступен только суперадмину.')
     # Сам откат откатывать нельзя — иначе бесконечный redo-цикл.
     if metadata.get('operation') == 'changelog.revert':
         raise RevertForbidden('Откат операции отката недоступен.')

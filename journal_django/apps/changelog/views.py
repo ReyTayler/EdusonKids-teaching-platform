@@ -36,7 +36,8 @@ class ChangelogListView(APIView):
     permission_classes = [IsAdminOrSuperAdmin]
 
     def get(self, request: Request) -> Response:
-        return Response(services.list_operations(**_parse_list_params(request)))
+        return Response(services.list_operations(
+            **_parse_list_params(request), role=getattr(request.user, 'role', None)))
 
 
 class ChangelogDetailView(APIView):

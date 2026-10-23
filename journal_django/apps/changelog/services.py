@@ -5,14 +5,21 @@ from typing import Optional
 
 from rest_framework.request import Request
 
-from apps.changelog import repository
+from apps.changelog import labels, repository
 from apps.changelog import revert as revert_module
 
 
-def list_operations(page: int = 1, page_size: int = 50, filters: dict | None = None) -> dict:
-    return repository.list_operations(
+def list_operations(page: int = 1, page_size: int = 50, filters: dict | None = None,
+                    role: str | None = None) -> dict:
+    data = repository.list_operations(
         page=page, page_size=page_size, filters=filters or {},
     )
+    if role != 'superadmin':
+        # Мотивацию откатывает только superadmin — admin кнопку «Откатить» не видит.
+        for row in data['rows']:
+            if labels.is_motivation_operation(row['operation']):
+                row['revertable'] = False
+    return data
 
 
 def get_operation(context_id) -> dict | None:
@@ -25,4 +32,5 @@ def revert_operation(context_id, request: Optional[Request] = None) -> dict:
     В журнал ИБ не пишем: сам откат — доменное действие и он фиксируется в
     «Журнале изменений» собственной операцией 'changelog.revert'
     (metadata.operation, см. repository._operation_of)."""
-    return revert_module.revert_context(context_id)
+    role = getattr(getattr(request, 'user', None), 'role', None)
+    return revert_module.revert_context(context_id, role=role)

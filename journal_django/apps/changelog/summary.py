@@ -7,8 +7,11 @@ repository одним IN-запросом на тип, без N+1).
 
 Принцип (по образцу журнала старой системы Eduson, legacy/client AuditPage):
 описание отвечает «что сделали, с чем и как изменилось» — «Перенос ПИ1001 №5:
-09.07.2026 12:00 → 10.07.2026 12:00», «Персональная ставка Иванов — ПИ1033:
-700 ₽ вместо ставки», а не «Персональная ставка #10: создание (+ ещё изменений: 25)».
+09.07.2026 12:00 → 10.07.2026 12:00», «Выключена персональная ставка Иванов —
+ПИ1033», а не «Персональная ставка #10: создание (+ ещё изменений: 25)».
+Мотивация сотрудников конфиденциальна: ленту видит и admin, поэтому описания
+операций зарплаты и ставок — без сумм (MOTIVATION_ENTITIES); суммы — только
+в describe_event для модалки деталей, которую отдаёт лишь superadmin.
 Специфичные шаблоны — по ключу операции (_BUILDERS) и по типу записи
 (describe_event); остальное — generic-фолбэк с подписями полей и значениями
 «было → стало». Описание НИКОГДА не пустое.
@@ -736,15 +739,18 @@ def _first(by_entity: dict, entity: str, label: Optional[str] = None) -> Optiona
 
 
 def _recalc_tail(by_entity: dict) -> str:
-    """«; пересчитано начислений — 25» — побочный пересчёт зарплат операции."""
-    n = len(by_entity.get('payroll', ())) + len(by_entity.get('cancellation_pay', ()))
-    return f'; пересчитано начислений — {_count(n)}' if n else ''
+    """«; начисления пересчитаны» — побочный пересчёт зарплат операции (без цифр:
+    мотивация конфиденциальна, см. MOTIVATION_ENTITIES)."""
+    if by_entity.get('payroll') or by_entity.get('cancellation_pay'):
+        return '; начисления пересчитаны'
+    return ''
 
 
 def _others_tail(by_entity: dict, skip=()) -> str:
     """«(также: занятий плана — 48, начислений — 3)» — что ещё задела операция."""
     parts = [f'{_ENTITY_MANY_RU.get(e, _entity_label(e).lower())} — {_count(len(evs))}'
-             for e, evs in by_entity.items() if e not in skip and evs]
+             for e, evs in by_entity.items()
+             if e not in skip and e not in MOTIVATION_ENTITIES and evs]
     return f' (также: {", ".join(parts)})' if parts else ''
 
 
@@ -860,10 +866,8 @@ def _sum_plan_cancel(op, by_entity, lk):
             text = (f'Отмена занятия {lk.group(data.get("group_id"))} '
                     f'№{_fmt_num(data.get("lesson_number"))} '
                     f'({_fmt_dt(data.get("scheduled_date"), data.get("scheduled_time"))})')
-            pay = _first(by_entity, 'cancellation_pay', 'insert')
-            if pay is not None:
-                text += (f'; оплата за отмену {lk.teacher(pay["pgh_data"].get("teacher_id"))} — '
-                         f'{money(pay["pgh_data"].get("payment"))}')
+            if _first(by_entity, 'cancellation_pay', 'insert') is not None:
+                text += '; начислена оплата за отмену'  # сумма конфиденциальна
             return text
     return None
 
@@ -884,10 +888,6 @@ def _sum_lesson(op, by_entity, lk):
         text = f'Проведён урок {group} №{num} ({date})'
         if att:
             text += f': были {present} из {len(att)}'
-        pay = _first(by_entity, 'payroll', 'insert')
-        if pay is not None:
-            text += (f'; начислено {lk.teacher(pay["pgh_data"].get("teacher_id"))} — '
-                     f'{money(pay["pgh_data"].get("payment"))}')
         return text
     if ev['pgh_label'] == 'delete':
         return f'Удалён урок {group} №{num} ({date})'
@@ -971,6 +971,19 @@ def _sum_payment(op, by_entity, lk):
 
 
 # --- Зарплата и «Мотивация» ---
+#
+# КОНФИДЕНЦИАЛЬНО (решение владельца 2026-10-23): суммы, ставки, проценты и
+# штрафы мотивации видит только superadmin. Ленту журнала читает и admin,
+# поэтому описания ленты здесь — формальные, без единой цифры мотивации:
+# «Изменена персональная ставка Иванов — ПИ1001». Значения «было/стало» есть
+# только в деталях операции (модалка), а её отдаёт лишь IsSuperAdmin.
+
+# Сущности мотивации: ни в описании ленты, ни в его хвосте их значения не выводим.
+MOTIVATION_ENTITIES = frozenset({
+    'payroll', 'cancellation_pay', 'pay_rate_version', 'pay_rate_direction',
+    'personal_rate', 'personal_rate_term',
+})
+
 
 def _sum_payroll_edit(op, by_entity, lk):
     ev = _first(by_entity, 'payroll', 'update')
@@ -979,8 +992,8 @@ def _sum_payroll_edit(op, by_entity, lk):
     data = ev.get('pgh_data') or {}
     who = f'{lk.teacher(data.get("teacher_id"))} за {lk.lesson(data.get("lesson_id"))}'
     if op == 'payroll.reset':
-        return f'Сброс ручной правки начисления {who}: {_payment_diff(ev)} (по ставке)'
-    return f'Ручная правка начисления {who}: {_payment_diff(ev)}'
+        return f'Сброшена ручная правка начисления: {who}'
+    return f'Начисление изменено вручную: {who}'
 
 
 def _sum_cancellation_edit(op, by_entity, lk):
@@ -991,100 +1004,65 @@ def _sum_cancellation_edit(op, by_entity, lk):
     who = (f'{lk.teacher(data.get("teacher_id"))} — {lk.group(data.get("group_id"))}, '
            f'{_fmt_dt(data.get("lesson_date"), data.get("scheduled_time"))}')
     if op == 'payroll.cancellation_reset':
-        return f'Сброс ручной правки оплаты отмены {who}: {_payment_diff(ev)} (по ставке)'
-    return f'Ручная правка оплаты отмены {who}: {_payment_diff(ev)}'
-
-
-def _direction_changes(by_entity, lk) -> list[str]:
-    parts = []
-    for ev in by_entity.get('pay_rate_direction', ()):
-        data = ev.get('pgh_data') or {}
-        direction = lk.direction(data.get('direction_id'))
-        if ev['pgh_label'] == 'insert':
-            parts.append(f'{direction} — {_direction_rates_text(data)}')
-        elif ev['pgh_label'] == 'delete':
-            parts.append(f'{direction} — как по умолчанию')
-        else:
-            parts.append(f'{direction}: {_diff_text(ev, lk, skip=("version_id", "direction_id"))}')
-    return parts
+        return f'Сброшена ручная правка оплаты отмены: {who}'
+    return f'Оплата отмены изменена вручную: {who}'
 
 
 def _sum_rate_version(op, by_entity, lk):
     version = _first(by_entity, 'pay_rate_version')
-    dirs = _direction_changes(by_entity, lk)
     tail = _recalc_tail(by_entity)
     if version is None:
-        if not dirs:
-            return None
-        return f'Ставки школы: особые ставки {"; ".join(dirs)}{tail}'
-    data = version.get('pgh_data') or {}
-    since = fmt_date(data.get('effective_from'))
+        return f'Изменены ставки школы{tail}' if by_entity.get('pay_rate_direction') else None
+    since = fmt_date((version.get('pgh_data') or {}).get('effective_from'))
     if op == 'payroll.rate_version_delete' or version['pgh_label'] == 'delete':
         return f'Удалены ставки школы с {since}{tail}'
     if version['pgh_label'] == 'insert':
-        text = f'Ставки школы с {since}: {_rates_text(data)}'
-        if dirs:
-            text += f'; особые ставки: {"; ".join(dirs)}'
-        return text + tail
-    changes = [_diff_text(version, lk)] if version.get('pgh_diff') else []
-    changes += dirs
-    return f'Изменены ставки школы с {since}: {"; ".join(changes) or "без видимых изменений"}{tail}'
-
-
-def _rate_and_term(by_entity):
-    rate = _first(by_entity, 'personal_rate')
-    term = _first(by_entity, 'personal_rate_term', 'insert')
-    closed = next((e for e in by_entity.get('personal_rate_term', ())
-                   if e['pgh_label'] == 'update'), None)
-    return rate, term, closed
+        return f'Новые ставки школы с {since}{tail}'
+    return f'Изменены ставки школы с {since}{tail}'
 
 
 def _sum_personal_rate(op, by_entity, lk):
-    rate, term, closed = _rate_and_term(by_entity)
-    anchor = rate or term or closed
+    rate = _first(by_entity, 'personal_rate')
+    anchor = rate or _first(by_entity, 'personal_rate_term')
     if anchor is None:
         return None
     data = anchor.get('pgh_data') or {}
     pair = _rate_pair(data.get('teacher_id'), data.get('group_id'), lk)
-    tail = _recalc_tail(by_entity)
-    current = (term or closed or {}).get('pgh_data')
-    params = f': {_term_text(current)}' if current else ''
-
-    if op == 'payroll.personal_rate_create':
-        return f'Новая персональная ставка {pair}{params}{tail}'
-    if op == 'payroll.personal_rate_deactivate':
-        return f'Выключена персональная ставка {pair}{params}{tail}'
-    if op == 'payroll.personal_rate_activate':
-        return f'Включена персональная ставка {pair}{params}{tail}'
-    if op == 'payroll.personal_rate_delete':
-        return f'Удалена персональная ставка {pair}{params}{tail}'
-
-    # Правка: новый период закрывает прежний (поправка §8) — «было → стало».
-    if term is not None:
-        new = term['pgh_data']
-        since = f' с {fmt_date(new["valid_from"])}' if new.get('valid_from') else ''
-        if closed is not None:
-            return (f'Изменена персональная ставка {pair}{since}: '
-                    f'{_term_text(closed["pgh_data"])} → {_term_text(new)}{tail}')
-        return f'Изменена персональная ставка {pair}{since}: {_term_text(new)}{tail}'
-    # Период того же дня правится на месте.
-    if closed is not None and set(closed.get('pgh_diff') or {}) - {'valid_until'}:
-        return f'Изменена персональная ставка {pair}: {_diff_text(closed, lk)}{tail}'
-    if rate is not None and rate['pgh_label'] == 'update':
-        return f'Изменена персональная ставка {pair}: {_diff_text(rate, lk)}{tail}'
-    return f'Изменена персональная ставка {pair}{params}{tail}'
+    verb = {
+        'payroll.personal_rate_create': 'Новая персональная ставка',
+        'payroll.personal_rate_deactivate': 'Выключена персональная ставка',
+        'payroll.personal_rate_activate': 'Включена персональная ставка',
+        'payroll.personal_rate_delete': 'Удалена персональная ставка',
+    }.get(op, 'Изменена персональная ставка')
+    return f'{verb} {pair}{_recalc_tail(by_entity)}'
 
 
 def _sum_recalculate(op, by_entity, lk):
-    n = len(by_entity.get('payroll', ())) + len(by_entity.get('cancellation_pay', ()))
-    return f'Пересчёт зарплат: изменено начислений — {_count(n)}'
+    return 'Пересчёт зарплат'
+
+
+def _motivation_phrase(ev: dict, lk: Lookups) -> str:
+    """Формальное описание события мотивации для ленты — без сумм и ставок."""
+    entity = ev.get('entity')
+    data = ev.get('pgh_data') or {}
+    verb = {'insert': 'создание', 'update': 'изменение', 'delete': 'удаление'}[ev['pgh_label']]
+    if entity == 'payroll':
+        return (f'Начисление {lk.teacher(data.get("teacher_id"))} '
+                f'за {lk.lesson(data.get("lesson_id"))}: {verb}')
+    if entity == 'cancellation_pay':
+        return (f'Оплата отмены {lk.teacher(data.get("teacher_id"))} — '
+                f'{lk.group(data.get("group_id"))}: {verb}')
+    if entity in ('personal_rate', 'personal_rate_term'):
+        return (f'Персональная ставка {_rate_pair(data.get("teacher_id"), data.get("group_id"), lk)}: '
+                f'{verb}')
+    return f'Ставки школы: {verb}'
 
 
 # --- Перенос и обновление данных Eduson ---
 
 _IMPORT_ORDER = ('direction', 'teacher', 'account', 'student', 'group', 'membership',
                  'schedule_slot', 'planned_lesson', 'lesson', 'attendance',
-                 'lesson_feedback', 'payroll', 'renewal_deal')
+                 'lesson_feedback', 'renewal_deal')
 
 
 def _sum_eduson_import(op, by_entity, lk):
@@ -1316,5 +1294,8 @@ def build_summary(operation: str, events: list[dict], lk: Lookups) -> str:
 
     # --- Generic: первое событие + что ещё задела операция ---
     ev = events[0]
+    if ev['entity'] in MOTIVATION_ENTITIES:
+        # describe_event показывает суммы — он для модалки суперадмина, не для ленты.
+        return _motivation_phrase(ev, lk)
     return (describe_event(ev, lk)
             + _others_tail({e: [x for x in evs if x is not ev] for e, evs in by_entity.items()}))

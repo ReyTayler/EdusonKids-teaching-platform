@@ -586,7 +586,7 @@ def test_personal_rate_update_not_revertable(client, admin_client, db_school, cl
     row = next(r for r in rows if r['id'] == str(context_id))
     assert row['revertable'] is False
 
-    resp = admin_client.post(f'/api/admin/changelog/{context_id}/revert')
+    resp = client.post(f'/api/admin/changelog/{context_id}/revert')  # superadmin: ставки не откатывает никто
 
     assert resp.status_code == 400
     assert 'периоды персональных ставок' in resp.json()['error']
@@ -599,7 +599,7 @@ def test_rate_version_create_not_revertable(client, admin_client, db_school, clo
     version_id = client.post(VERSIONS, _version_body('2031-04-01'), format='json').json()['id']
     context_id = _last_context('PayRateVersion')
 
-    resp = admin_client.post(f'/api/admin/changelog/{context_id}/revert')
+    resp = client.post(f'/api/admin/changelog/{context_id}/revert')  # superadmin: ставки не откатывает никто
 
     assert resp.status_code == 400
     assert 'ставки школы' in resp.json()['error']

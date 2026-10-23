@@ -247,9 +247,7 @@ def test_build_summary_rate_version_create():
         *_payrolls(3),
     ]
     assert build_summary('payroll.rate_version_create', events, _RLK) == (
-        f'Ставки школы с 01.06.2026: групповой 1{_N}000{_N}₽, индивидуальный 600{_N}₽, '
-        f'отмена 50 %; особые ставки: Вайб-кодинг — индивидуальный 800{_N}₽; '
-        f'пересчитано начислений — 3')
+        'Новые ставки школы с 01.06.2026; начисления пересчитаны')
 
 
 def test_build_summary_rate_version_update():
@@ -259,8 +257,7 @@ def test_build_summary_rate_version_update():
         *_payrolls(2),
     ]
     assert build_summary('payroll.rate_version_update', events, _RLK) == (
-        f'Изменены ставки школы с 01.06.2026: ставка группового: 1{_N}000{_N}₽ → 600{_N}₽; '
-        f'пересчитано начислений — 2')
+        'Изменены ставки школы с 01.06.2026; начисления пересчитаны')
 
 
 def test_build_summary_personal_rate_create_with_term():
@@ -272,11 +269,10 @@ def test_build_summary_personal_rate_create_with_term():
         *_payrolls(4),
     ]
     assert build_summary('payroll.personal_rate_create', events, _RLK) == (
-        f'Новая персональная ставка Пётр — ПИ1012: +150{_N}₽ к ставке, уроки 5–10; '
-        f'пересчитано начислений — 4')
+        'Новая персональная ставка Пётр — ПИ1012; начисления пересчитаны')
 
 
-def test_build_summary_personal_rate_update_shows_old_and_new_term():
+def test_build_summary_personal_rate_update_is_formal():
     term = {'teacher_id': 1, 'group_id': 7, 'lesson_from': None, 'lesson_to': None}
     events = [
         _ev('personal_rate_term', 'update', {**term, 'kind': 'fixed', 'value': 700.0},
@@ -285,8 +281,7 @@ def test_build_summary_personal_rate_update_shows_old_and_new_term():
             {**term, 'kind': 'plus_percent', 'value': 10.0, 'valid_from': '2026-10-23'}, obj_id=4),
     ]
     assert build_summary('payroll.personal_rate_update', events, _RLK) == (
-        f'Изменена персональная ставка Пётр — ПИ1012 с 23.10.2026: '
-        f'700{_N}₽ вместо ставки, все уроки → +10 % к ставке, все уроки')
+        'Изменена персональная ставка Пётр — ПИ1012')
 
 
 def test_build_summary_personal_rate_deactivate():
@@ -298,15 +293,15 @@ def test_build_summary_personal_rate_deactivate():
             'lesson_from': None, 'lesson_to': None}, {'valid_until': [None, '2026-10-23']}),
     ]
     assert build_summary('payroll.personal_rate_deactivate', events, _RLK) == (
-        f'Выключена персональная ставка Пётр — ПИ1012: 700{_N}₽ вместо ставки, все уроки')
+        'Выключена персональная ставка Пётр — ПИ1012')
 
 
-def test_build_summary_manual_payroll_edit_names_lesson():
+def test_build_summary_manual_payroll_edit_hides_amount():
     events = [_ev('payroll', 'update',
                   {'teacher_id': 1, 'lesson_id': 50, 'payment': 800.0, 'is_manual': True},
                   {'payment': [600.0, 800.0], 'is_manual': [False, True]})]
     assert build_summary('payroll.update', events, _RLK) == (
-        f'Ручная правка начисления Пётр за ПИ1012 №5 (09.07.2026): 600{_N}₽ → 800{_N}₽')
+        'Начисление изменено вручную: Пётр за ПИ1012 №5 (09.07.2026)')
 
 
 def test_build_summary_group_update_shows_teacher_names():
@@ -357,3 +352,54 @@ def test_build_summary_student_update_hides_personal_values():
     out = build_summary('student.update', events, _RLK)
     assert out == 'Изменена карточка ученика Иван Тестов: телефон'
     assert '+7' not in out
+
+
+# ---------------------------------------------------------------------------
+# Мотивация конфиденциальна (решение владельца 2026-10-23): ленту видит и
+# admin, поэтому ни сумм, ни ставок, ни процентов в описаниях быть не должно.
+# ---------------------------------------------------------------------------
+
+_SECRET = ['1000', '1 000', '1\u202f000', '600', '700', '150', '₽', '%']
+
+
+def _assert_no_amounts(text):
+    for s in _SECRET:
+        assert s not in text, (s, text)
+
+
+@pytest.mark.parametrize('operation, events', [
+    ('lesson.submit', [
+        _ev('lesson', 'insert', {'group_id': 7, 'lesson_number': 5, 'lesson_date': '2026-07-09'}),
+        _ev('payroll', 'insert', {'teacher_id': 1, 'lesson_id': 50, 'payment': 700.0})]),
+    ('plan.cancel', [
+        _ev('planned_lesson', 'update', {'group_id': 7, 'lesson_number': 5,
+                                         'scheduled_date': '2026-07-09', 'scheduled_time': '12:00'},
+            {'status': ['pending', 'cancelled']}),
+        _ev('cancellation_pay', 'insert', {'teacher_id': 1, 'group_id': 7, 'payment': 150.0})]),
+    ('payroll.cancellation_update', [
+        _ev('cancellation_pay', 'update', {'teacher_id': 1, 'group_id': 7, 'payment': 700.0,
+                                           'lesson_date': '2026-07-09', 'scheduled_time': '12:00'},
+            {'payment': [150.0, 700.0]})]),
+    ('other', [_ev('payroll', 'update', {'teacher_id': 1, 'lesson_id': 50, 'payment': 700.0},
+                   {'payment': [600.0, 700.0]})]),
+    ('payroll.recalculate', _payrolls(3)),
+])
+def test_feed_never_shows_motivation_amounts(operation, events):
+    _assert_no_amounts(build_summary(operation, events, _RLK))
+
+
+def test_admin_cannot_revert_motivation_operation(admin_client, superadmin_client):
+    from apps.changelog import labels
+    assert labels.is_motivation_operation('payroll.update')
+    assert not labels.is_motivation_operation('lesson.submit')
+    d = Direction.objects.create(name='__motiv_rev__')
+    with pghistory.context(url='/api/admin/payroll/1', method='PATCH'):
+        Direction.objects.filter(id=d.id).update(name='__motiv_rev2__')
+    row = admin_client.get('/api/admin/changelog?page_size=1').json()['rows'][0]
+    assert row['operation'] == 'payroll.update'
+    assert row['revertable'] is False
+    resp = admin_client.post(f"/api/admin/changelog/{row['id']}/revert")
+    assert resp.status_code == 400
+    assert 'суперадмину' in resp.json()['error']
+    super_row = superadmin_client.get('/api/admin/changelog?page_size=1').json()['rows'][0]
+    assert super_row['revertable'] is True

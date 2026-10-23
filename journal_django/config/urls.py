@@ -31,6 +31,8 @@ urlpatterns = [
     path('api/admin/lessons', include('apps.lessons.urls')),
     # Phase 7 — payroll
     path('api/admin/payroll', include('apps.payroll.urls')),
+    # Справочник причин отмены урока: чтение — staff, запись — superadmin
+    path('api/admin/cancellation-reasons', include('apps.cancellations.urls')),
     # Доп.уроки (компенсация пропусков) — admin CRUD
     path('api/admin/extra-lessons', include('apps.extra_lessons.urls')),
     # Отзывы преподавателей по урокам (Eduson) — чтение для manager/admin

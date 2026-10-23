@@ -74,6 +74,13 @@ TRACKED: dict[str, TrackedModel] = {
     # Период персональной ставки (поправка §8) — после самой ставки (30).
     'payroll.PersonalRateTerm':       TrackedModel('personal_rate_term', False, 35),
     'payroll.CancellationPay':        TrackedModel('cancellation_pay', True, 50),
+    # Отмены уроков (спека 2026-10-23). Справочник и записи не откатываются:
+    # запись — снимок решения о деньгах преподавателя, справочник правит только
+    # superadmin (как ставки). Следствие: операция plan.cancel (с записью)
+    # больше не откатывается (решение В4). Запись — после справочника (10) и
+    # маркера (planned_lesson, 30).
+    'cancellations.CancellationReason': TrackedModel('cancellation_reason', False, 10),
+    'cancellations.LessonCancellation': TrackedModel('lesson_cancellation', False, 35),
     # renewals: справочники воронки → сделки → активность (лог, не откатываем)
     'renewals.RenewalPipeline':       TrackedModel('renewal_pipeline', True, 20),
     'renewals.RenewalStage':          TrackedModel('renewal_stage', True, 25),

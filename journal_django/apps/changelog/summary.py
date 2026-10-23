@@ -259,6 +259,7 @@ _ENTITY_RU = {
     'notification_settings': 'Настройки уведомлений',
     'telegram_recipient': 'Получатель в Telegram',
     'absence_resolution': 'Пропуск', 'lesson_skip': 'Неоплачиваемый пропуск',
+    'cancellation_reason': 'Причина отмены', 'lesson_cancellation': 'Отмена урока',
 }
 
 # Сущность → (как сказать о создании, как — об удалении): «Новая группа «ПИ1001»».

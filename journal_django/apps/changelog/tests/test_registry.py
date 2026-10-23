@@ -43,6 +43,12 @@ def test_operation_from_url():
     assert labels.resolve_operation('POST', '/api/admin/renewals/7/unfreeze') == 'renewal.unfreeze'
     assert labels.resolve_operation('PATCH', '/api/admin/students/7/manager') == 'student.manager_update'
     assert labels.resolve_operation('GET', '/api/admin/groups') == 'other'
+    assert labels.resolve_operation(
+        'POST', '/api/admin/cancellation-reasons') == 'cancellation_reason.create'
+    assert labels.resolve_operation(
+        'PATCH', '/api/admin/cancellation-reasons/5') == 'cancellation_reason.update'
+    assert labels.resolve_operation(
+        'DELETE', '/api/admin/cancellation-reasons/5') == 'cancellation_reason.delete'
 
 
 def test_operation_from_url_keeps_removed_endpoints():

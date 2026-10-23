@@ -330,6 +330,8 @@ FORBIDDEN_RU = {
     'pay_rate_direction': 'ставки направлений',
     'personal_rate': 'персональные ставки',
     'personal_rate_term': 'периоды персональных ставок',
+    'cancellation_reason': 'причины отмен',
+    'lesson_cancellation': 'записи об отменах уроков',
 }
 
 

@@ -135,6 +135,7 @@ INSTALLED_APPS = [
     'apps.scheduling',
     'apps.extra_lessons',
     'apps.feedback',
+    'apps.cancellations',
     'apps.changelog',
     'apps.sync',
     'apps.reports',

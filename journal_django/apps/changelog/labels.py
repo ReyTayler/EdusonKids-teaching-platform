@@ -106,6 +106,12 @@ RULES: list[tuple[str, re.Pattern, str]] = [
      'payroll.personal_rate_deactivate'),
     ('POST', re.compile(r'^/api/admin/payroll/personal-rates/\d+/activate$'),
      'payroll.personal_rate_activate'),
+    # «Настройки → Отмены уроков»: справочник причин (superadmin)
+    ('POST', re.compile(r'^/api/admin/cancellation-reasons$'), 'cancellation_reason.create'),
+    ('PATCH', re.compile(r'^/api/admin/cancellation-reasons/\d+$'),
+     'cancellation_reason.update'),
+    ('DELETE', re.compile(r'^/api/admin/cancellation-reasons/\d+$'),
+     'cancellation_reason.delete'),
     # accounts
     ('POST', re.compile(r'^/api/admin/accounts/\d+/reset-password$'), 'account.reset_password'),
     ('POST', re.compile(r'^/api/admin/accounts/\d+/reset-2fa$'), 'account.reset_2fa'),

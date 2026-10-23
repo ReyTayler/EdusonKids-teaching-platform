@@ -3,6 +3,8 @@ import { PageHeader } from '../../components/shell/PageHeader';
 import { Tabs, type TabItem } from '../../components/ui/Tabs';
 import { SchoolRatesSection } from './SchoolRatesSection';
 import { PersonalRatesSection } from './PersonalRatesSection';
+import { CancellationReasonsTab } from './CancellationReasonsTab';
+import { CANCELLATION_LABELS, SETTINGS_TAB_LABELS } from '../../lib/labels';
 
 function MotivationTab() {
   return (
@@ -14,7 +16,8 @@ function MotivationTab() {
 }
 
 const TABS: TabItem[] = [
-  { value: 'motivation', label: 'Мотивация', content: <MotivationTab /> },
+  { value: 'motivation', label: SETTINGS_TAB_LABELS.motivation, content: <MotivationTab /> },
+  { value: 'cancellations', label: CANCELLATION_LABELS.tab, content: <CancellationReasonsTab /> },
 ];
 const DEFAULT_TAB = 'motivation';
 

@@ -915,3 +915,16 @@
   font-size: var(--fs-xs);
   color: var(--text3);
 }
+
+/* ── ClampText: длинный текст в две строки + «Показать полностью» ── */
+/* Ширина колонки таблицы — задаёт потребитель, не сам компонент. */
+.clamp-text--column { min-width: 220px; max-width: 420px; white-space: normal; }
+.clamp-text__body { overflow-wrap: anywhere; white-space: pre-wrap; }
+.clamp-text__body--clamped {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.clamp-text__more {
+  margin-top: var(--space-1); padding: 0; background: none; border: 0;
+  color: var(--info); font: inherit; font-size: var(--fs-xs); cursor: pointer;
+}
+.clamp-text__more:hover { text-decoration: underline; }

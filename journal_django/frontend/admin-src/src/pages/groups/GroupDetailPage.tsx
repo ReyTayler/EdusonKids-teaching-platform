@@ -19,7 +19,8 @@ import { directionColor } from '../../lib/direction-color';
 import { fmtDate } from '../../lib/format';
 import { formatSlot } from '../../lib/slots';
 import { LessonFeedbackTable } from '../../components/feedback/LessonFeedbackTable';
-import { FEEDBACK_LABELS } from '../../lib/labels';
+import { GroupCancellationsTab } from './GroupCancellationsTab';
+import { CANCELLATION_LABELS, FEEDBACK_LABELS } from '../../lib/labels';
 import { useToast } from '../../components/ui/Toast';
 import { useApiError } from '../../hooks/useApiError';
 import { useGroupPlanCalendar } from '../../hooks/useGroupPlanCalendar';
@@ -45,7 +46,7 @@ import GroupKpiRow from './GroupKpiRow';
  */
 const GROUP_PLAN_VIEWS: CalendarViewMode[] = ['month'];
 
-const GROUP_TABS = ['overview', 'students', 'lessons', 'progress', 'schedule', 'feedback', 'history'] as const;
+const GROUP_TABS = ['overview', 'students', 'lessons', 'progress', 'schedule', 'feedback', 'cancellations', 'history'] as const;
 type GroupTab = (typeof GROUP_TABS)[number];
 const DEFAULT_TAB: GroupTab = 'overview';
 
@@ -88,6 +89,11 @@ export default function GroupDetailPage() {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       if (tab === DEFAULT_TAB) next.delete('tab'); else next.set('tab', tab);
+      // page/page_size/f.* принадлежат вкладке: страница 3 из «Отзывов» во вкладке
+      // «Отмены уроков» дала бы 404 «Invalid page».
+      for (const key of Array.from(next.keys())) {
+        if (key === 'page' || key === 'page_size' || key.startsWith('f.')) next.delete(key);
+      }
       return next;
     }, { replace: true });
   };
@@ -292,6 +298,12 @@ export default function GroupDetailPage() {
     value: 'feedback',
     label: FEEDBACK_LABELS.tab,
     content: <LessonFeedbackTable groupId={group.id} />,
+  });
+
+  tabs.push({
+    value: 'cancellations',
+    label: CANCELLATION_LABELS.tab,
+    content: <GroupCancellationsTab groupId={group.id} />,
   });
 
   if (canSeeChangelog(me?.role as Role)) {

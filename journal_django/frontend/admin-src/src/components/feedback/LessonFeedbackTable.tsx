@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useMemo } from 'react';
 import { useListSearchParams } from '../../hooks/useListSearchParams';
 import { useLessonFeedback } from '../../hooks/useLessonFeedback';
 import { useGroupsAll } from '../../hooks/useGroups';
@@ -6,28 +6,12 @@ import { useTeachers } from '../../hooks/useTeachers';
 import { DataTable, type Column } from '../table/DataTable';
 import { TableSkeleton } from '../ui/Skeleton';
 import { EmptyState } from '../ui/EmptyState';
+import { ClampText } from '../ui/ClampText';
 import { EntityLink } from '../EntityLink';
 import { DateInput } from '../form/DateInput';
 import { fmtDate, fmtDateTime } from '../../lib/format';
 import { FEEDBACK_LABELS } from '../../lib/labels';
 import type { LessonFeedbackRow } from '../../lib/types';
-
-/** Комментарий: две строки, по клику — целиком. Текст может быть до 5000 знаков. */
-function CommentCell({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  // Короткий комментарий раскрывать незачем; порог — грубая оценка «влезет в 2 строки».
-  const long = text.length > 90 || text.includes('\n');
-  return (
-    <div className="fb-comment">
-      <div className={`fb-comment__text${open ? '' : ' fb-comment__text--clamp'}`}>{text}</div>
-      {long && (
-        <button type="button" className="fb-comment__more" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-          {open ? FEEDBACK_LABELS.collapse : FEEDBACK_LABELS.expand}
-        </button>
-      )}
-    </div>
-  );
-}
 
 /** Оценка 1–10; null (урок не состоялся) — прочерк, а не пустое « / 10». */
 function ScoreCell({ value }: { value: number | null }) {
@@ -109,7 +93,7 @@ export function LessonFeedbackTable({ groupId }: { groupId?: number }) {
     },
     {
       key: 'comment', label: FEEDBACK_LABELS.colComment, sortable: false,
-      cell: (r) => <CommentCell text={r.comment} />,
+      cell: (r) => <ClampText text={r.comment} className="clamp-text--column" />,
     },
     {
       key: 'record_url', label: FEEDBACK_LABELS.colRecord, sortable: false,

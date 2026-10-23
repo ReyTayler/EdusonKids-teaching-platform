@@ -10,6 +10,8 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' |
   placeholder?: string;
   /** Самая ранняя допустимая дата 'YYYY-MM-DD': ранние дни в календаре недоступны, вписанные вручную отклоняются. */
   min?: string;
+  /** Самая поздняя допустимая дата 'YYYY-MM-DD': поздние дни в календаре недоступны, вписанные вручную отклоняются. */
+  max?: string;
 }
 
 // Дни недели сверху grid'а — начинаем с понедельника (русская конвенция).
@@ -93,7 +95,7 @@ function buildMonthGrid(y: number, m: number): Array<{ y: number; m: number; d: 
   return grid;
 }
 
-export function DateInput({ value, onChange, placeholder, disabled, className, min, ...rest }: Props) {
+export function DateInput({ value, onChange, placeholder, disabled, className, min, max, ...rest }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
@@ -149,6 +151,9 @@ export function DateInput({ value, onChange, placeholder, disabled, className, m
     inputRef.current?.focus();
   };
 
+  // ISO-даты сравниваются лексикографически.
+  const inRange = (iso: string) => !(min && iso < min) && !(max && iso > max);
+
   const handleInput = (e: ChangeEvent<HTMLInputElement>) => {
     const masked = maskTyped(e.target.value);
     setText(masked);
@@ -156,7 +161,7 @@ export function DateInput({ value, onChange, placeholder, disabled, className, m
     // не дожидаясь blur (подсвечивается в календаре, доступно форме сразу).
     if (masked.replace(/\D/g, '').length === 8) {
       const parsed = parseTyped(masked);
-      if (parsed && !(min && fmtISO(parsed.y, parsed.m, parsed.d) < min)) onChange?.({ target: { value: fmtISO(parsed.y, parsed.m, parsed.d) } });
+      if (parsed && inRange(fmtISO(parsed.y, parsed.m, parsed.d))) onChange?.({ target: { value: fmtISO(parsed.y, parsed.m, parsed.d) } });
     }
   };
 
@@ -173,7 +178,7 @@ export function DateInput({ value, onChange, placeholder, disabled, className, m
       return;
     }
     const parsed = parseTyped(trimmed);
-    if (parsed && !(min && fmtISO(parsed.y, parsed.m, parsed.d) < min)) {
+    if (parsed && inRange(fmtISO(parsed.y, parsed.m, parsed.d))) {
       const iso = fmtISO(parsed.y, parsed.m, parsed.d);
       if (iso !== value) onChange?.({ target: { value: iso } });
       setText(fmtDisplay(iso));
@@ -265,21 +270,21 @@ export function DateInput({ value, onChange, placeholder, disabled, className, m
             {grid.map((c, i) => {
               const isToday = c.y === today.y && c.m === today.m && c.d === today.d;
               const isSelected = valuePart && c.y === valuePart.y && c.m === valuePart.m && c.d === valuePart.d;
-              const tooEarly = !!min && fmtISO(c.y, c.m, c.d) < min;
+              const outOfRange = !inRange(fmtISO(c.y, c.m, c.d));
               const cls = [
                 'date-input__day',
                 !c.inMonth && 'is-muted',
                 isToday && 'is-today',
                 isSelected && 'is-selected',
-                tooEarly && 'is-disabled',
+                outOfRange && 'is-disabled',
               ].filter(Boolean).join(' ');
               return (
                 <button
                   type="button"
                   key={i}
                   className={cls}
-                  disabled={tooEarly}
-                  onMouseDown={(e) => { e.preventDefault(); if (!tooEarly) emit(fmtISO(c.y, c.m, c.d)); }}
+                  disabled={outOfRange}
+                  onMouseDown={(e) => { e.preventDefault(); if (!outOfRange) emit(fmtISO(c.y, c.m, c.d)); }}
                 >{c.d}</button>
               );
             })}
@@ -288,7 +293,7 @@ export function DateInput({ value, onChange, placeholder, disabled, className, m
             <button
               type="button"
               className="date-input__action"
-              disabled={!!min && fmtISO(today.y, today.m, today.d) < min}
+              disabled={!inRange(fmtISO(today.y, today.m, today.d))}
               onClick={() => emit(fmtISO(today.y, today.m, today.d))}
             >Сегодня</button>
             {value && (

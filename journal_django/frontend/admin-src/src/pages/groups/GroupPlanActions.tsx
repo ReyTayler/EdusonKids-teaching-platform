@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import { useGroupPlan, type PlanRow } from '../../hooks/useGroupPlanCalendar';
 import {
-  useGeneratePlan, useReschedule, usePermanentChange, usePermanentChangePreview, useCancelLesson,
+  useGeneratePlan, useReschedule, usePermanentChange, usePermanentChangePreview,
   useChangeTeacher, useChangeTeacherPermanent,
   type PermanentChangeSlot, type AffectedOp,
 } from '../../hooks/useGroupPlan';
@@ -16,6 +16,8 @@ import { SelectInput } from '../../components/form/SelectInput';
 import { DateInput } from '../../components/form/DateInput';
 import { TimeInput } from '../../components/form/TimeInput';
 import { Combobox } from '../../components/form/Combobox';
+import { CancelLessonDialog } from './CancelLessonDialog';
+import { lessonLabel } from './planLabels';
 import { fmtDate, todayMSK } from '../../lib/format';
 import { AFFECTED_OP_LABELS } from '../../lib/labels';
 import type { LessonActionKind } from '../../shared/calendar/LessonPopup';
@@ -33,12 +35,6 @@ const DOW_OPTIONS = [
   { value: 6, label: 'Суббота' },
   { value: 0, label: 'Воскресенье' },
 ];
-
-function lessonLabel(r: PlanRow): string {
-  const time = r.scheduled_time ? r.scheduled_time.slice(0, 5) : '';
-  const pos = r.seq != null ? `Урок ${r.seq}` : 'Доп. занятие';
-  return `${pos} — ${fmtDate(r.scheduled_date)}${time ? ` ${time}` : ''}`;
-}
 
 type TeacherScope = 'once' | 'permanent';
 
@@ -77,7 +73,6 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
   const permanentChangePreview = usePermanentChangePreview(groupId);
   const changeTeacher = useChangeTeacher(groupId);
   const changeTeacherPermanent = useChangeTeacherPermanent(groupId);
-  const cancelLesson = useCancelLesson(groupId);
   const scheduleChange = useScheduleChange(groupId);
 
   // Есть ли у группы активное расписание (recurrence-слоты). Без слотов план не
@@ -285,15 +280,6 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
     setDialog('cancel');
   };
 
-  const submitCancel = async () => {
-    if (!cLessonId) { toast('Выберите занятие', 'error'); return; }
-    try {
-      await cancelLesson.mutateAsync(Number(cLessonId));
-      toast('Занятие отменено, курс продлён на неделю', 'ok');
-      closeDialog();
-    } catch (err) { showError(err); }
-  };
-
   // ── Задать расписание (bootstrap первого расписания для группы без слотов) ──
   const [ssDate, setSsDate] = useState('');
   const [ssSlots, setSsSlots] = useState<PermanentChangeSlot[]>([]);
@@ -368,7 +354,6 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
   }), [plan]);
 
   const rescheduleOptions = reschedulableRows.map((r) => ({ value: String(r.id), label: lessonLabel(r) }));
-  const cancelOptions = courseRows.map((r) => ({ value: String(r.id), label: lessonLabel(r) }));
   const permanentOptions = permanentRows.map((r) => ({ value: String(r.seq), label: lessonLabel(r) }));
   const teacherScopeOptions = [
     { value: 'once', label: 'Только это занятие' },
@@ -582,29 +567,13 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
       </Dialog>
 
       {/* Отменить занятие */}
-      <Dialog
+      <CancelLessonDialog
         open={dialog === 'cancel'}
-        onOpenChange={(o) => !o && closeDialog()}
-        title="Отменить занятие"
-        footer={
-          <Button variant="danger" onClick={() => { void submitCancel(); }} disabled={cancelLesson.isPending}>
-            Отменить занятие
-          </Button>
-        }
-      >
-        <Field label="Занятие" required>
-          <SelectInput
-            value={cLessonId}
-            onChange={(e) => setCLessonId(e.target.value)}
-            options={cancelOptions}
-            placeholder="Выберите занятие"
-          />
-        </Field>
-        <div className="schedule-form__hint">
-          Все последующие непроведённые занятия сдвинутся на неделю позже — курс продлевается,
-          отменённое занятие не списывается с абонемента.
-        </div>
-      </Dialog>
+        onClose={closeDialog}
+        groupId={groupId}
+        rows={courseRows}
+        initialLessonId={cLessonId ? Number(cLessonId) : null}
+      />
 
       {/* Задать расписание (bootstrap для группы без слотов) */}
       <Dialog

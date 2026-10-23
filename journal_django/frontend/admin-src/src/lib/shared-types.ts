@@ -791,3 +791,56 @@ export interface PersonalRatePayload {
   value: string;
   note?: string;
 }
+
+// ===== Причины отмены уроков =====
+
+export type CancellationSide = 'teacher' | 'client';
+
+export interface CancellationReason {
+  id: ID;
+  side: CancellationSide;
+  name: string;
+  position: number;
+  /** Только для superadmin: решение о деньгах преподавателя конфиденциально. */
+  compensation?: boolean;
+}
+
+/** GET /api/admin/cancellation-reasons — активные причины по сторонам. */
+export type CancellationReasonsResponse = Record<CancellationSide, CancellationReason[]>;
+
+export interface CancellationReasonCreatePayload {
+  side: CancellationSide;
+  name: string;
+  compensation?: boolean;
+}
+
+/** Сторона причины неизменяема, поэтому в PATCH её нет. */
+export interface CancellationReasonUpdatePayload {
+  name?: string;
+  compensation?: boolean;
+  position?: number;
+}
+
+/** Тело POST /plan/<lid>/cancel: причина XOR свободный текст; notified_on — только для client. */
+export interface CancelLessonPayload {
+  lesson_date: string;
+  side: CancellationSide;
+  reason_id?: ID | null;
+  other_text?: string | null;
+  notified_on?: string | null;
+}
+
+/** Строка вкладки группы «Отмены уроков». */
+export interface LessonCancellationRow {
+  id: ID;
+  lesson_date: string;
+  scheduled_time: string; // 'HH:MM'
+  side: CancellationSide;
+  reason_text: string;
+  is_other: boolean;
+  notified_on: string | null;
+  teacher_id: ID | null;
+  teacher_name: string | null;
+  created_at: string;
+  created_by_name: string | null;
+}

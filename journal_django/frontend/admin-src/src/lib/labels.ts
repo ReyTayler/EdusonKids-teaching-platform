@@ -1,4 +1,4 @@
-import type { CancelMode, LessonType, PayrollKind, PenaltyMode, PersonalRateKind, RegistrySegment, RegistryStatus, Role, StudentLessonKind } from './types';
+import type { CancelMode, CancellationSide, LessonType, PayrollKind, PenaltyMode, PersonalRateKind, RegistrySegment, RegistryStatus, Role, StudentLessonKind } from './types';
 
 // Статуса ученика больше нет (спека 2026-07-25): его «статус» — стадия последней
 // сделки продления, подписи стадий приходят с бэка (useRenewalStages).
@@ -212,6 +212,9 @@ export const CHANGELOG_OPERATION_LABELS:Record<string, string> = {
   'task_stage.update':             'Правка этапа задач',
   'task_stage.delete':             'Удаление этапа задач',
   'task_stage.reorder':            'Порядок этапов задач',
+  'cancellation_reason.create':    'Новая причина отмены',
+  'cancellation_reason.update':    'Изменение причины отмены',
+  'cancellation_reason.delete':    'Удаление причины отмены',
   other:                           'Другое действие',
 };
 
@@ -241,6 +244,8 @@ export const CHANGELOG_ENTITY_LABELS: Record<string, string> = {
   cancellation_pay:   'Начисление за отмену',
   absence_resolution: 'Пропуск (резолюция)',
   lesson_skip:    'Неоплачиваемый пропуск',
+  cancellation_reason: 'Причина отмены',
+  lesson_cancellation: 'Отмена урока',
 };
 
 export const CHANGELOG_ENTITY_OPTIONS: { value: string; label: string }[] =
@@ -423,14 +428,84 @@ export const FEEDBACK_LABELS = {
   lessonDeleted: 'урок удалён',
   notHeld: 'не состоялся',
   openRecord: 'Открыть запись',
-  expand: 'Показать полностью',
-  collapse: 'Свернуть',
   dateFrom: 'Дата: с',
   dateTo: 'Дата: по',
   rangeInverted: '«Дата: с» позже «Дата: по» — период не применён.',
   errorTitle: 'Не удалось загрузить отзывы',
   errorHint: 'Это сбой загрузки, а не отсутствие отзывов. Попробуйте ещё раз.',
   retry: 'Повторить',
+} as const;
+
+// ===== Настройки: подписи вкладок =====
+
+export const SETTINGS_TAB_LABELS = {
+  motivation: 'Мотивация',
+} as const;
+
+// ===== Общий свёрнутый текст (ClampText) =====
+
+export const CLAMP_LABELS = {
+  expand: 'Показать полностью',
+  collapse: 'Свернуть',
+} as const;
+
+// ===== Отмены уроков: причины, форма отмены, вкладка группы =====
+
+export const CANCELLATION_SIDE_LABELS: Record<CancellationSide, string> = {
+  teacher: 'Преподаватель',
+  client: 'Клиент',
+};
+
+export const CANCELLATION_LABELS = {
+  tab: 'Отмены уроков',
+  title: 'Отмены уроков',
+  side: 'С чьей стороны отмена',
+  reason: 'Причина',
+  otherReason: 'Другая причина',
+  otherText: 'Опишите причину',
+  notifiedOn: 'Когда сообщили об отмене',
+  addReason: 'Добавить причину',
+  reasonName: 'Название причины',
+  compensation: 'Компенсация',
+  noCompensation: 'компенсации нет',
+  empty: 'Отмен пока не было',
+  errorTitle: 'Не удалось загрузить отмены',
+  errorHint: 'Это сбой загрузки, а не отсутствие отмен. Попробуйте ещё раз.',
+  retry: 'Повторить',
+  colLessonDate: 'Занятие',
+  colSide: 'Сторона',
+  colReason: 'Причина',
+  // Диалог отмены занятия в плане группы.
+  dialogTitle: 'Отменить занятие',
+  lesson: 'Занятие',
+  pickLesson: 'Выберите занятие',
+  pickSide: 'Выберите сторону',
+  pickReason: 'Выберите причину',
+  submit: 'Отменить занятие',
+  success: 'Занятие отменено',
+  reasonsLoading: 'Загрузка…',
+  reasonsError: 'Не удалось загрузить причины отмены',
+  changed: 'Занятие изменилось, план обновлён — выберите занятие заново',
+  otherPlaceholder: 'Что именно произошло',
+  // Вкладка группы: колонка «Отменил» (кто и когда внёс отмену).
+  colCancelledBy: 'Отменил',
+  // Настройки → Отмены уроков.
+  settingsLead: 'Причины, из которых выбирают при отмене занятия. От переключателя «Компенсация» зависит, платят ли преподавателю за отменённый урок.',
+  edit: 'Изменить',
+  remove: 'Удалить',
+  rowActions: 'Действия с причиной',
+  save: 'Сохранить',
+  saving: 'Сохраняем…',
+  cancel: 'Отмена',
+  newReasonTitle: 'Новая причина',
+  editReasonTitle: 'Изменить причину',
+  deleteTitle: 'Удалить причину?',
+  deleteMessage: (name: string) =>
+    `Причина «${name}» исчезнет из списка. Уже внесённые отмены с этой причиной не изменятся.`,
+  settingsErrorTitle: 'Не удалось загрузить причины отмены',
+  settingsErrorHint: 'Это сбой загрузки, а не отсутствие причин. Попробуйте ещё раз.',
+  toggleFailed: 'Не удалось изменить компенсацию',
+  deleteFailed: 'Не удалось удалить причину',
 } as const;
 
 // ===== Настройки → Мотивация =====

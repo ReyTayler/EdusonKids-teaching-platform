@@ -28,6 +28,18 @@
 .settings-table .settings-note { white-space: normal; min-width: 160px; }
 .settings-muted { color: var(--text3); }
 
+/* Причины отмены: два блока (Преподаватель/Клиент) друг под другом — фиксированная
+   раскладка, чтобы колонка «Компенсация» стояла в обоих на одном месте. */
+.settings-table--reasons { width: 100%; table-layout: fixed; }
+.settings-table--reasons th:nth-child(2) { width: 200px; }
+.settings-table--reasons th:nth-child(3) { width: 64px; }
+.settings-table--reasons .settings-note { min-width: 0; overflow-wrap: break-word; }
+@media (max-width: 640px) {
+  .settings-table--reasons th:nth-child(2) { width: 120px; }
+  .settings-table--reasons th:nth-child(3) { width: 56px; }
+  .settings-table--reasons .settings-muted { white-space: normal; }
+}
+
 .settings-summary {
   display: flex; flex-direction: column; gap: var(--space-1);
   padding: var(--space-3) var(--space-4);

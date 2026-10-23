@@ -83,7 +83,7 @@ export function CancellationReasonsTab() {
             </div>
             <div className="table-panel">
               <div className="table-wrap">
-                <table className="settings-table">
+                <table className="settings-table settings-table--reasons">
                   <thead>
                     <tr>
                       <th>{CANCELLATION_LABELS.reason}</th>

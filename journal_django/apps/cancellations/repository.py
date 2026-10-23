@@ -7,12 +7,13 @@
 """
 from __future__ import annotations
 
-from django.db.models import Max, Value
+from django.db.models import Max, Q, Value
 from django.db.models.functions import Lower
 from django.utils import timezone
 
 from apps.cancellations.models import CancellationReason, CancellationSide, LessonCancellation
 from apps.cancellations.rules import CancellationDraft, is_compensated
+from apps.payroll.engine import CancellationDecision
 
 # Поля строки справочника для API; compensation вырезает services.serialize_reason
 # для не-superadmin.
@@ -99,6 +100,99 @@ def create_for_marker(marker, draft: CancellationDraft) -> LessonCancellation:
         ),
         created_by_id=draft.created_by_id,
     )
+
+
+# Поля записи, нужные привязке и решению; остальное пересчёту не нужно.
+_RESOLVE_FIELDS = ('id', 'planned_lesson_id', 'group_id', 'lesson_date', 'scheduled_time',
+                   'side', 'is_other', 'reason_text', 'compensated')
+
+# «Другая причина» в пояснении начисления — без введённого текста: свободный
+# текст может содержать ПДн (имя клиента), а пояснение видит преподаватель в
+# кабинете. Полный текст — только во вкладке группы.
+_OTHER_REASON_NOTE = 'Другая причина'
+
+Key = tuple  # (group_id, lesson_date, scheduled_time) — естественный ключ отмены
+
+
+def _decision(rec: LessonCancellation) -> CancellationDecision:
+    return CancellationDecision(
+        compensated=rec.compensated,
+        side_label=CancellationSide(rec.side).label,
+        reason=_OTHER_REASON_NOTE if rec.is_other else rec.reason_text,
+    )
+
+
+def lock_for_markers(marker_rows: list[dict]) -> list[LessonCancellation]:
+    """Залочить записи об отменах, которые пересчёт может отдать маркерам.
+
+    marker_rows — маркеры, УЖЕ залоченные пересчётом (payroll.recalc._lock_markers).
+    Одним SELECT … FOR UPDATE: записи этих маркеров по FK и сироты их групп за
+    их даты. Сирота-кандидат всегда той же даты, что маркер: и по ключу, и по
+    дню начисление-сирота привязывается только к маркеру своей даты. Произведение
+    групп × дат шире пар (группа, дата) — лишние просто ни к чему не привяжутся.
+
+    Лок — до лока начислений (порядок «план → записи отмен → деньги»), а решение о
+    привязке — позже, в bind_for_markers: запись идёт за начислением. Лок нужен
+    сиротам: два пересчёта соседних маркеров группы иначе привязали бы одну запись
+    дважды."""
+    if not marker_rows:
+        return []
+    return list(
+        LessonCancellation.objects.select_for_update(of=('self',))
+        .filter(Q(planned_lesson_id__in=[r['id'] for r in marker_rows])
+                | Q(planned_lesson__isnull=True,
+                    group_id__in={r['group_id'] for r in marker_rows},
+                    lesson_date__in={r['scheduled_date'] for r in marker_rows}))
+        .only(*_RESOLVE_FIELDS)
+        .order_by('id')
+    )
+
+
+def bind_for_markers(marker_rows: list[dict], records: list[LessonCancellation],
+                     follow: dict[int, Key]) -> dict[int, CancellationDecision]:
+    """Решение об отмене для маркеров пересчёта: {id маркера: решение}. Маркера без
+    записи в ответе нет — он платится, как отмена до фичи причин.
+
+    records — результат lock_for_markers. follow — {id маркера: исходный ключ
+    начисления-сироты}, которое пересчёт только что привязал к этому маркеру (по
+    ключу или по дню).
+
+    Запись СЛЕДУЕТ ЗА начислением, своей привязки по дню у неё нет. Иначе множества
+    сирот расходятся (будущее начисление удаляется, запись — никогда): запись
+    снятой отмены цеплялась бы к чужому маркеру дня и обнуляла его, а прошлое
+    начисление, привязанное по дню, теряло бы своё решение и менялось задним числом.
+    Порядок для маркера:
+      1. своя запись по FK;
+      2. к маркеру привязалось начисление-сирота — запись-сирота с ИСХОДНЫМ ключом
+         этого начисления (решение той же отмены);
+      3. иначе — запись-сирота по точному ключу самого маркера.
+    При нескольких сиротах одного ключа — самая новая: последнее решение человека
+    (В7д). Привязанные записи получают ссылку одним bulk_update (planned_lesson
+    исключён из журнала — событий нет)."""
+    linked = {r.planned_lesson_id: r for r in records if r.planned_lesson_id is not None}
+    orphans: dict[Key, list[LessonCancellation]] = {}
+    for rec in reversed(records):  # новые первыми
+        if rec.planned_lesson_id is None:
+            orphans.setdefault((rec.group_id, rec.lesson_date, rec.scheduled_time),
+                               []).append(rec)
+
+    decisions: dict[int, CancellationDecision] = {}
+    rebound: list[LessonCancellation] = []
+    for row in marker_rows:
+        rec = linked.get(row['id'])
+        if rec is None:
+            key = follow.get(row['id'],
+                             (row['group_id'], row['scheduled_date'], row['scheduled_time']))
+            bucket = orphans.get(key)
+            if bucket:
+                rec = bucket.pop(0)
+                rec.planned_lesson_id = row['id']
+                rebound.append(rec)
+        if rec is not None:
+            decisions[row['id']] = _decision(rec)
+    if rebound:
+        LessonCancellation.objects.bulk_update(rebound, ['planned_lesson'])
+    return decisions
 
 
 def soft_delete(pk: int) -> bool:

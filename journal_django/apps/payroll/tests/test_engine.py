@@ -13,6 +13,7 @@ from decimal import Decimal
 import pytest
 
 from apps.payroll.engine import (
+    CancellationDecision,
     LessonInput,
     MarkerInput,
     PersonalRateInput,
@@ -398,3 +399,50 @@ def test_cancellation_note_shows_exact_base():
     assert res.rule_note.endswith(
         'Персональная ставка (все уроки): +1 % к 0,50 ₽ = 0,505 ₽ · '
         'Отмена: 50 % от 0,505 ₽ = 0,25 ₽')
+
+
+# ---------------------------------------------------------------------------
+# Решение об отмене (спека 2026-10-23-eduson-lesson-cancel-reasons-design, §4)
+# ---------------------------------------------------------------------------
+
+_NOT_PAID = CancellationDecision(compensated=False, side_label='Клиент', reason='Заболел')
+_PAID = CancellationDecision(compensated=True, side_label='Клиент', reason='Заболел')
+
+
+@pytest.mark.parametrize('card, personal, expected, tail', [
+    (_card(), [], D('250.00'), 'Отмена: 50 % от 500 ₽ = 250 ₽'),
+    (_card(cancel_mode='fixed', cancel_value=D('200')), [], D('200.00'), 'Отмена: фикс 200 ₽'),
+    (_card(), [_personal('fixed', 900)], D('450.00'), 'Отмена: 50 % от 900 ₽ = 450 ₽'),
+])
+def test_cancellation_without_decision_paid_as_before(card, personal, expected, tail):
+    # Маркер без записи (отмены до фичи, импорт старой системы) — платится, как
+    # раньше, и пояснение без префикса причины.
+    res = cancellation_pay(_marker(decision=None), card, personal)
+    assert res.payment == expected
+    assert res.rule_note.endswith(tail)
+    assert 'Клиент' not in res.rule_note and 'Без компенсации' not in res.rule_note
+
+
+@pytest.mark.parametrize('card', [_card(), _card(cancel_mode='fixed', cancel_value=D('200')),
+                                  None])
+def test_cancellation_not_compensated_is_zero_with_reason(card):
+    # Ноль даже при персональной ставке и даже без версии ставок: решение
+    # «не компенсировать» сильнее любой суммы; строка остаётся с причиной.
+    res = cancellation_pay(_marker(decision=_NOT_PAID), card, [_personal('fixed', 900)])
+    assert res.payment == D('0.00')
+    assert res.rule_note == 'Без компенсации: Клиент — Заболел'
+
+
+def test_cancellation_compensated_keeps_amount_with_reason_prefix():
+    plain = cancellation_pay(_marker(), _card(), [_personal('plus_fixed', 100)])
+    res = cancellation_pay(_marker(decision=_PAID), _card(), [_personal('plus_fixed', 100)])
+    assert res.payment == plain.payment == D('300.00')
+    assert res.rule_note == f'Клиент — Заболел · {plain.rule_note}'
+
+
+def test_cancellation_compensated_without_rate_keeps_no_rate_note():
+    teacher = CancellationDecision(compensated=True, side_label='Преподаватель',
+                                   reason='Болезнь')
+    res = cancellation_pay(_marker(decision=teacher), None, [])
+    assert res.payment == D('0.00')
+    assert res.rule_note == 'Преподаватель — Болезнь · Нет ставки на 10.06.2026'

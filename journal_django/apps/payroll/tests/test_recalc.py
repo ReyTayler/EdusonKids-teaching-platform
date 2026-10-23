@@ -322,6 +322,43 @@ def test_orphan_not_rebound_by_day_when_marker_already_paid(db_school):
     assert CancellationPay.objects.filter(planned_lesson=marker).count() == 1
 
 
+def test_orphan_rebound_by_day_when_neighbour_has_own_pay(db_school):
+    """Сосед дня со своим начислением вне охвата — не конкурент: точечный пересчёт
+    нового маркера привязывает сироту по дню (две отмены в двух слотах дня, одну
+    перенесли)."""
+    from apps.payroll.models import CancellationPay
+    db_version(datetime.date(2026, 6, 1))
+    day = datetime.date(2026, 6, 10)
+    neighbour = db_marker(db_school, day, time=datetime.time(9, 0))
+    recalc_group(db_school)
+    orphan = db_orphan(db_school, day, time=datetime.time(10, 0), payment='1')
+    marker = db_marker(db_school, day, time=datetime.time(15, 0))
+
+    recalculate(marker_ids=[marker.id])
+
+    orphan.refresh_from_db()
+    assert orphan.planned_lesson_id == marker.id
+    assert CancellationPay.objects.filter(planned_lesson=neighbour).count() == 1
+    assert CancellationPay.objects.filter(group=db_school['group']).count() == 2
+
+
+def test_orphan_not_rebound_by_day_when_two_markers_without_pay_outside_scope(db_school):
+    """Оба маркера дня ещё без начисления, пересчёт точечный — второй вне охвата, но
+    в БД: однозначности нет, сирота не привязывается."""
+    from apps.payroll.models import CancellationPay
+    db_version(datetime.date(2026, 6, 1))
+    day = datetime.date(2026, 6, 10)
+    orphan = db_orphan(db_school, day, time=datetime.time(10, 0), payment='1')
+    marker = db_marker(db_school, day, time=datetime.time(15, 0))
+    db_marker(db_school, day, time=datetime.time(16, 0))
+
+    recalculate(marker_ids=[marker.id])
+
+    orphan.refresh_from_db()
+    assert orphan.planned_lesson_id is None
+    assert CancellationPay.objects.get(planned_lesson=marker).payment == D('300.00')
+
+
 def test_point_recalc_by_lesson_deletes_future_orphans_of_its_group(db_school):
     # reset_plan удалил маркеры (SET NULL) — следующий пересчёт, затронувший
     # группу хоть одним уроком, убирает будущие сироты; прошлые остаются.
@@ -447,8 +484,9 @@ def test_recalculate_query_count_does_not_grow(db_school, django_assert_max_num_
     for i in range(30):
         db_lesson(db_school, datetime.date(2026, 6, 1) + datetime.timedelta(days=i), i + 1)
         db_marker(db_school, datetime.date(2026, 6, 1) + datetime.timedelta(days=i))
-    # Число запросов не зависит от числа уроков: загрузки + bulk-операции.
-    with django_assert_max_num_queries(12):
+    # Число запросов не зависит от числа уроков: загрузки + bulk-операции
+    # (+1 — записи об отменах всего набора маркеров одним запросом).
+    with django_assert_max_num_queries(13):
         stats = recalc_group(db_school)
     assert stats['created'] == 60
 
@@ -474,6 +512,7 @@ def test_substitute_on_cancelled_marker_moves_pay(db_school):
 
 
 def test_rule_note_has_no_personal_data(db_school):
+    from apps.cancellations.models import LessonCancellation
     from apps.payroll.models import CancellationPay, Payroll
     db_version(datetime.date(2026, 6, 1), db_school['direction'], D('500'),
                penalty_enabled=True, penalty_amount=D('40'))
@@ -482,9 +521,22 @@ def test_rule_note_has_no_personal_data(db_school):
     lesson = db_lesson(db_school, datetime.date(2026, 6, 10), 1,
                         submitted_at=datetime.datetime(2026, 6, 12, 9, 0, tzinfo=UTC))
     db_marker(db_school, datetime.date(2026, 6, 17))
+    # Отмена с «Другой причиной»: свободный текст может содержать имена — в
+    # пояснение (его видит преподаватель в кабинете) он не попадает.
+    student = db_school['students'][0]
+    LessonCancellation.objects.create(
+        group=db_school['group'], lesson_date=datetime.date(2026, 6, 24),
+        scheduled_time=datetime.time(15, 0), teacher=db_school['t1'],
+        planned_lesson=db_marker(db_school, datetime.date(2026, 6, 24)), side='teacher',
+        is_other=True, reason_text=f'Мама {student.full_name} (Иванов) попросила',
+        compensated=False)
     recalc_group(db_school)
+    other_note = CancellationPay.objects.get(lesson_date=datetime.date(2026, 6, 24)).rule_note
+    assert other_note == 'Без компенсации: Преподаватель — Другая причина'
     notes = [Payroll.objects.get(lesson=lesson).rule_note,
-             CancellationPay.objects.get(group=db_school['group']).rule_note]
+             *CancellationPay.objects.filter(group=db_school['group'])
+             .values_list('rule_note', flat=True)]
+    assert len(notes) == 3
     # Название направления — справочник школы, не ПДн; имён людей и примечаний нет.
     direction = db_school['direction'].name
     assert notes[0] == (f'Групповой урок · {direction} · ставка с 01.06.2026 — 500 ₽ · '
@@ -497,8 +549,9 @@ def test_rule_note_has_no_personal_data(db_school):
 
 
 def test_lock_order_plan_before_money(db_school):
-    # Порядок захвата «урок/план → деньги»: уроки, маркеры, затем Payroll и
-    # CancellationPay; агрегат присутствия читается после лока уроков.
+    # Порядок захвата «урок/план → деньги»: уроки, маркеры, записи об отменах
+    # (решение о компенсации), затем Payroll и CancellationPay; агрегат
+    # присутствия читается после лока уроков.
     from django.db import connection
     from django.test.utils import CaptureQueriesContext
     db_version(datetime.date(2026, 6, 1))
@@ -523,7 +576,8 @@ def test_lock_order_plan_before_money(db_school):
                 return sql[i + 6:sql.index('"', i + 7) + 1]
 
     tables = [main_table(sql) for sql in locked]
-    assert tables == ['"lessons"', '"planned_lessons"', '"payroll"', '"payroll_cancellations"']
+    assert tables == ['"lessons"', '"planned_lessons"', '"lesson_cancellations"', '"payroll"',
+                      '"payroll_cancellations"']
     attendance_aggregate = first(lambda sql: 'COUNT(' in sql and 'lesson_attendance' in sql)
     assert first(lambda sql: 'FOR UPDATE' in sql) < attendance_aggregate
 
@@ -611,5 +665,6 @@ def test_cancellations_only_never_locks_or_reads_lessons(db_school):
     sqls = [q['sql'] for q in ctx.captured_queries]
     assert not [sql for sql in sqls if '"lessons"' in sql or '"payroll"' in sql]
     locked = [sql for sql in sqls if 'FOR UPDATE' in sql]
+    # Лочатся только план, записи об отменах и начисления за отмены.
     assert locked and all('"payroll_cancellations"' in sql or '"planned_lessons"' in sql
-                          for sql in locked)
+                          or '"lesson_cancellations"' in sql for sql in locked)

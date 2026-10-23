@@ -21,7 +21,7 @@ from typing import Iterable
 from apps.core.utils.dates import MSK
 
 __all__ = [
-    'RateCard', 'LessonInput', 'MarkerInput', 'PersonalRateInput', 'Result',
+    'RateCard', 'LessonInput', 'CancellationDecision', 'MarkerInput', 'PersonalRateInput', 'Result',
     'rates_on', 'format_rate', 'lesson_pay', 'cancellation_pay',
 ]
 
@@ -95,6 +95,20 @@ class LessonInput:
 
 
 @dataclass(frozen=True)
+class CancellationDecision:
+    """Снимок решения об отмене (LessonCancellation.compensated) для маркера с записью
+    (спека 2026-10-23-eduson-lesson-cancel-reasons-design, §4).
+
+    reason — готовый текст причины (собирает apps/cancellations/repository.py):
+    название из справочника либо «Другая причина» — свободный текст в пояснение не
+    попадает, он может содержать ПДн. Движок текст не разбирает."""
+
+    compensated: bool
+    side_label: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class MarkerInput:
     """Маркер отмены (PlannedLesson status='cancelled', seq IS NULL)."""
 
@@ -104,6 +118,9 @@ class MarkerInput:
     is_individual: bool
     direction_id: int | None
     direction_name: str | None
+    # None — отмена без записи (до фичи причин, импорт старой системы): платится,
+    # как раньше. Прошлое не пересматриваем.
+    decision: CancellationDecision | None = None
 
 
 @dataclass(frozen=True)
@@ -304,7 +321,25 @@ def lesson_pay(lesson: LessonInput, card: RateCard | None,
 
 def cancellation_pay(marker: MarkerInput, card: RateCard | None,
                      personal_rates: Iterable[PersonalRateInput]) -> Result:
-    """Начисление за отменённое занятие по версии на его дату (§1.3, §1.7)."""
+    """Начисление за отменённое занятие по версии на его дату (§1.3, §1.7).
+
+    Решение об отмене (marker.decision) проверяется раньше ставки: «без
+    компенсации» — ноль даже без версии ставок, а строка остаётся с причиной,
+    чтобы в «Зарплате» был виден и ноль, и почему. С компенсацией — сумма
+    «Мотивации» как прежде, причина — префиксом пояснения."""
+    decision = marker.decision
+    if decision is not None and not decision.compensated:
+        return Result(_ZERO, f'Без компенсации: {decision.side_label} — {decision.reason}')
+    res = _cancellation_amount(marker, card, personal_rates)
+    if decision is None:
+        return res
+    return Result(res.payment, f'{decision.side_label} — {decision.reason} · {res.rule_note}')
+
+
+def _cancellation_amount(marker: MarkerInput, card: RateCard | None,
+                         personal_rates: Iterable[PersonalRateInput]) -> Result:
+    """Сумма «Мотивации» за отмену: % от ставки формата (с персональной «все
+    уроки») или фикс."""
     if card is None:
         return Result(_ZERO, f'Нет ставки на {_date(marker.scheduled_date)}')
 

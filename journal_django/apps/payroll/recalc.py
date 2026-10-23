@@ -6,9 +6,17 @@
 грузятся фиксированным числом запросов, запись — bulk_create/bulk_update только
 реально изменившихся строк. Число запросов не зависит от числа уроков.
 
-Порядок блокировок внутри пересчёта — «урок/план → деньги» (как у
-scheduling.repository.cancel_lesson: сначала строки плана, затем зависимые):
-уроки охвата по id, затем маркеры по id, затем Payroll по lesson_id и
+Отмена платится только при компенсации (спека 2026-10-23-eduson-lesson-cancel-
+reasons-design, §4): маркер с записью LessonCancellation и compensated=False —
+0 «Без компенсации: …», с compensated=True — сумма «Мотивации» с причиной;
+маркер без записи (отмены до фичи, импорт) платится, как раньше. Запись идёт за
+начислением: к маркеру привязывается запись той же отмены, чьё начисление-сирота
+привязалось к нему (cancellations.repository.bind_for_markers).
+
+Порядок блокировок внутри пересчёта — «урок → план → записи отмен → деньги» (как
+у scheduling.repository.cancel_lesson: сначала строки плана, затем зависимые):
+уроки охвата по id, затем маркеры по id, затем записи об отменах
+(cancellations.repository.lock_for_markers), затем Payroll по lesson_id и
 CancellationPay по id. Два параллельных пересчёта поэтому не встают в дедлок
 друг с другом; лок урока до чтения агрегата присутствия защищает от расчёта по
 устаревшей посещаемости и от двойного bulk_create одного начисления. Удаление
@@ -89,16 +97,22 @@ def _load_personal(group_ids: set[int]) -> dict[int, list[PersonalRateInput]]:
     return by_group
 
 
-def _markers():
-    """Маркеры отмен, за которые есть кому платить: эффективный преподаватель —
-    замена, если поставлена (её ставят и на уже отменённое занятие), иначе teacher.
-    Маркер без преподавателя пропускается: teacher у начисления NOT NULL."""
+def _marker_qs():
+    """Единственное определение «маркера отмены» для привязки начислений (и, через
+    них, записей об отменах): строка плана seq IS NULL, status='cancelled', и есть
+    кому платить — замена или преподаватель. Маркер без преподавателя не в счёт:
+    он не привяжет сироту никогда (teacher у начисления NOT NULL)."""
     from apps.scheduling.models import PlannedLesson
-    return (
-        PlannedLesson.objects.filter(status=_CANCELLED, seq__isnull=True)
-        .annotate(eff_teacher_id=Coalesce('substitute_teacher_id', 'teacher_id'))
-        .filter(eff_teacher_id__isnull=False)
-    )
+    return PlannedLesson.objects.filter(
+        Q(substitute_teacher_id__isnull=False) | Q(teacher_id__isnull=False),
+        status=_CANCELLED, seq__isnull=True)
+
+
+def _markers():
+    """Маркеры отмен с эффективным преподавателем: замена, если поставлена (её
+    ставят и на уже отменённое занятие), иначе teacher."""
+    return _marker_qs().annotate(eff_teacher_id=Coalesce('substitute_teacher_id',
+                                                         'teacher_id'))
 
 
 def _scope(qs, *, group_ids, date_field, date_from, date_to):
@@ -207,10 +221,12 @@ def _recalc_lessons(rows, cards, personal_by_group) -> dict:
 
 
 def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
-                          today: datetime.date) -> dict:
+                          today: datetime.date, records: list) -> dict:
     """Начисления маркеров охвата + сироты (маркер удалён) в orphan_scope.
 
-    orphan_scope — queryset CancellationPay без маркера или None (сирот не трогаем)."""
+    orphan_scope — queryset CancellationPay без маркера или None (сирот не трогаем).
+    records — записи об отменах, уже залоченные (cancellations.repository.
+    lock_for_markers); к маркерам они привязываются здесь, вслед за начислениями."""
     from apps.payroll.models import CancellationPay
 
     pays_filter = Q(planned_lesson_id__in=[r['id'] for r in marker_rows])
@@ -222,7 +238,7 @@ def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
             # Маркер с тем же ключом вне охвата пересчёта: сироту не удаляем — её
             # привяжет к нему пересчёт, который этот маркер затронет. Маркер без
             # преподавателя не в счёт: он не привяжет никогда, сирота жила бы вечно.
-            has_marker=Exists(_markers().filter(
+            has_marker=Exists(_marker_qs().filter(
                 group_id=OuterRef('group_id'), scheduled_date=OuterRef('lesson_date'),
                 scheduled_time=OuterRef('scheduled_time'))),
         ).order_by('id')
@@ -253,6 +269,16 @@ def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
             current_by_marker[row['id']] = current
     _bind_by_day(unbound, orphans, current_by_marker)
 
+    # Решение об отмене — по записи, идущей за начислением: сирота-начисление,
+    # привязавшаяся к маркеру, ведёт за собой запись со своим ИСХОДНЫМ ключом
+    # (ключ читается до _diff, который перепишет его на ключ маркера).
+    decisions: dict = {}
+    if marker_rows:
+        from apps.cancellations.repository import bind_for_markers
+        follow = {mid: (p.group_id, p.lesson_date, p.scheduled_time)
+                  for mid, p in current_by_marker.items() if p.planned_lesson_id != mid}
+        decisions = bind_for_markers(marker_rows, records, follow)
+
     to_create, to_update = [], []
     for row in marker_rows:
         marker = MarkerInput(
@@ -261,6 +287,7 @@ def _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
             is_individual=row['group__is_individual'],
             direction_id=row['group__direction_id'],
             direction_name=row['group__direction__name'],
+            decision=decisions.get(row['id']),
         )
         res = cancellation_pay(marker, rates_on(cards, marker.scheduled_date),
                                personal_by_group.get(marker.group_id, ()))
@@ -301,8 +328,13 @@ def _bind_by_day(unbound: list[dict], orphans: dict[tuple, list], current_by_mar
     сменилось (мягкое обновление: в старой системе перенесли время отменённого
     занятия). Без неё прошлая сирота осталась бы рядом с новым начислением —
     двойная оплата одной отмены. Только однозначный случай: в группе на дату ровно
-    один маркер без начисления и ровно одна свободная сирота. Сирота, чей маркер
-    с тем же ключом есть вне охвата (has_marker), не кандидат — её привяжет он."""
+    один маркер отмены БЕЗ своего начисления и ровно одна свободная сирота. Маркеры
+    считаются по всей БД, не по охвату: точечный пересчёт одного маркера иначе не
+    увидел бы второго такого же в этом дне. Маркер со своим начислением (в БД или
+    привязанным в этом проходе) — не конкурент: в дне с двумя слотами перенос одной
+    отмены не должен оставлять её сироту без пары. Сирота, чей маркер с тем же
+    ключом есть вне охвата (has_marker), не кандидат — её привяжет он."""
+    from apps.payroll.models import CancellationPay
     markers_by_day: dict[tuple, list[dict]] = {}
     for row in unbound:
         markers_by_day.setdefault((row['group_id'], row['scheduled_date']), []).append(row)
@@ -310,11 +342,29 @@ def _bind_by_day(unbound: list[dict], orphans: dict[tuple, list], current_by_mar
     for key, bucket in orphans.items():
         for p in bucket:
             orphans_by_day.setdefault(key[:2], []).append((key, p))
-    for day_key, rows in markers_by_day.items():
-        candidates = orphans_by_day.get(day_key, [])
-        if len(rows) != 1 or len(candidates) != 1 or candidates[0][1].has_marker:
+    days = [
+        day_key for day_key, rows in markers_by_day.items()
+        if len(rows) == 1 and len(orphans_by_day.get(day_key, [])) == 1
+        and not orphans_by_day[day_key][0][1].has_marker
+    ]
+    if not days:
+        return
+    # Маркеры этих дней без своего начисления во всей БД — один запрос по
+    # planned_lessons_group_date_idx; уже получившие начисление в этом проходе
+    # (по FK или ключу) исключаются явно — в БД ссылка появится только при записи.
+    per_day = {
+        (g, d): n for g, d, n in _marker_qs()
+        .filter(group_id__in={g for g, _ in days}, scheduled_date__in={d for _, d in days})
+        .exclude(Exists(CancellationPay.objects.filter(planned_lesson_id=OuterRef('pk'))))
+        .exclude(id__in=list(current_by_marker))
+        .values('group_id', 'scheduled_date').annotate(n=Count('id'))
+        .values_list('group_id', 'scheduled_date', 'n')
+    }
+    for day_key in days:
+        if per_day.get(day_key) != 1:
             continue
-        key, orphan = candidates[0]
+        rows = markers_by_day[day_key]
+        key, orphan = orphans_by_day[day_key][0]
         orphans[key].remove(orphan)
         current_by_marker[rows[0]['id']] = orphan
 
@@ -408,6 +458,14 @@ def _run(*, lesson_ids, marker_ids, group_ids, date_from, date_to,
                 marker_qs = marker_qs.filter(id__in=list(marker_ids))
             marker_rows = _lock_markers(marker_qs)
 
+        # 2a. Записи об отменах этих маркеров — лок после плана, до денег; привязка
+        # к маркерам — позже, вслед за начислениями. Локальный импорт: cancellations
+        # сам ссылается на scheduling.
+        records: list = []
+        if marker_rows:
+            from apps.cancellations.repository import lock_for_markers
+            records = lock_for_markers(marker_rows)
+
         # Сироты — в группах охвата. При точечном пересчёте это группы
         # затронутых строк: удаление маркера (reset_plan) иначе оставило бы
         # будущую сироту до ближайшего полного пересчёта.
@@ -434,7 +492,7 @@ def _run(*, lesson_ids, marker_ids, group_ids, date_from, date_to,
             stats['updated'] += res['updated']
         if marker_rows or orphan_scope is not None:
             res = _recalc_cancellations(marker_rows, orphan_scope, cards, personal_by_group,
-                                        today)
+                                        today, records)
             stats['created'] += res['created']
             stats['updated'] += res['updated']
             stats['deleted'] += res['deleted']

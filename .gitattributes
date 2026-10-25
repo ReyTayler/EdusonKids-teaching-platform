@@ -6,3 +6,6 @@
 # (UTF-8 BOM при этом обязателен — его git не трогает, держит сам файл).
 deploy/nginx/**/*.conf text eol=lf
 *.ps1 text eol=crlf
+# Docker: всё, что уезжает внутрь Linux-образов, — строго LF.
+Dockerfile text eol=lf
+deploy/docker/** text eol=lf

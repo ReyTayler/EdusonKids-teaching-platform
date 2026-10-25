@@ -1,0 +1,37 @@
+# Что НЕ отправлять в сборку Docker (контекст = platform/).
+# Секреты, данные и тяжёлые локальные каталоги не должны попасть в образ:
+# образ можно выложить в реестр, и всё, что в нём лежит, считается опубликованным.
+
+# Секреты и локальные настройки
+.env
+.env.*
+!deploy/docker/.env.staging.example
+**/*.pem
+**/*.key
+
+# Git и служебное
+.git
+.gitignore
+.claude
+**/__pycache__
+**/*.pyc
+.pytest_cache
+
+# Python-окружения
+.venv
+**/.venv
+
+# Фронт: зависимости и готовые сборки — образ собирает их сам
+**/node_modules
+journal_django/frontend/admin-dist
+journal_django/frontend/teacher-dist
+
+# Данные и файлы, созданные во время работы
+journal_django/media
+deploy/nginx/local/.runtime
+deploy/nginx/local/logs
+**/*.dump
+**/*.sqlite*
+
+# Документация и тесты в образ не нужны
+docs

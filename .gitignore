@@ -4,6 +4,9 @@
 .env
 .env.*
 !.env.example
+!deploy/docker/.env.staging.example
+# Снимок базы для staging-контейнера (ПДн)
+deploy/docker/seed/
 service-account-key.json
 *.pem
 *.key

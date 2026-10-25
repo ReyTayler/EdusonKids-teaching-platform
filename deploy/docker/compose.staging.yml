@@ -1,0 +1,106 @@
+# Staging Eduson Kids в Docker: вся система одной командой.
+#
+#   cd deploy/docker
+#   docker compose -f compose.staging.yml up -d --build     # собрать и поднять
+#   docker compose -f compose.staging.yml ps                # что запущено
+#   docker compose -f compose.staging.yml logs -f app       # логи приложения
+#   docker compose -f compose.staging.yml down              # остановить (данные в томах остаются)
+#   docker compose -f compose.staging.yml down -v           # остановить и СТЕРЕТЬ данные
+#
+# Открыть: https://127.0.0.1:8443 (сертификат самоподписанный — браузер предупредит).
+#
+# Сервисы:
+#   db      — PostgreSQL 15; при первом запуске заливает seed/eduson.dump, если он есть;
+#   migrate — разово применяет миграции и завершается;
+#   app     — Django + gunicorn (стартует только после успешных миграций);
+#   web     — nginx: фронт + прокси /api в app; единственный, кто виден снаружи.
+#
+# Redis и Celery не поднимаются: без REDIS_URL Eduson работает синхронно и
+# кеширует в памяти процесса — для staging этого достаточно.
+
+name: eduson-staging
+
+x-app: &app-common
+  image: eduson-staging-app:latest
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+    target: app
+  env_file: .env.staging
+  volumes:
+    - media:/media
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:15-alpine
+    env_file: .env.staging
+    environment:
+      POSTGRES_DB: eduson_staging
+      POSTGRES_USER: eduson
+      TZ: Europe/Moscow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Скрипты первого запуска: выполняются ТОЛЬКО на пустом томе pgdata.
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+      - ./seed:/seed:ro
+    # Минимальные настройки памяти под staging (по умолчанию 128 МБ буферов и 100 соединений).
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20", "-c", "work_mem=4MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eduson -d eduson_staging"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+
+  migrate:
+    <<: *app-common
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    mem_limit: 400m
+    restart: "no"
+
+  app:
+    <<: *app-common
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Production-настройки редиректят http→https; X-Forwarded-Proto говорит Django,
+      # что запрос «уже https» (так делает и nginx).
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/health', headers={'X-Forwarded-Proto': 'https'}), timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 400m
+    cpus: 0.5
+    restart: unless-stopped
+
+  web:
+    image: eduson-staging-web:latest
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: web
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      # Только 127.0.0.1: staging не виден другим компьютерам в сети.
+      - "127.0.0.1:8443:443"
+      - "127.0.0.1:8081:80"
+    volumes:
+      - media:/media:ro
+      - certs:/etc/nginx/certs
+    mem_limit: 64m
+    cpus: 0.25
+    restart: unless-stopped
+
+volumes:
+  pgdata:   # данные PostgreSQL — переживают down/up, стираются только down -v
+  media:    # файлы базы знаний: пишет app, читает web
+  certs:    # самоподписанный сертификат nginx

@@ -35,3 +35,6 @@ deploy/nginx/local/logs
 
 # Документация и тесты в образ не нужны
 docs
+
+# Пароль входа на staging-сайт и секреты сервера
+deploy/docker/.staging-basic-auth

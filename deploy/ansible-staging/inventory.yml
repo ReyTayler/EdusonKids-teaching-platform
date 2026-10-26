@@ -1,0 +1,7 @@
+# Плейбук запускается на самом сервере — подключение локальное.
+all:
+  children:
+    staging:
+      hosts:
+        localhost:
+          ansible_connection: local

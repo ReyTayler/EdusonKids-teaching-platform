@@ -60,7 +60,7 @@ services:
     # Минимальные настройки памяти под staging (по умолчанию 128 МБ буферов и 100 соединений).
     command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20", "-c", "work_mem=4MB"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eduson -d eduson_staging"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U eduson -d eduson_staging && test ! -f /var/lib/postgresql/data/RESTORE_FAILED"]
       interval: 5s
       timeout: 3s
       retries: 30

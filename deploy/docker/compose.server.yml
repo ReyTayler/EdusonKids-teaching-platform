@@ -1,0 +1,106 @@
+# Staging Eduson Kids на сервере (рядом с журналом KOTOKOD, /opt/eduson-staging).
+#
+# Отличия от локального compose.staging.yml:
+#   - образы НЕ собираются на сервере: их собирают на машине разработчика и
+#     привозят готовыми (deploy-staging.sh). Версия — метка TAG из файла .env
+#     рядом (это короткий хеш коммита). На сервере нет ни кэша сборки, ни нагрузки
+#     от неё на работающий прод;
+#   - TLS и настоящий сертификат — у nginx сервера; контейнер web слушает
+#     обычный HTTP только на 127.0.0.1:8090. Docker открывает опубликованные
+#     порты В ОБХОД ufw, поэтому наружу контейнеры не публикуются никогда;
+#   - секреты — app.env (приложение) и db.env (только пароль базы); их кладёт
+#     deploy-staging.sh sync, плейбук их не пишет и не читает;
+#   - конфиги nginx смонтированы файлами: после их замены нужен
+#     «docker compose restart web» (release делает это сам).
+#
+# Управление (на сервере, из /opt/eduson-staging):
+#   docker compose ps -a | logs -f app | restart app | down
+#
+# Откат: в .env указать прежний TAG (хранятся 3 последние версии) и
+# «docker compose up -d». ⚠️ Миграции назад не откатываются — откат на образ
+# старше последней миграции небезопасен.
+
+name: eduson-staging
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app-common
+  logging: *logging
+  image: eduson-staging-app:${TAG:?TAG не задан в .env}
+  env_file: app.env
+  volumes:
+    - media:/media
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    logging: *logging
+    # Образ привозится вместе с образами приложения (docker save), с Docker Hub
+    # сервер ничего не скачивает.
+    image: postgres:15-alpine
+    env_file: db.env
+    environment:
+      POSTGRES_DB: eduson_staging
+      POSTGRES_USER: eduson
+      TZ: Europe/Moscow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+      - ./seed:/seed:ro
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20", "-c", "work_mem=4MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U eduson -d eduson_staging && test ! -f /var/lib/postgresql/data/RESTORE_FAILED"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+
+  migrate:
+    <<: *app-common
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    mem_limit: 400m
+    restart: "no"
+
+  app:
+    <<: *app-common
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/health', headers={'X-Forwarded-Proto': 'https'}), timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 400m
+    cpus: 0.5
+    restart: unless-stopped
+
+  web:
+    logging: *logging
+    image: eduson-staging-web:${TAG:?TAG не задан в .env}
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8090:80"
+    volumes:
+      - media:/media:ro
+      # Конфиг «за прокси сервера» поверх зашитого в образ (локального, с TLS).
+      - ./nginx/server.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/proxy-headers-server.conf:/etc/nginx/snippets/proxy-headers-server.conf:ro
+    mem_limit: 64m
+    cpus: 0.25
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  media:

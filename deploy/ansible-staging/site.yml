@@ -1,0 +1,293 @@
+# Staging Eduson Kids на сервере журнала KOTOKOD: Docker, swap, каталог,
+# сайт nginx с сертификатом и паролем.
+#
+# Запуск — НА САМОМ сервере (тот же ansible-core, что у KOTOKOD, /opt/ansible):
+#   cd /opt/eduson-staging/src/deploy/ansible-staging
+#   /opt/ansible/bin/ansible-playbook site.yml --check --diff   # только показать
+#   /opt/ansible/bin/ansible-playbook site.yml                  # применить
+#
+# Плейбук трогает ТОЛЬКО объекты staging Eduson (имена eduson*, /opt/eduson-staging,
+# Docker, swap). Сайт, базу, сервисы и бэкапы KOTOKOD он не меняет, а плейбук
+# KOTOKOD — эти объекты (проверено по его ролям: он управляет только своими файлами).
+#
+# Секреты плейбук не создаёт и не читает: app.env/db.env и пароль входа на сайт
+# (/etc/nginx/eduson-staging.htpasswd) кладёт deploy-staging.sh sync.
+#
+# ⚠️ Связка с плейбуком KOTOKOD через apt: после установки репозиторий Docker
+# участвует в каждом «apt update» сервера. Если download.docker.com недоступен,
+# apt-задачи плейбука KOTOKOD упадут. При аварии — временно переименовать
+# /etc/apt/sources.list.d/docker.list. Обновления Docker не входят в
+# unattended-upgrades (только Ubuntu security): обновлять осознанно, руками.
+
+- name: Staging Eduson Kids
+  hosts: staging
+  become: true
+
+  vars:
+    stage_root: /opt/eduson-staging
+    stage_domain: eduson-staging.develop-kotokod.ru
+    stage_port: 8090            # 127.0.0.1:8090 — контейнер web
+    # «zz-» — чтобы файл шёл в sites-enabled ПОСЛЕ journal-kotokod: при равных
+    # listen без default_server сервером по умолчанию nginx делает первый
+    # подключённый блок, и им должен остаться KOTOKOD.
+    stage_site: zz-eduson-staging
+    htpasswd_file: /etc/nginx/eduson-staging.htpasswd
+    certbot_email: ""           # пусто → регистрация без почты
+    swap_size_mb: 2048
+    min_free_gb: 8              # свободно на / после swap и образов — для PG KOTOKOD и его WAL
+    postgres_uid: 70            # пользователь postgres в образе postgres:*-alpine
+
+  pre_tasks:
+    # ------------------------------------------------------------------
+    # Предусловия: ничего не меняют, останавливают прогон до первой правки.
+    # ------------------------------------------------------------------
+    - name: Свободное место на /
+      ansible.builtin.assert:
+        that: >-
+          (ansible_mounts | selectattr('mount', 'equalto', '/') | first).size_available
+          > (min_free_gb + (0 if ansible_swaptotal_mb > 0 else swap_size_mb / 1024)) * 1024 ** 3
+        fail_msg: "На / мало места: нужно ≥ {{ min_free_gb }} ГБ сверх swap — диск общий с базой KOTOKOD."
+        quiet: true
+
+    - name: Имя staging указывает на этот сервер
+      ansible.builtin.command: getent ahostsv4 {{ stage_domain }}
+      register: stage_dns
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: DNS обязателен для сертификата
+      ansible.builtin.assert:
+        that: ansible_default_ipv4.address in stage_dns.stdout
+        fail_msg: >-
+          {{ stage_domain }} не указывает на {{ ansible_default_ipv4.address }}
+          (получено: «{{ stage_dns.stdout | default('') | trim }}»). Сначала A-запись в DNS.
+        quiet: true
+
+    - name: Порт {{ stage_port }} свободен или занят нашим контейнером
+      ansible.builtin.shell: >-
+        ss -Hltnp 'sport = :{{ stage_port }}' | grep -v docker-proxy || true
+      register: port_owner
+      changed_when: false
+      check_mode: false
+
+    - name: Порт не занят чужим процессом
+      ansible.builtin.assert:
+        that: port_owner.stdout | trim == ''
+        fail_msg: "Порт 127.0.0.1:{{ stage_port }} занят: {{ port_owner.stdout }}"
+        quiet: true
+
+  tasks:
+    # ------------------------------------------------------------------
+    # Swap — страховка всего сервера от нехватки памяти.
+    # Условие — «swap выключен», а не «нет файла»: если swapon однажды упал,
+    # повторный прогон доведёт дело до конца.
+    # ------------------------------------------------------------------
+    - name: Создать swap-файл
+      ansible.builtin.command:
+        cmd: "fallocate -l {{ swap_size_mb }}M /swapfile"
+        creates: /swapfile
+
+    - name: Права swap-файла
+      when: not ansible_check_mode
+      ansible.builtin.file:
+        path: /swapfile
+        mode: "0600"
+        owner: root
+        group: root
+
+    - name: Разметить и включить swap
+      when: ansible_swaptotal_mb == 0 and not ansible_check_mode
+      ansible.builtin.shell: |
+        set -e
+        blkid /swapfile >/dev/null 2>&1 || mkswap /swapfile
+        swapon /swapfile
+
+    - name: Swap переживает перезагрузку
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "/swapfile none swap sw 0 0"
+        regexp: '^/swapfile\s'
+
+    - name: Swap — только в крайнем случае (swappiness 10)
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/60-eduson-swap.conf
+        content: "vm.swappiness = 10\n"
+        mode: "0644"
+      register: swappiness
+
+    - name: Применить swappiness (только этот файл)
+      when: swappiness.changed and not ansible_check_mode
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/60-eduson-swap.conf
+
+    # ------------------------------------------------------------------
+    # Docker Engine — из официального репозитория Docker.
+    # ------------------------------------------------------------------
+    - name: Каталоги ключей apt и настроек Docker
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [/etc/apt/keyrings, /etc/docker]
+
+    - name: Ключ репозитория Docker
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Репозиторий Docker
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.list
+        content: >
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        mode: "0644"
+      register: docker_repo
+
+    - name: Настройки Docker (ротация логов всех контейнеров)
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+        content: |
+          {
+            "log-driver": "json-file",
+            "log-opts": { "max-size": "10m", "max-file": "3" },
+            "live-restore": true
+          }
+      register: docker_daemon
+
+    # В режиме проверки репозиторий не записан и кэш apt не обновлён — пакет
+    # «не найден». Это ожидаемо: проверка показывает, что ОН БУДЕТ установлен.
+    - name: Пакеты Docker
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+        state: present
+        update_cache: "{{ docker_repo.changed or not ansible_check_mode }}"
+      register: docker_pkgs
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Docker запущен и в автозагрузке
+      when: not ansible_check_mode
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Перечитать настройки Docker
+      when: docker_daemon.changed and not docker_pkgs.changed and not ansible_check_mode
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+
+    # ------------------------------------------------------------------
+    # Каталог staging. Конфиги — из этой же копии репозитория (../docker).
+    # ------------------------------------------------------------------
+    - name: Каталоги staging
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.owner | default('root') }}"
+      loop:
+        - { path: "{{ stage_root }}", mode: "0755" }
+        - { path: "{{ stage_root }}/nginx", mode: "0755" }
+        - { path: "{{ stage_root }}/db-init", mode: "0755" }
+        # Снимок базы читает postgres ВНУТРИ контейнера (uid 70) — каталог его.
+        - { path: "{{ stage_root }}/seed", mode: "0700", owner: "{{ postgres_uid }}" }
+
+    - name: Файлы staging
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ stage_root }}/{{ item.dest }}"
+        mode: "{{ item.mode }}"
+        owner: root
+        group: root
+      loop:
+        - { src: ../docker/compose.server.yml, dest: compose.yml, mode: "0644" }
+        - { src: ../docker/nginx/server.conf, dest: nginx/server.conf, mode: "0644" }
+        - { src: ../docker/nginx/proxy-headers-server.conf, dest: nginx/proxy-headers-server.conf, mode: "0644" }
+        - { src: ../docker/db-init/10-restore-seed.sh, dest: db-init/10-restore-seed.sh, mode: "0755" }
+      # В режиме проверки каталогов ещё нет — копирование показать нельзя.
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    # ------------------------------------------------------------------
+    # nginx сервера: сертификат → пароль → сайт.
+    # ------------------------------------------------------------------
+    - name: Проверить сертификат staging
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ stage_domain }}/fullchain.pem"
+      register: stage_cert
+
+    # certonly: certbot только выпускает сертификат, конфиги nginx не правит.
+    # Продление — существующий certbot.timer (тот же, что у основного домена).
+    - name: Выпустить сертификат Let's Encrypt
+      when: not stage_cert.stat.exists and not ansible_check_mode
+      ansible.builtin.command: >-
+        certbot certonly --nginx --non-interactive --agree-tos
+        {{ '--email ' ~ certbot_email if certbot_email else '--register-unsafely-without-email' }}
+        -d {{ stage_domain }}
+
+    - name: Проверить файл паролей входа
+      ansible.builtin.stat:
+        path: "{{ htpasswd_file }}"
+      register: htpasswd
+
+    - name: Файл паролей обязателен
+      ansible.builtin.assert:
+        that: htpasswd.stat.exists
+        fail_msg: "Нет {{ htpasswd_file }}. Его кладёт deploy-staging.sh sync."
+        quiet: true
+
+    - name: Обновить сайт nginx с проверкой
+      block:
+        - name: Сайт staging
+          ansible.builtin.template:
+            src: templates/eduson-staging.conf.j2
+            dest: "/etc/nginx/sites-available/{{ stage_site }}"
+            mode: "0644"
+            backup: true
+          register: stage_site_file
+
+        - name: Включить сайт
+          ansible.builtin.file:
+            src: "/etc/nginx/sites-available/{{ stage_site }}"
+            dest: "/etc/nginx/sites-enabled/{{ stage_site }}"
+            state: link
+          register: stage_link
+          ignore_errors: "{{ ansible_check_mode }}"
+
+        # Проверка и перечитывание — на каждом прогоне: дёшево и догоняет прогон,
+        # прерванный между записью файла и reload.
+        - name: Проверить конфигурацию nginx
+          when: not ansible_check_mode
+          ansible.builtin.command: nginx -t
+          changed_when: false
+
+        - name: Перечитать nginx
+          when: (stage_site_file.changed or stage_link.changed) and not ansible_check_mode
+          ansible.builtin.systemd:
+            name: nginx
+            state: reloaded
+      rescue:
+        # Ошибка не должна уронить сайт KOTOKOD: вернуть прежний файл staging
+        # (или убрать новый) и снять ссылку — nginx остаётся на рабочей конфигурации.
+        - name: Вернуть прежний конфиг staging
+          when: stage_site_file.backup_file is defined
+          ansible.builtin.copy:
+            src: "{{ stage_site_file.backup_file }}"
+            dest: "/etc/nginx/sites-available/{{ stage_site }}"
+            remote_src: true
+            mode: "0644"
+
+        - name: Отключить сайт staging
+          ansible.builtin.file:
+            path: "/etc/nginx/sites-enabled/{{ stage_site }}"
+            state: absent
+
+        - name: Остановиться с ошибкой
+          ansible.builtin.fail:
+            msg: >-
+              nginx -t не прошёл — сайт staging отключён, nginx работает на прежней
+              конфигурации. Смотрите вывод «Проверить конфигурацию nginx» выше.

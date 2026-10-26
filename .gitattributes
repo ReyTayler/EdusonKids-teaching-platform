@@ -9,3 +9,4 @@ deploy/nginx/**/*.conf text eol=lf
 # Docker: всё, что уезжает внутрь Linux-образов, — строго LF.
 Dockerfile text eol=lf
 deploy/docker/** text eol=lf
+deploy/ansible-staging/** text eol=lf

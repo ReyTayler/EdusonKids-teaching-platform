@@ -1,0 +1,64 @@
+# Staging Eduson Kids — сайт nginx СЕРВЕРА (рядом с journal-kotokod).
+# Управляется плейбуком EdusonPlatform/platform/deploy/ansible-staging — руками не править.
+#
+# Здесь только вход: TLS, пароль, ограничение частоты, проксирование в контейнер
+# web (127.0.0.1:{{ stage_port }}). Маршруты, статика и заголовки безопасности —
+# в nginx контейнера.
+
+# Зоны с префиксом eduson_ — имена зон общие на весь nginx и не должны
+# совпасть с зонами KOTOKOD (api_general, api_login…).
+limit_req_zone $binary_remote_addr zone=eduson_login:10m rate=20r/m;
+limit_req_zone $binary_remote_addr zone=eduson_all:10m rate=600r/m;
+
+server {
+    listen 80;
+    server_name {{ stage_domain }};
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name {{ stage_domain }};
+
+    ssl_certificate     /etc/letsencrypt/live/{{ stage_domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ stage_domain }}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    server_tokens off;
+    client_max_body_size 26m;
+
+    access_log /var/log/nginx/eduson-staging.access.log;
+    error_log  /var/log/nginx/eduson-staging.error.log;
+
+    # Staging закрыт паролем: поверх обычного входа платформы с 2FA.
+    auth_basic           "Eduson staging";
+    auth_basic_user_file {{ htpasswd_file }};
+
+    # Приложение (DRF) на неавторизованный запрос отвечает 401 c
+    # «WWW-Authenticate: Bearer». Браузер, увидев чужую схему, сбрасывает
+    # запомненный пароль staging и спрашивает его снова — скрываем заголовок.
+    proxy_hide_header WWW-Authenticate;
+
+    # Заголовки ставятся явно и один раз (без дистрибутивного proxy_params —
+    # двойной X-Forwarded-For уже ломал rate-limit на проде KOTOKOD).
+    location = /api/auth/login {
+        limit_req zone=eduson_login burst=10 nodelay;
+        proxy_pass http://127.0.0.1:{{ stage_port }};
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location / {
+        limit_req zone=eduson_all burst=120 nodelay;
+        proxy_pass http://127.0.0.1:{{ stage_port }};
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+}

@@ -1106,6 +1106,10 @@ button.kb-tree__twist:hover { color: var(--text2); }
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-3);
+  /* .page-header тянет следующий блок на −8px (рассчитано на зазор .app-page),
+     а .page статьи — обычный блок без зазора: без отступа строка статуса
+     наезжала на заголовок документа. */
+  margin-top: var(--space-4);
   margin-bottom: var(--space-5);
 }
 
@@ -2036,4 +2040,13 @@ body.kb-resizing * {
   inset: 0;
   background: var(--accent-soft);
   pointer-events: none;
+}
+
+/* --- Выравнивание «по ширине» -------------------------------------------- */
+/* Класс ставит documentRenderMap (атрибут textAlign=justify, обычно приходит
+   из Google Docs). На узком экране строка вмещает 4–6 слов, и растянутые
+   пробелы рвут текст — там выравниваем по левому краю. */
+.kb-justify { text-align: justify; }
+@media (max-width: 640px) {
+  .kb-justify { text-align: left; }
 }

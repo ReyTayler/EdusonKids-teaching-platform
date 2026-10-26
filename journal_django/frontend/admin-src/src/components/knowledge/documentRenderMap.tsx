@@ -43,12 +43,12 @@ function alignStyle(node: JSONNodeType) {
   const background = node.attrs?.blockBackground;
 
   const style: {
-    textAlign?: 'center' | 'right' | 'justify';
+    textAlign?: 'center' | 'right';
     backgroundColor?: string;
   } = {};
-  if (typeof align === 'string' && align && align !== 'left') {
-    style.textAlign = align as 'center' | 'right' | 'justify';
-  }
+  // «По ширине» — не стилем, а классом (blockClass): в узкой колонке телефона
+  // оно растягивает пробелы между словами, и CSS отключает его на малых экранах.
+  if (align === 'center' || align === 'right') style.textAlign = align;
   // Заливка блока. Сервер пропускает только значения из закрытого списка
   // (content.py: ALLOWED_HIGHLIGHT_COLORS), поэтому подставляется как есть.
   if (typeof background === 'string' && background) style.backgroundColor = background;
@@ -58,9 +58,12 @@ function alignStyle(node: JSONNodeType) {
 
 /** Класс блока с заливкой — из него берутся поля и скругление (knowledge.css). */
 function blockClass(node: JSONNodeType): string | undefined {
-  return typeof node.attrs?.blockBackground === 'string' && node.attrs.blockBackground
-    ? 'kb-block-bg'
-    : undefined;
+  const classes: string[] = [];
+  if (typeof node.attrs?.blockBackground === 'string' && node.attrs.blockBackground) {
+    classes.push('kb-block-bg');
+  }
+  if (node.attrs?.textAlign === 'justify') classes.push('kb-justify');
+  return classes.length > 0 ? classes.join(' ') : undefined;
 }
 
 /**
@@ -189,17 +192,33 @@ function Link({ mark, children }: MProps) {
  * ALLOWED_CALLOUT_TONES), поэтому его можно подставлять в имя класса.
  * Подписи — из общего словаря с редактором (calloutMeta.ts).
  */
+/** Плоский текст узла — для сравнения первой строки выноски с её подписью. */
+function nodeText(node: JSONNodeType | undefined): string {
+  if (!node) return '';
+  if (typeof node.text === 'string') return node.text;
+  return (node.content ?? []).map((child) => nodeText(child as JSONNodeType)).join('');
+}
+
 function Callout({ node, children }: NProps) {
   const raw = node.attrs?.tone;
   const tone = isCalloutTone(raw) ? raw : DEFAULT_CALLOUT_TONE;
+  const label = CALLOUT_LABELS[tone];
+  // Автор часто сам начинает выноску строкой «Информация» (так её переносит
+  // Google Docs) — тогда подпись дублировала бы её. Смысл блока при этом
+  // по-прежнему назван словом, а не только цветом.
+  const firstLine = nodeText(node.content?.[0] as JSONNodeType | undefined)
+    .trim().replace(/[:.]$/, '').toLowerCase();
+  const duplicated = firstLine === label.toLowerCase();
   return (
     <aside className={`kb-callout kb-callout--${tone}`} data-tone={tone}>
       {/* Подпись вида выноски — не украшение: без неё цвет остаётся
           единственным носителем смысла, а он не читается ни в чёрно-белой
           печати, ни при нарушении цветовосприятия. */}
-      <div className="kb-callout__head">
-        <span className="kb-callout__label">{CALLOUT_LABELS[tone]}</span>
-      </div>
+      {!duplicated && (
+        <div className="kb-callout__head">
+          <span className="kb-callout__label">{label}</span>
+        </div>
+      )}
       <div className="kb-callout__body">{children}</div>
     </aside>
   );

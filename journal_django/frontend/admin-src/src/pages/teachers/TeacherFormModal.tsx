@@ -20,11 +20,13 @@ export default function TeacherFormModal({ initial, onClose }: Props) {
   const [name, setName] = useState(initial?.name || '');
   const [email, setEmail] = useState(initial?.email || '');
   const [phone, setPhone] = useState(initial?.phone || '');
+  const [callUrl, setCallUrl] = useState(initial?.call_url || '');
   const [active, setActive] = useState(initial?.active ?? true);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const body: Partial<Teacher> = { name, email: email || null, phone: phone || null };
+    const body: Partial<Teacher> = { name, email: email || null, phone: phone || null,
+      call_url: callUrl.trim() || null };
     if (!isNew) body.active = active;
     try {
       if (isNew) {
@@ -60,6 +62,10 @@ export default function TeacherFormModal({ initial, onClose }: Props) {
         </Field>
         <Field label="Телефон">
           <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 (___) ___-__-__" />
+        </Field>
+        <Field label="Ссылка на звонок" full>
+          <TextInput type="url" value={callUrl} onChange={(e) => setCallUrl(e.target.value)}
+            placeholder="https://telemost.yandex.ru/j/…" />
         </Field>
         {!isNew && (
           <Field label="Активен">

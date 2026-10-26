@@ -16,6 +16,7 @@ import { fmtDate, todayMSK } from '../../lib/format';
 import type { Teacher } from '../../lib/types';
 import TeacherFormModal from './TeacherFormModal';
 import { TeacherTelegramBlock } from './TeacherTelegramBlock';
+import { TeacherCallBlock } from './TeacherCallBlock';
 import TeacherStatsRow from './TeacherStatsRow';
 import TeacherDirectionsBreakdown from './TeacherDirectionsBreakdown';
 import TeacherMonthDetails from './TeacherMonthDetails';
@@ -67,6 +68,12 @@ export default function TeacherDetailPage() {
     { key: 'id', label: 'ID' },
     { key: 'email', label: 'Email' },
     { key: 'phone', label: 'Телефон' },
+    {
+      key: 'call_url', label: 'Ссылка на звонок',
+      cell: (r) => r.call_url
+        ? <a href={r.call_url} target="_blank" rel="noopener noreferrer">{r.call_url}</a>
+        : '—',
+    },
     { key: 'active', label: 'Статус', cell: (r) => r.active ? 'Активен' : 'Архив' },
     { key: 'created_at', label: 'Добавлен', cell: (r) => fmtDate(r.created_at) },
   ];
@@ -139,7 +146,12 @@ export default function TeacherDetailPage() {
           value: stats?.last_lesson_date ? fmtDate(stats.last_lesson_date) : '—',
         },
       ]}
-      aside={<TeacherTelegramBlock teacher={teacher} />}
+      aside={
+        <>
+          <TeacherCallBlock teacher={teacher} />
+          <TeacherTelegramBlock teacher={teacher} />
+        </>
+      }
     />
   );
 

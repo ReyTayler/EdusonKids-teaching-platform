@@ -172,6 +172,48 @@ def test_patch_active_false(superadmin_client):
         _cleanup_teacher(teacher['id'])
 
 
+@pytest.mark.django_db
+def test_create_with_call_url(superadmin_client):
+    resp = superadmin_client.post(
+        BASE_URL,
+        {'name': '__test_call_url_create__', 'call_url': ' https://telemost.yandex.ru/j/123 '},
+        format='json',
+    )
+    assert resp.status_code == 201
+    try:
+        assert resp.json()['call_url'] == 'https://telemost.yandex.ru/j/123'
+    finally:
+        _cleanup_teacher(resp.json()['id'])
+
+
+@pytest.mark.django_db
+def test_patch_call_url_sets_and_clears(superadmin_client):
+    from apps.teachers import repository
+    teacher = repository.create_teacher({'name': '__test_call_url_patch__'})
+    url = f"{BASE_URL}/{teacher['id']}"
+    try:
+        resp = superadmin_client.patch(url, {'call_url': 'https://vk.com/call/join/abc'}, format='json')
+        assert resp.status_code == 200
+        assert resp.json()['call_url'] == 'https://vk.com/call/join/abc'
+
+        # PATCH без ключа ссылку не трогает
+        resp = superadmin_client.patch(url, {'name': '__test_call_url_patch_2__'}, format='json')
+        assert resp.json()['call_url'] == 'https://vk.com/call/join/abc'
+
+        resp = superadmin_client.patch(url, {'call_url': ''}, format='json')
+        assert resp.status_code == 200
+        assert resp.json()['call_url'] is None
+    finally:
+        _cleanup_teacher(teacher['id'])
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('bad', ['javascript:alert(1)', 'ftp://example.org/x', 'telemost'])
+def test_call_url_rejects_non_http_links(superadmin_client, bad):
+    resp = superadmin_client.post(BASE_URL, {'name': '__test_call_url_bad__', 'call_url': bad}, format='json')
+    assert resp.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # DELETE /api/admin/teachers/:id — soft delete
 # ---------------------------------------------------------------------------

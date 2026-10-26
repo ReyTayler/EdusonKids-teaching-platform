@@ -43,7 +43,8 @@ COURSE_LESSONS = 48
 GROUP_CODE_LETTER = {'П': 'python', 'С': 'scratch', 'В': 'vibe'}
 
 # Контакты преподавателя, которым в модели KOTOKOD пока нет полей (этап 3).
-_TEACHER_EXTRA = ('tg', 'telemost', 'vk', 'subjects')
+# telemost переносится в Teacher.call_url; vk в Eduson — профиль, а не звонок.
+_TEACHER_EXTRA = ('tg', 'vk', 'subjects')
 
 
 def _text(value) -> str | None:
@@ -96,7 +97,7 @@ def _needed_teachers(teachers: dict[int, dict], users: list[dict], referenced: s
 
 def _teacher_fields(t: dict) -> dict:
     return {'name': t['name'].strip(), 'email': _text(t['email']), 'phone': _text(t['phone']),
-            'active': bool(t['active'])}
+            'call_url': _text(t.get('telemost')), 'active': bool(t['active'])}
 
 
 def _report_teachers(teachers: dict[int, dict], needed: set[int], ctx: ImportContext) -> None:
@@ -304,6 +305,9 @@ def _sync_teachers(teachers: dict[int, dict], needed: set[int], linked: dict[str
             teacher = Teacher.objects.create(**fields, created_at=now)
             created += 1
         else:
+            # Ссылку на звонок, вписанную в платформе, пустой Eduson не стирает.
+            if fields['call_url'] is None:
+                del fields['call_url']
             changed = [k for k, v in fields.items() if getattr(teacher, k) != v]
             if changed:
                 for k in changed:

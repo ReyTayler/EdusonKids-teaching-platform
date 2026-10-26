@@ -10,7 +10,12 @@ TeacherUpdateSerializer — ввод для PATCH (updateTeacherSchema, все �
 """
 from __future__ import annotations
 
+from django.core.validators import URLValidator
 from rest_framework import serializers
+
+# Ссылка рендерится как <a href>: только http(s), иначе в карточку можно
+# положить что-то вроде ftp:// или вовсе не адрес.
+_CALL_URL_VALIDATORS = [URLValidator(schemes=['http', 'https'])]
 
 
 class TeacherReadSerializer(serializers.Serializer):
@@ -22,6 +27,7 @@ class TeacherReadSerializer(serializers.Serializer):
     name = serializers.CharField()
     email = serializers.CharField(allow_null=True)
     phone = serializers.CharField(allow_null=True)
+    call_url = serializers.CharField(allow_null=True)
     active = serializers.BooleanField()
     created_at = serializers.DateTimeField()
 
@@ -39,6 +45,10 @@ class TeacherWriteSerializer(serializers.Serializer):
     name = serializers.CharField(min_length=1)
     email = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     phone = serializers.CharField(allow_null=True, allow_blank=True, required=False)
+    call_url = serializers.CharField(
+        allow_null=True, allow_blank=True, required=False, max_length=500,
+        validators=_CALL_URL_VALIDATORS,
+    )
 
     def validate_name(self, value: str) -> str:
         return value.strip()
@@ -63,6 +73,12 @@ class TeacherUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(min_length=1, required=False)
     email = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     phone = serializers.CharField(allow_null=True, allow_blank=True, required=False)
+    # В отличие от email/phone пустое значение СТИРАЕТ ссылку: звонки
+    # пересоздают, и старую ссылку нужно уметь убрать.
+    call_url = serializers.CharField(
+        allow_null=True, allow_blank=True, required=False, max_length=500,
+        validators=_CALL_URL_VALIDATORS,
+    )
     active = serializers.BooleanField(required=False)
 
     def validate_name(self, value: str) -> str:

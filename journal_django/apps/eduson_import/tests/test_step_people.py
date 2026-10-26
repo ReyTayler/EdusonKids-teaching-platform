@@ -126,10 +126,20 @@ def test_teacher_contacts_reported_without_values(tmp_path):
     db.teacher(2, 'Борис Тестов')
     ctx = _run(db)
     text = '\n'.join(ctx.report)
-    assert '#1' in text and 'tg' in text and 'telemost' in text and 'subjects' in text
+    assert '#1' in text and 'tg' in text and 'subjects' in text
+    assert 'telemost' not in text                          # переносится в call_url, не в архив
     assert '#2' not in text
     for secret in ('anna_secret', 'telemost.example', 'Анна'):
         assert secret not in text
+
+
+def test_teacher_telemost_becomes_call_url(tmp_path):
+    db = EdusonDB(tmp_path / 'e.db')
+    db.teacher(1, 'Анна Тестова', telemost=' https://telemost.example/j/1 ')
+    db.teacher(2, 'Борис Тестов')
+    ctx = _run(db)
+    assert _teacher(ctx, 1).call_url == 'https://telemost.example/j/1'
+    assert _teacher(ctx, 2).call_url is None
 
 
 # ── учётки ──────────────────────────────────────────────────────────────────

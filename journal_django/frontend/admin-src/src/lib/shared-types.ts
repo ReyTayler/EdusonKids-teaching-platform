@@ -20,6 +20,8 @@ export interface Teacher {
   name: string;
   email: string | null;
   phone: string | null;
+  /** Постоянная ссылка на звонок (Телемост, ВК Звонок…); null — не указана. */
+  call_url: string | null;
   active: boolean;
   created_at: string;
   /** null — аккаунт не привязан. */

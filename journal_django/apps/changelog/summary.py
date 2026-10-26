@@ -311,7 +311,7 @@ FIELD_RU = {
     'parent2_email': 'email родителя 2',
     'platform_id': 'ID платформы', 'manager_id': 'менеджер', 'assignee_id': 'ответственный менеджер',
     'vk_chat': 'VK-чат', 'note': 'комментарий', 'comment': 'комментарий',
-    'record_url': 'ссылка на запись',
+    'record_url': 'ссылка на запись', 'call_url': 'ссылка на звонок',
     'direction': 'направление', 'direction_id': 'направление',
     'teacher': 'преподаватель', 'teacher_id': 'преподаватель',
     'substitute_teacher_id': 'замена',

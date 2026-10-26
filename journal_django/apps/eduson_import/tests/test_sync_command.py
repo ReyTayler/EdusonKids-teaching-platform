@@ -154,6 +154,17 @@ def test_empty_source_value_keeps_platform_value(db):
     assert Student.objects.get(id=misha.id).email == 'misha@example.org'
 
 
+def test_teacher_call_url_follows_eduson_but_empty_keeps_platform_value(db):
+    teacher = Teacher.objects.get(name='Анна Тестова')
+    Teacher.objects.filter(id=teacher.id).update(call_url='https://example.org/platform-call')
+    _sync(db)
+    assert Teacher.objects.get(id=teacher.id).call_url == 'https://example.org/platform-call'
+
+    db.con.execute("UPDATE teachers SET telemost='https://telemost.example/j/2' WHERE id=1")
+    _sync(db)
+    assert Teacher.objects.get(id=teacher.id).call_url == 'https://telemost.example/j/2'
+
+
 def test_vanished_group_goes_to_archive_without_facts(db):
     db.group(6, 'СИ1002', 'scratch', 1, fmt='individual')
     db.participant(6, 'Оля', 'Мама Оли', '79990000004', id=14)

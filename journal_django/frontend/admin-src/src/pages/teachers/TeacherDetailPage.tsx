@@ -147,11 +147,12 @@ export default function TeacherDetailPage() {
         },
       ]}
       aside={
-        <>
+        <div className="ehero__cards">
           <TeacherCallBlock teacher={teacher} />
           <TeacherTelegramBlock teacher={teacher} />
-        </>
+        </div>
       }
+      wideSide
     />
   );
 

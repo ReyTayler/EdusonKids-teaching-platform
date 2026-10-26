@@ -117,6 +117,14 @@
   min-width: 240px;
   display: flex; flex-direction: column; gap: var(--space-2);
 }
+.ehero__side--wide { flex-basis: 600px; }
+/* Карточки в ряд под фактами (звонок + Telegram у преподавателя); на узкой
+   колонке auto-fit сам переносит их друг под друга. */
+.ehero__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-2);
+}
 /* Факты — пары «ключ — значение» (.kv Eduson): ключ --text2, значение mono. */
 .ehero__facts {
   display: flex; flex-direction: column;

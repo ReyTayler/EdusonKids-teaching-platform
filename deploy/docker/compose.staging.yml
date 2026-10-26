@@ -20,7 +20,17 @@
 
 name: eduson-staging
 
+# Логи контейнеров. Docker по умолчанию пишет вывод в JSON-файл БЕЗ ограничения
+# размера — он растёт, пока контейнер не удалят. Ротация: не больше 3 файлов
+# по 10 МБ на контейнер (≤ 30 МБ), старые удаляются автоматически.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-app: &app-common
+  logging: *logging
   image: eduson-staging-app:latest
   build:
     context: ../..
@@ -35,6 +45,7 @@ x-app: &app-common
 
 services:
   db:
+    logging: *logging
     image: postgres:15-alpine
     env_file: .env.staging
     environment:
@@ -81,6 +92,7 @@ services:
     restart: unless-stopped
 
   web:
+    logging: *logging
     image: eduson-staging-web:latest
     build:
       context: ../..

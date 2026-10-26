@@ -88,8 +88,14 @@ FROM nginx:1.27-alpine AS web
 # openssl — выпустить самоподписанный сертификат при первом старте (staging без домена).
 # /srv/media — точка монтирования тома с файлами базы знаний; владелец uid 1000
 # (= пользователь eduson приложения), см. комментарий в этапе app.
+#
+# nginx — в группе приложения (gid 1000): оригиналы загрузок приложение пишет
+# с правами 0640 (apps/knowledge/storage.py, STORED_FILE_MODE) — читать их
+# может только группа. Это та же схема, что на проде (nginx в группе www-data).
+# Без группы nginx отвечал 403 на оригинал картинки, а webp-варианты (0644) отдавал.
 RUN apk add --no-cache openssl \
- && mkdir -p /srv/media && chown 1000:1000 /srv/media
+ && mkdir -p /srv/media && chown 1000:1000 /srv/media \
+ && addgroup -g 1000 eduson && addgroup nginx eduson
 
 # Тот же каталог, что и в приложении (/app = journal_django): общий сниппет статики
 # проекта (deploy/nginx/snippets/journal-static.conf) опирается на $app_root.

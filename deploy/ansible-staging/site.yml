@@ -1,5 +1,5 @@
 # Staging Eduson Kids на сервере журнала KOTOKOD: Docker, swap, каталог,
-# сайт nginx с сертификатом и паролем.
+# сайт nginx с сертификатом.
 #
 # Запуск — НА САМОМ сервере (тот же ansible-core, что у KOTOKOD, /opt/ansible):
 #   cd /opt/eduson-staging/src/deploy/ansible-staging
@@ -10,8 +10,7 @@
 # Docker, swap). Сайт, базу, сервисы и бэкапы KOTOKOD он не меняет, а плейбук
 # KOTOKOD — эти объекты (проверено по его ролям: он управляет только своими файлами).
 #
-# Секреты плейбук не создаёт и не читает: app.env/db.env и пароль входа на сайт
-# (/etc/nginx/eduson-staging.htpasswd) кладёт deploy-staging.sh sync.
+# Секреты плейбук не создаёт и не читает: app.env/db.env кладёт deploy-staging.sh sync.
 #
 # ⚠️ Связка с плейбуком KOTOKOD через apt: после установки репозиторий Docker
 # участвует в каждом «apt update» сервера. Если download.docker.com недоступен,
@@ -31,6 +30,7 @@
     # listen без default_server сервером по умолчанию nginx делает первый
     # подключённый блок, и им должен остаться KOTOKOD.
     stage_site: zz-eduson-staging
+    # Пароль на сайт снят (решение владельца 2026-10-26) — прежний файл удаляется.
     htpasswd_file: /etc/nginx/eduson-staging.htpasswd
     certbot_email: ""           # пусто → регистрация без почты
     swap_size_mb: 2048
@@ -229,16 +229,6 @@
         {{ '--email ' ~ certbot_email if certbot_email else '--register-unsafely-without-email' }}
         -d {{ stage_domain }}
 
-    - name: Проверить файл паролей входа
-      ansible.builtin.stat:
-        path: "{{ htpasswd_file }}"
-      register: htpasswd
-
-    - name: Файл паролей обязателен
-      ansible.builtin.assert:
-        that: htpasswd.stat.exists
-        fail_msg: "Нет {{ htpasswd_file }}. Его кладёт deploy-staging.sh sync."
-        quiet: true
 
     - name: Обновить сайт nginx с проверкой
       block:
@@ -286,8 +276,15 @@
             path: "/etc/nginx/sites-enabled/{{ stage_site }}"
             state: absent
 
-        - name: Остановиться с ошибкой
+        - name: Остановиться с ошибкой (пароль сайта не удалён)
           ansible.builtin.fail:
             msg: >-
               nginx -t не прошёл — сайт staging отключён, nginx работает на прежней
               конфигурации. Смотрите вывод «Проверить конфигурацию nginx» выше.
+
+    # После того как nginx перечитал конфиг без пароля: раньше удалять нельзя —
+    # старый конфиг ссылался бы на несуществующий файл.
+    - name: Удалить прежний файл паролей сайта
+      ansible.builtin.file:
+        path: "{{ htpasswd_file }}"
+        state: absent

@@ -13,7 +13,7 @@
 #                  /opt/ansible/bin/ansible-playbook site.yml                 → с его согласия
 #   3) release
 #
-# Скрипт трогает на сервере только /opt/eduson-staging и /etc/nginx/eduson-staging.htpasswd.
+# Скрипт трогает на сервере только /opt/eduson-staging.
 #
 # ⚠️ Секреты сервера живут ТОЛЬКО локально в deploy/docker/.env.server (вне git).
 # Если файл потерян и сгенерирован заново, новый пароль базы не совпадёт с
@@ -31,7 +31,6 @@ POSTGRES_UID=70                         # пользователь postgres в �
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 SECRETS="$HERE/.env.server"            # секреты сервера — только локально, вне git
-AUTH="$HERE/.staging-basic-auth"       # логин и пароль входа на сайт — только локально
 DOCKER="${DOCKER:-/c/Program Files/Docker/Docker/resources/bin/docker.exe}"
 [ -x "$DOCKER" ] || DOCKER=docker
 
@@ -68,10 +67,6 @@ EDUSON_PROD_REFRESH_BUTTON=false
 EOF
     )
   fi
-  if [ ! -s "$AUTH" ]; then
-    say "Генерирую пароль входа на сайт: $AUTH"
-    (umask 077 && printf 'eduson\n%s\n' "$(rnd 16)" > "$AUTH")
-  fi
 }
 
 cmd_sync() {
@@ -95,14 +90,6 @@ cmd_sync() {
   ssh "$HOST" "mkdir -p $REMOTE/seed && umask 077 && cat > $REMOTE/seed/eduson.dump \
     && chown -R $POSTGRES_UID:$POSTGRES_UID $REMOTE/seed && chmod 700 $REMOTE/seed && chmod 600 $REMOTE/seed/eduson.dump" \
     < "$HERE/seed/eduson.dump"
-
-  say "Пароль входа на сайт → /etc/nginx/eduson-staging.htpasswd"
-  local user hash
-  user="$(clean "$AUTH" | sed -n 1p)"
-  # SHA-512 (crypt), пароль — через stdin, не в аргументах команды.
-  hash="$(clean "$AUTH" | sed -n 2p | openssl passwd -6 -stdin)"
-  printf '%s:%s\n' "$user" "$hash" \
-    | ssh "$HOST" "umask 027 && cat > /etc/nginx/eduson-staging.htpasswd && chown root:www-data /etc/nginx/eduson-staging.htpasswd && chmod 640 /etc/nginx/eduson-staging.htpasswd"
 
   say "Готово. Дальше — плейбук на сервере (--check --diff), затем: $0 release"
 }
@@ -154,9 +141,8 @@ docker system df
 REMOTE_SCRIPT
 
   say "Проверка снаружи"
-  local user pass code
-  user="$(clean "$AUTH" | sed -n 1p)"; pass="$(clean "$AUTH" | sed -n 2p)"
-  code="$(curl -s -o /dev/null -w '%{http_code}' -u "$user:$pass" "https://$DOMAIN/health")"
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/health")"
   echo "https://$DOMAIN/health → $code"
   [ "$code" = 200 ] || { echo "Staging не отвечает 200 — смотрите: $0 status"; exit 1; }
 }

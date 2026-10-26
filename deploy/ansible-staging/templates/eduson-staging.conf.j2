@@ -1,7 +1,7 @@
 # Staging Eduson Kids — сайт nginx СЕРВЕРА (рядом с journal-kotokod).
 # Управляется плейбуком EdusonPlatform/platform/deploy/ansible-staging — руками не править.
 #
-# Здесь только вход: TLS, пароль, ограничение частоты, проксирование в контейнер
+# Здесь только вход: TLS, ограничение частоты, проксирование в контейнер
 # web (127.0.0.1:{{ stage_port }}). Маршруты, статика и заголовки безопасности —
 # в nginx контейнера.
 
@@ -31,14 +31,9 @@ server {
     access_log /var/log/nginx/eduson-staging.access.log;
     error_log  /var/log/nginx/eduson-staging.error.log;
 
-    # Staging закрыт паролем: поверх обычного входа платформы с 2FA.
-    auth_basic           "Eduson staging";
-    auth_basic_user_file {{ htpasswd_file }};
-
-    # Приложение (DRF) на неавторизованный запрос отвечает 401 c
-    # «WWW-Authenticate: Bearer». Браузер, увидев чужую схему, сбрасывает
-    # запомненный пароль staging и спрашивает его снова — скрываем заголовок.
-    proxy_hide_header WWW-Authenticate;
+    # Отдельного пароля на сайт нет (решение владельца 2026-10-26): вход —
+    # только через платформу с 2FA. От поисковиков — X-Robots-Tag noindex
+    # (ставит nginx контейнера).
 
     # Заголовки ставятся явно и один раз (без дистрибутивного proxy_params —
     # двойной X-Forwarded-For уже ломал rate-limit на проде KOTOKOD).

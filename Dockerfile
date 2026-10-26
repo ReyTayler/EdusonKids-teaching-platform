@@ -61,8 +61,13 @@ RUN pip install -r requirements.txt
 # Код бэкенда. Фронт-исходники и node_modules сюда не нужны (.dockerignore их режет).
 COPY --chown=eduson:eduson journal_django/ ./
 
-# Каталог файлов базы знаний (в compose на него монтируется том).
-RUN mkdir -p /media && chown eduson:eduson /media
+# Каталог файлов базы знаний (в compose на него монтируется том media).
+# НЕ /media: это системный каталог Linux (cdrom/floppy/usb, владелец root) —
+# том, заполненный из него, достаётся root, и приложение не может писать файлы.
+# Пустой том Docker заполняет содержимым и правами каталога из образа
+# контейнера, который смонтировал его первым, поэтому /srv/media с тем же
+# владельцем (uid 1000) есть и в образе nginx ниже.
+RUN mkdir -p /srv/media && chown eduson:eduson /srv/media
 
 USER eduson
 EXPOSE 8000
@@ -81,7 +86,10 @@ CMD ["gunicorn", "config.wsgi:application", \
 FROM nginx:1.27-alpine AS web
 
 # openssl — выпустить самоподписанный сертификат при первом старте (staging без домена).
-RUN apk add --no-cache openssl
+# /srv/media — точка монтирования тома с файлами базы знаний; владелец uid 1000
+# (= пользователь eduson приложения), см. комментарий в этапе app.
+RUN apk add --no-cache openssl \
+ && mkdir -p /srv/media && chown 1000:1000 /srv/media
 
 # Тот же каталог, что и в приложении (/app = journal_django): общий сниппет статики
 # проекта (deploy/nginx/snippets/journal-static.conf) опирается на $app_root.

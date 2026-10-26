@@ -20,8 +20,8 @@ interface Props {
   facts?: HeroFact[];
   /** Произвольный блок под фактами (например, последний комментарий). */
   aside?: ReactNode;
-  /** Широкая правая колонка — когда в `aside` несколько карточек в ряд. */
-  wideSide?: boolean;
+  /** Строка под чипами в основной колонке (например, ссылка на звонок). */
+  extra?: ReactNode;
 }
 
 /**
@@ -33,7 +33,7 @@ interface Props {
  * монограммы считаются от неё через color-mix, поэтому в JS остаётся один цвет,
  * а не тройка hsl-строк.
  */
-export function EntityHero({ monogram, color, title, badge, meta, actions, facts, aside, wideSide }: Props) {
+export function EntityHero({ monogram, color, title, badge, meta, actions, facts, aside, extra }: Props) {
   const hasSide = Boolean(facts?.length) || Boolean(aside);
 
   return (
@@ -46,12 +46,13 @@ export function EntityHero({ monogram, color, title, badge, meta, actions, facts
             {badge}
           </div>
           {meta && <div className="ehero__meta">{meta}</div>}
+          {extra}
           {actions && <div className="ehero__actions">{actions}</div>}
         </div>
       </div>
 
       {hasSide && (
-        <div className={`ehero__side${wideSide ? ' ehero__side--wide' : ''}`}>
+        <div className="ehero__side">
           {!!facts?.length && (
             <dl className="ehero__facts">
               {facts.map((f) => (

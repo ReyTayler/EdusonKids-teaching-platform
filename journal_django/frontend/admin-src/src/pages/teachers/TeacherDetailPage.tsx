@@ -16,7 +16,7 @@ import { fmtDate, todayMSK } from '../../lib/format';
 import type { Teacher } from '../../lib/types';
 import TeacherFormModal from './TeacherFormModal';
 import { TeacherTelegramBlock } from './TeacherTelegramBlock';
-import { TeacherCallBlock } from './TeacherCallBlock';
+import { TeacherCallLink } from './TeacherCallLink';
 import TeacherStatsRow from './TeacherStatsRow';
 import TeacherDirectionsBreakdown from './TeacherDirectionsBreakdown';
 import TeacherMonthDetails from './TeacherMonthDetails';
@@ -146,13 +146,8 @@ export default function TeacherDetailPage() {
           value: stats?.last_lesson_date ? fmtDate(stats.last_lesson_date) : '—',
         },
       ]}
-      aside={
-        <div className="ehero__cards">
-          <TeacherCallBlock teacher={teacher} />
-          <TeacherTelegramBlock teacher={teacher} />
-        </div>
-      }
-      wideSide
+      extra={<TeacherCallLink teacher={teacher} />}
+      aside={<TeacherTelegramBlock teacher={teacher} />}
     />
   );
 

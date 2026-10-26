@@ -96,14 +96,18 @@ cmd_sync() {
 
 cmd_release() {
   local tag; tag="$(git -C "$REPO" rev-parse --short HEAD)"
-  # Всё, что попадает в образы: код, Dockerfile, правила контекста, конфиги nginx.
+  # Образ собирается из чистой выгрузки коммита (git archive), а не из рабочей
+  # папки: в ней бывают чужие незакоммиченные правки, и в образ попало бы то,
+  # чего нет ни в одном коммите. Так версия на сервере = ровно коммит $tag.
   if [ -n "$(git -C "$REPO" status --porcelain -- journal_django Dockerfile .dockerignore deploy/nginx deploy/docker/nginx)" ]; then
-    echo "Есть незакоммиченные правки в том, что попадает в образ — он не совпадёт с версией $tag. Закоммитьте и повторите."
-    exit 1
+    echo "(в рабочей папке есть незакоммиченные правки — в образ они НЕ попадут, собирается коммит $tag)"
   fi
+  local build_dir; build_dir="$(mktemp -d)"
+  trap 'rm -rf "$build_dir"' RETURN
+  git -C "$REPO" archive --format=tar HEAD | tar -xf - -C "$build_dir"
 
-  say "Сборка образов локально (версия $tag)"
-  "$DOCKER" compose -f "$HERE/compose.staging.yml" build
+  say "Сборка образов локально (версия $tag, из коммита)"
+  "$DOCKER" compose -f "$build_dir/deploy/docker/compose.staging.yml" build
   "$DOCKER" tag eduson-staging-app:latest "eduson-staging-app:$tag"
   "$DOCKER" tag eduson-staging-web:latest "eduson-staging-web:$tag"
   "$DOCKER" pull -q "$POSTGRES_IMAGE"

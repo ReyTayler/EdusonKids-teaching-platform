@@ -162,11 +162,13 @@ nonce**. Сейчас в режиме `Report-Only`, флип на боевой 
 - `permission_classes = [IsBotService]` задан явно на каждой вьюхе.
 - Аутентификация не сессионная ⇒ CSRF не применяется; `@csrf_exempt` не нужен и
   не ставится.
-- Rate-limit (`ScopedRateThrottle`, scope `bot_service`) + `limit_req` в nginx.
-- В nginx `location /api/integrations/` закрыт `allow 127.0.0.1; deny all` — бот
-  и журнал на одной машине, наружу этому торчать незачем.
+- Rate-limit — `ScopedRateThrottle`, scope `bot_service`. `limit_req` в nginx здесь
+  не работает: бот ходит мимо nginx.
+- Бот — контейнер в сети compose и ходит в `app:8000` мимо nginx; снаружи
+  nginx отдаёт на `/api/integrations/` 404 — наружу этому торчать незачем.
+  Защита от внешнего вызова — секрет `X-Bot-Token` и этот 404, не nginx-лимит.
 
-`TELEGRAM_BOT_TOKEN` живёт в двух `.env` (журнала и бота) на одной машине —
+`TELEGRAM_BOT_TOKEN` живёт в двух окружениях (журнала и бота) —
 осознанная цена того, что рассылку ведёт журнал напрямую.
 
 ## 14. Персональные данные (152-ФЗ)

@@ -16,8 +16,10 @@ KIND_LESSON_MOVED = 'lesson_moved'
 KIND_LESSON_CANCELLED = 'lesson_cancelled'
 KIND_SUBSTITUTE_ASSIGNED = 'substitute_assigned'
 KIND_SUBSTITUTE_REMOVED = 'substitute_removed'
-# Email-напоминания Eduson (спека этапа 3, раздел D). Утреннее письмо
-# преподавателю — тот же morning_digest, только канал email.
+# Email-напоминания Eduson (спека этапа 3, раздел D).
+# Только для отображения старых строк журнала доставки; письма «урок не записан»
+# убраны 2026-10-27, новых таких строк нет. Из KIND_CHOICES не убирается: на
+# нём стоит CHECK в БД, и старые строки должны оставаться валидными.
 KIND_LESSON_UNRECORDED = 'lesson_unrecorded'
 KIND_PARENT_DAY_BEFORE = 'parent_day_before'
 KIND_PARENT_HOUR_BEFORE = 'parent_hour_before'
@@ -51,17 +53,11 @@ TERMINAL_STATUSES = (STATUS_SENT, STATUS_FAILED)
 MAX_ATTEMPTS = 5
 
 # --- Email-напоминания -----------------------------------------------------
-# «Урок не записан»: первое письмо — в течение REMIND_WINDOW после конца урока,
-# затем до UNRECORDED_MAX_REPEATS повторов с шагом REPEAT_EVERY (каждый — в своём
-# окне той же ширины). Окно нужно, чтобы задача по расписанию не будила
-# преподавателя письмами про уроки недельной давности.
-UNRECORDED_WINDOW_HOURS = 3
-UNRECORDED_REPEAT_EVERY_HOURS = 24
-UNRECORDED_MAX_REPEATS = 3
 # «Урок через час»: занятия, до начала которых (55; 65] минут.
 HOUR_BEFORE_FROM_MINUTES = 55
 HOUR_BEFORE_TO_MINUTES = 65
 # Сколько держать завершённые email-строки, не отдавая их подрезке хвоста.
-# Идемпотентность оконных напоминаний держится на dedup_key — удали строку
-# раньше, чем закроется окно, и следующий тик пришлёт письмо повторно.
+# Идемпотентность родительских напоминаний («урок завтра», «через час») держится
+# на dedup_key — удали строку раньше, чем закроется окно, и следующий тик
+# пришлёт семье то же письмо повторно.
 EMAIL_DEDUP_HORIZON_HOURS = 24

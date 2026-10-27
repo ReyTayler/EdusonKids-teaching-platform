@@ -3,23 +3,20 @@ from __future__ import annotations
 
 import datetime
 
-from django.db.models import Exists, F, Max, OuterRef, Q, QuerySet
+from django.db.models import F, Max, Q, QuerySet
 
-from apps.accounts.models import Account
 from apps.memberships.models import GroupMembership
 from apps.notifications.constants import (
-    CHANNEL_CHOICES, KIND_CHOICES, KIND_FILL_DIGEST, KIND_LESSON_UNRECORDED,
-    KIND_MORNING_DIGEST, KIND_PARENT_DAY_BEFORE, KIND_PARENT_HOUR_BEFORE,
-    STATUS_CHOICES,
+    CHANNEL_CHOICES, KIND_CHOICES, KIND_FILL_DIGEST, KIND_MORNING_DIGEST,
+    KIND_PARENT_DAY_BEFORE, KIND_PARENT_HOUR_BEFORE, STATUS_CHOICES,
 )
 from apps.notifications.models import NotificationMessage
 from apps.scheduling.models import PlannedLesson
 from apps.scheduling.occurrences import PENDING
-from apps.teachers.models import Teacher
 
 # Виды сообщений, которые ставит задача по расписанию (вкладка «Расписание»).
 SCHEDULED_KINDS = [
-    KIND_MORNING_DIGEST, KIND_FILL_DIGEST, KIND_LESSON_UNRECORDED,
+    KIND_MORNING_DIGEST, KIND_FILL_DIGEST,
     KIND_PARENT_DAY_BEFORE, KIND_PARENT_HOUR_BEFORE,
 ]
 
@@ -71,74 +68,10 @@ def counts_by_status() -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
-# Email-напоминания (спека этапа 3, раздел D). Все выборки пакетные: один запрос
-# на всю школу, группировка в памяти у вызывающего (apps.notifications.reminders).
+# Email-напоминания семьям (спека этапа 3, раздел D). Все выборки пакетные: один
+# запрос на всю школу, группировка в памяти у вызывающего
+# (apps.notifications.reminders).
 # ---------------------------------------------------------------------------
-
-def teacher_contacts(teacher_ids) -> dict[int, dict]:
-    """
-    teacher_id → {'email', 'name'} для писем; преподаватели без адреса не попадают.
-
-    Канон адреса — email УЧЁТКИ преподавателя, запас — email из карточки.
-    Почему учётка: этим адресом человек входит в журнал и на него же приходят
-    одноразовые коды 2FA — адрес заведомо живой и принадлежит именно ему (поле
-    уникально). Email карточки — справочное поле, его никто не проверяет; он
-    берётся только для преподавателя без активной учётки, чтобы тот не остался
-    совсем без писем.
-
-    Два запроса на любое число преподавателей.
-    """
-    ids = {i for i in teacher_ids if i is not None}
-    if not ids:
-        return {}
-    cards = {
-        r['id']: r for r in Teacher.objects.filter(id__in=ids).values('id', 'name', 'email')
-    }
-    login_emails = dict(
-        Account.objects
-        .filter(teacher_id__in=ids, is_active=True)
-        .values_list('teacher_id', 'email')
-    )
-    out: dict[int, dict] = {}
-    for teacher_id, card in cards.items():
-        email = login_emails.get(teacher_id) or (card['email'] or '').strip()
-        if email:
-            out[teacher_id] = {'email': email, 'name': card['name']}
-    return out
-
-
-def unrecorded_positions(date_from: datetime.date, date_to: datetime.date) -> list[dict]:
-    """
-    Незаписанные позиции плана за окно дат — источник письма «Урок не записан».
-
-    Предикаты — те же, что у scheduling.repository.unfilled_planned_lessons
-    (вкладка «Заполнить» и вечерний дайджест): активная группа с активными
-    учениками, статус pending, факта нет. Отличие одно — нижняя граница дат:
-    задача ходит каждые 15 минут, и читать весь исторический хвост
-    незаполненного ей незачем (окно повторов — несколько суток).
-    """
-    has_students = GroupMembership.objects.filter(
-        group_id=OuterRef('group_id'), active=True)
-    return list(
-        PlannedLesson.objects
-        .filter(
-            Exists(has_students),
-            group__active=True,
-            status=PENDING,
-            fact_lesson__isnull=True,
-            scheduled_date__gte=date_from,
-            scheduled_date__lte=date_to,
-        )
-        .order_by('scheduled_date', 'scheduled_time', 'id')
-        .values(
-            'id', 'seq', 'scheduled_date', 'scheduled_time',
-            'teacher_id', 'substitute_teacher_id',
-            group_name=F('group__name'),
-            direction_name=F('group__direction__name'),
-            duration=F('group__lesson_duration_minutes'),
-        )
-    )
-
 
 def _upcoming(window: Q) -> list[dict]:
     """

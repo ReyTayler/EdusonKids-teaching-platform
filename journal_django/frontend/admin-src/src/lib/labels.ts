@@ -264,6 +264,7 @@ export const NOTIFICATION_KIND_LABELS: Record<string, string> = {
   lesson_cancelled:    'Отмена занятия',
   substitute_assigned: 'Назначена замена',
   substitute_removed:  'Снята замена',
+  // устаревший вид: письма «урок не записан» убраны 2026-10-27, нужен для старых строк
   lesson_unrecorded:   'Урок не записан',
   parent_day_before:   'Родителям: урок завтра',
   parent_hour_before:  'Родителям: урок через час',

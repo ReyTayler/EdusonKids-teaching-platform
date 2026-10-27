@@ -1,6 +1,7 @@
 """
 API выключателей (GET/POST /api/admin/notifications/toggle) — флаг родительских
 напоминаний, вкладка «Расписание», команда send_reminders, расписание beat.
+Письма преподавателям убраны 2026-10-27 — здесь же проверяется, что их нет.
 """
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 from django.conf import settings
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 
 from apps.notifications.models import NotificationSettings
 
@@ -62,38 +63,55 @@ def test_manager_cannot_switch_parent_reminders(manager_client):
 
 
 @pytest.mark.django_db
-def test_schedule_tab_lists_email_jobs(admin_client):
+def test_schedule_tab_lists_only_parent_email_jobs(admin_client):
+    """Письма преподавателям убраны (2026-10-27): во вкладке — только родительские."""
     jobs = admin_client.get('/api/admin/notifications/schedule').data['jobs']
     keys = [j['key'] for j in jobs]
-    assert {'lesson_unrecorded', 'parent_day_before', 'parent_hour_before'} <= set(keys)
+    assert {'parent_day_before', 'parent_hour_before'} <= set(keys)
+    assert 'lesson_unrecorded' not in keys
 
 
 @pytest.mark.django_db
 def test_send_reminders_command_runs_job_and_optionally_dispatches():
     out = StringIO()
     with patch('apps.notifications.management.commands.send_reminders.JOBS',
-               {'unrecorded': lambda: 3}), \
+               {'parent-day': lambda: 3}), \
             patch('apps.notifications.management.commands.send_reminders.dispatcher.dispatch',
                   return_value=2) as dispatch:
-        call_command('send_reminders', 'unrecorded', stdout=out)
+        call_command('send_reminders', 'parent-day', stdout=out)
         dispatch.assert_not_called()
-        call_command('send_reminders', 'unrecorded', '--dispatch', stdout=out)
+        call_command('send_reminders', 'parent-day', '--dispatch', stdout=out)
         dispatch.assert_called_once()
     assert 'Поставлено в очередь: 3.' in out.getvalue()
     assert 'Отправлено: 2.' in out.getvalue()
 
 
-def test_beat_schedule_has_email_reminders():
+def test_send_reminders_command_offers_only_parent_jobs():
+    from apps.notifications.management.commands.send_reminders import JOBS
+    assert set(JOBS) == {'parent-day', 'parent-hour'}
+    # Преподавательские письма убраны: старые имена команд отвергаются, а не
+    # молча ничего не делают.
+    for job in ('schedule', 'unrecorded'):
+        with pytest.raises(CommandError):
+            call_command('send_reminders', job, stdout=StringIO())
+
+
+def test_beat_schedule_has_only_parent_email_reminders():
     pytest.importorskip('celery')
     beat = settings.CELERY_BEAT_SCHEDULE
+    assert 'notifications-email-teacher-schedule' not in beat
+    assert 'notifications-email-unrecorded' not in beat
     expected = {
-        'notifications-email-teacher-schedule': 'send_teacher_schedule_email',
-        'notifications-email-unrecorded': 'send_unrecorded_reminders',
         'notifications-email-parent-day-before': 'send_parent_day_before',
         'notifications-email-parent-hour-before': 'send_parent_hour_before',
     }
     for key, task in expected.items():
         assert beat[key]['task'] == f'apps.notifications.tasks.{task}'
-    assert beat['notifications-email-teacher-schedule']['schedule'].hour == {8}
     assert beat['notifications-email-parent-day-before']['schedule'].hour == {10}
     assert len(beat['notifications-email-parent-hour-before']['schedule'].minute) == 12
+    # Ни одна задача beat не ссылается на удалённые преподавательские письма.
+    tasks = {entry['task'] for entry in beat.values()}
+    assert not tasks & {
+        'apps.notifications.tasks.send_teacher_schedule_email',
+        'apps.notifications.tasks.send_unrecorded_reminders',
+    }

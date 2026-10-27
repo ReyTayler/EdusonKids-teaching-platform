@@ -10,8 +10,8 @@ from apps.core.pagination import StandardPagination
 from apps.core.permissions import IsAdminOrSuperAdmin, ReadStaffWriteAdmin
 from apps.notifications import repository
 from apps.notifications.constants import (
-    KIND_FILL_DIGEST, KIND_LESSON_UNRECORDED, KIND_MORNING_DIGEST,
-    KIND_PARENT_DAY_BEFORE, KIND_PARENT_HOUR_BEFORE,
+    KIND_FILL_DIGEST, KIND_MORNING_DIGEST, KIND_PARENT_DAY_BEFORE,
+    KIND_PARENT_HOUR_BEFORE,
 )
 from apps.notifications.models import (
     NotificationSettings, TelegramRecipient, TelegramUser,
@@ -127,9 +127,6 @@ class NotificationScheduleView(APIView):
                 {'key': 'fill_digest', 'title': 'Незаполненные отчёты',
                  'schedule': '21:00', 'kind': KIND_FILL_DIGEST,
                  'last_run_at': last[KIND_FILL_DIGEST]},
-                {'key': 'lesson_unrecorded', 'title': 'Письмо «Урок не записан»',
-                 'schedule': 'каждые 15 минут', 'kind': KIND_LESSON_UNRECORDED,
-                 'last_run_at': last[KIND_LESSON_UNRECORDED]},
                 {'key': 'parent_day_before', 'title': 'Родителям: урок завтра',
                  'schedule': '10:00', 'kind': KIND_PARENT_DAY_BEFORE,
                  'last_run_at': last[KIND_PARENT_DAY_BEFORE]},

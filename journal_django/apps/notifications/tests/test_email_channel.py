@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from apps.notifications import dispatcher, services
 from apps.notifications.constants import (
-    CHANNEL_DM, CHANNEL_EMAIL, KIND_LESSON_UNRECORDED, KIND_MAKEUP_ASSIGNED,
+    CHANNEL_DM, CHANNEL_EMAIL, KIND_MAKEUP_ASSIGNED, KIND_PARENT_DAY_BEFORE,
     MAX_ATTEMPTS, STATUS_FAILED, STATUS_QUEUED, STATUS_SENT,
 )
 from apps.notifications.models import (
@@ -42,7 +42,7 @@ def linked(db):
 
 def _email(dedup: str = 'e1', teacher=None) -> NotificationMessage:
     services.enqueue_email(
-        kind=KIND_LESSON_UNRECORDED, to=TO, subject='Тема письма', text='Текст письма',
+        kind=KIND_PARENT_DAY_BEFORE, to=TO, subject='Тема письма', text='Текст письма',
         dedup_key=dedup, recipient_teacher_id=teacher.id if teacher else None)
     return NotificationMessage.objects.get(dedup_key=dedup)
 
@@ -71,7 +71,7 @@ def test_migration_adds_columns_and_parent_flag_off_by_default():
 def test_email_row_without_address_is_rejected_by_db():
     with pytest.raises(IntegrityError), transaction.atomic():
         NotificationMessage.objects.create(
-            kind=KIND_LESSON_UNRECORDED, channel=CHANNEL_EMAIL, subject='т', text='т',
+            kind=KIND_PARENT_DAY_BEFORE, channel=CHANNEL_EMAIL, subject='т', text='т',
             dedup_key='no-address')
 
 
@@ -85,9 +85,9 @@ def test_telegram_row_without_chat_id_is_still_rejected_by_db():
 
 @pytest.mark.django_db
 def test_enqueue_email_is_idempotent_by_dedup_key():
-    assert services.enqueue_email(kind=KIND_LESSON_UNRECORDED, to=TO, subject='s',
+    assert services.enqueue_email(kind=KIND_PARENT_DAY_BEFORE, to=TO, subject='s',
                                   text='t', dedup_key='same') is True
-    assert services.enqueue_email(kind=KIND_LESSON_UNRECORDED, to=TO, subject='s',
+    assert services.enqueue_email(kind=KIND_PARENT_DAY_BEFORE, to=TO, subject='s',
                                   text='t', dedup_key='same') is False
     row = NotificationMessage.objects.get(dedup_key='same')
     assert (row.channel, row.chat_id, row.recipient_email) == (CHANNEL_EMAIL, None, TO)

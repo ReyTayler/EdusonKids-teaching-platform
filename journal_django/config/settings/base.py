@@ -46,8 +46,6 @@ env = environ.Env(
     TELEGRAM_GENERAL_CHAT_ID=(int, 0),
     BOT_SERVICE_TOKEN=(str, ''),
     NOTIFICATIONS_HISTORY_LIMIT=(int, 200),
-    # Публичный адрес журнала (https://<домен>) — для ссылок в письмах.
-    PUBLIC_URL=(str, ''),
     # Гард оплат: запрет отмечать ученика без оплаченных уроков (наследие KOTOKOD).
     PAYMENT_BALANCE_GUARD=(bool, False),
 )
@@ -281,17 +279,9 @@ if crontab is not None:
             'task': 'apps.notifications.tasks.send_fill_digest',
             'schedule': crontab(hour=21, minute=0),
         },
-        # Email-напоминания Eduson (спека этапа 3, раздел D). Письма ставятся в
+        # Email-напоминания семьям (спека этапа 3, раздел D). Письма ставятся в
         # ту же очередь; уходят они с минутным тиком notifications-dispatch-outbox.
-        'notifications-email-teacher-schedule': {
-            'task': 'apps.notifications.tasks.send_teacher_schedule_email',
-            'schedule': crontab(hour=8, minute=0),
-        },
-        # Окно письма — 3 часа после конца урока; 15 минут — с большим запасом.
-        'notifications-email-unrecorded': {
-            'task': 'apps.notifications.tasks.send_unrecorded_reminders',
-            'schedule': crontab(minute='*/15'),
-        },
+        # Преподавателям писем нет (с 2026-10-27) — только дайджесты выше.
         'notifications-email-parent-day-before': {
             'task': 'apps.notifications.tasks.send_parent_day_before',
             'schedule': crontab(hour=10, minute=0),
@@ -327,9 +317,6 @@ TELEGRAM_GENERAL_CHAT_ID: int = env('TELEGRAM_GENERAL_CHAT_ID')
 BOT_SERVICE_TOKEN: str = env('BOT_SERVICE_TOKEN')
 # Сколько ЗАВЕРШЁННЫХ записей очереди храним. Строки в очереди не удаляются никогда.
 NOTIFICATIONS_HISTORY_LIMIT: int = env('NOTIFICATIONS_HISTORY_LIMIT')
-# Публичный адрес журнала без завершающего «/» (https://<домен>): ссылка на
-# кабинет преподавателя в email-напоминаниях. Пусто → письмо без ссылки.
-PUBLIC_URL: str = env('PUBLIC_URL')
 
 # ---------------------------------------------------------------------------
 # Гард оплат

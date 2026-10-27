@@ -307,7 +307,8 @@
 }
 .topbar__burger {
   flex-shrink: 0;
-  margin-left: auto;
+  /* Кнопка у левого края: меню выезжает слева — палец тянется туда же. */
+  margin-left: calc(-1 * var(--space-2));
   width: 36px; height: 36px;
   display: inline-flex; align-items: center; justify-content: center;
   border: none;
@@ -325,26 +326,54 @@
   --header-h: var(--mobile-bar-h);
 }
 
-/* ── Меню узкого режима (в общем Dialog): группы со значками одним списком ── */
-.side-drawer { display: flex; flex-direction: column; gap: var(--space-4); }
-.side-drawer__group { display: flex; flex-direction: column; gap: 1px; }
-.side-drawer__title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--text);
+/* ── Меню узкого режима: тот же сайдбар, выезжающий слева (как у KOTOKOD) ── */
+.sidebar-drawer-overlay {
+  position: fixed; inset: 0;
+  z-index: var(--z-overlay);
+  background: var(--overlay);
+  animation: drawer-fade var(--dur-2) var(--ease-out);
 }
-.side-drawer__title > svg { flex-shrink: 0; color: var(--text2); }
-.side-drawer .side-item { min-height: 36px; }
-.side-drawer__foot {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line);
+.sidebar-drawer-overlay[data-state="closed"] {
+  animation: drawer-fade var(--dur-1) var(--ease-out) reverse;
+}
+.sidebar-drawer {
+  position: fixed;
+  /* Высота — привязками top/bottom, а не 100dvh: на телефоне dvh пересчитывается
+     при показе адресной строки, и панель могла оказаться короче экрана. */
+  top: 0; bottom: 0; left: 0;
+  width: min(var(--sidebar-w), 88vw);
+  background: var(--bg2);
+  overflow: hidden;
+  z-index: var(--z-modal);
+  box-shadow: var(--shadow-modal);
+  outline: none;
+  animation: drawer-in var(--dur-3) var(--ease-out);
+}
+.sidebar-drawer[data-state="closed"] {
+  animation: drawer-in var(--dur-2) var(--ease-out) reverse;
+}
+/* Базовый .sidebar — липкая колонка высотой 100vh. Внутри панели — обычный
+   блок во всю её высоту; прокручивается только список разделов, а знак сверху
+   и пользователь с «Выйти» снизу остаются на местах. */
+.sidebar-drawer .sidebar {
+  position: static;
+  width: 100%; min-width: 0;
+  height: 100%; max-height: 100%;
+  overflow: hidden;
+  border-right: none;
+  /* Системная полоска внизу телефона не перекрывает «Выйти». */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to   { transform: none; }
+}
+@keyframes drawer-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-drawer, .sidebar-drawer-overlay { animation: none; }
 }
 
 /* Красный бейдж-счётчик необработанных пропусков на кнопке «Доп.уроки». */

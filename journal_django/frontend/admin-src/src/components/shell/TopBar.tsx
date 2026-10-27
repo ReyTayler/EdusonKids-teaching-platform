@@ -3,7 +3,8 @@ import { navLabelOfPath } from './navConfig';
 import { BrandMark } from './BrandMark';
 
 /**
- * Верхняя полоса узкого режима: знак, название раздела и кнопка меню.
+ * Верхняя полоса узкого режима: кнопка меню слева (меню выезжает с той же
+ * стороны, как у KOTOKOD), затем знак и название раздела.
  *
  * Стоит в потоке и липнет к верху — перекрывать содержимое ей нечем по
  * устройству (плавающая кнопка всегда висела НАД чем-нибудь). Заодно отвечает
@@ -15,8 +16,6 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
 
   return (
     <header className="topbar">
-      <BrandMark compact className="topbar__mark" />
-      {section && <span className="topbar__section">{section}</span>}
       <button
         type="button"
         className="topbar__burger"
@@ -29,6 +28,8 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
           <line x1="3" y1="18" x2="21" y2="18"/>
         </svg>
       </button>
+      <BrandMark compact className="topbar__mark" />
+      {section && <span className="topbar__section">{section}</span>}
     </header>
   );
 }

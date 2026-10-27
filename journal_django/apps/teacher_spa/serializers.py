@@ -6,6 +6,10 @@ date-поле — DateStringField (YYYY-MM-DD, без timezone drift).
 """
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from rest_framework import serializers
 
 from apps.core.fields import DateStringField
@@ -21,6 +25,12 @@ _SERVER_DERIVED_FIELDS = {
     'originalTeacher': 'Поле не принимается: замена назначается администратором.',
     'lessonType': 'Поле не принимается: тип урока выводится из плана занятий.',
 }
+
+RECORD_URL_REQUIRED = 'Вставьте ссылку на запись урока.'
+RECORD_URL_INVALID = 'Нужна ссылка на запись: адрес вида https://…'
+# Стандартный валидатор Django, но только веб-адреса: ftp/javascript/data и
+# прочие схемы ссылкой на видеозапись быть не могут.
+_record_url_validator = URLValidator(schemes=['http', 'https'])
 
 
 class StudentAttendanceSerializer(serializers.Serializer):
@@ -42,8 +52,11 @@ class SubmitLessonSerializer(serializers.Serializer):
     """
     Порт submitLessonSchema из shared/schemas.js.
 
-    Обязательные: group, date, students, feedback. Необязательные: recordUrl,
+    Обязательные: group, date, students, feedback, recordUrl. Необязательный:
     plannedLessonId.
+
+    recordUrl — ссылка на запись урока (обязательна с 27.10.2026, решение
+    владельца): только адрес http(s) с доменом, пробелы по краям срезаются.
 
     feedback — отзыв по уроку (этап 3 Eduson): урок без отзыва преподаватель
     сохранить не может, поэтому блок обязателен и проверяется ДО записи —
@@ -60,7 +73,9 @@ class SubmitLessonSerializer(serializers.Serializer):
     group = serializers.CharField()
     date = DateStringField()
     recordUrl = serializers.CharField(
-        allow_blank=True, required=False, trim_whitespace=False
+        max_length=2000,
+        error_messages={'required': RECORD_URL_REQUIRED, 'blank': RECORD_URL_REQUIRED,
+                        'null': RECORD_URL_REQUIRED},
     )
     students = StudentAttendanceSerializer(many=True)
     # Позиция курса (planned_lessons.id), по которой кликнули в календаре. НЕ
@@ -75,6 +90,17 @@ class SubmitLessonSerializer(serializers.Serializer):
         error_messages={'required': 'Заполните обратную связь по уроку.',
                         'null': 'Заполните обратную связь по уроку.'},
     )
+
+    def validate_recordUrl(self, value: str) -> str:  # noqa: N802 — имя поля из API
+        try:
+            _record_url_validator(value)
+        except DjangoValidationError:
+            raise serializers.ValidationError(RECORD_URL_INVALID)
+        # URLValidator пропускает «localhost» — у ссылки на видеохостинг всегда
+        # есть домен с точкой.
+        if '.' not in (urlsplit(value).hostname or ''):
+            raise serializers.ValidationError(RECORD_URL_INVALID)
+        return value
 
     def validate(self, attrs):
         forbidden = set(_SERVER_DERIVED_FIELDS) & set(self.initial_data or {})

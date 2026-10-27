@@ -72,6 +72,7 @@
 .lf-record { display: flex; flex-direction: column; gap: var(--space-2); }
 .lf-record-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .lf-record-head .t-sec-label { margin-bottom: 0; }
+/* Пометка «необязательно» — у ссылки доп. занятия (ExtraLessonRecordModal). */
 .lf-record-optional { font-size: var(--fs-2xs); color: var(--text3); }
 
 .lf-record-box {
@@ -90,6 +91,10 @@
 .lf-record-box.is-valid { border-color: var(--ok-line); }
 .lf-record-box.is-valid .lf-record-icon { color: var(--ok); }
 .lf-record-box.is-suspect { border-color: var(--warn-line); }
+/* Пусто или не ссылка после попытки сохранить — как незаполненные поля отзыва. */
+.lf-record-box.is-invalid {
+  border-color: var(--bad-line); box-shadow: 0 0 0 3px var(--bad-bg);
+}
 
 .lf-record-icon { flex-shrink: 0; color: var(--text3); transition: color var(--dur-1) var(--ease); }
 

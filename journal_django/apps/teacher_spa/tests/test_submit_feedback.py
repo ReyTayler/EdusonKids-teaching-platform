@@ -17,7 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.feedback.models import LessonFeedback
 from apps.lessons.models import Lesson
-from apps.teacher_spa.tests.payloads import VALID_FEEDBACK
+from apps.teacher_spa.tests.payloads import VALID_FEEDBACK, VALID_RECORD_URL
 
 pytestmark = pytest.mark.django_db
 
@@ -39,13 +39,17 @@ def _client(account_id: int) -> APIClient:
 
 
 def _payload(feedback=..., **extra) -> dict:
-    """Тело запроса; feedback=... — валидный отзыв, None — без ключа feedback."""
+    """Тело запроса; feedback=... — валидный отзыв, None — без ключа feedback.
+    recordUrl по умолчанию валидный; recordUrl=None — без ключа."""
     body = {
         'group': GROUP,
         'date': DATE,
         'students': [{'name': STUDENT, 'present': True}],
+        'recordUrl': VALID_RECORD_URL,
         **extra,
     }
+    if body['recordUrl'] is None:
+        del body['recordUrl']
     if feedback is ...:
         body['feedback'] = dict(VALID_FEEDBACK)
     elif feedback is not None:
@@ -127,19 +131,41 @@ def test_tech_problems_false_is_stored_as_false(
     assert (fb.understanding, fb.interest, fb.tech_problems) == (1, 1, False)
 
 
-def test_record_url_is_optional(account_fixture, group_fixture, student_fixture, cleanup):
-    resp = _client(account_fixture).post(URL, _payload(), format='json')
-    assert resp.status_code == 200, resp.json()
-    lesson = _group_lessons(group_fixture).get()
-    assert lesson.record_url is None
-    assert LessonFeedback.objects.filter(lesson=lesson).count() == 1
-
-
 def test_record_url_saved_on_lesson(account_fixture, group_fixture, student_fixture, cleanup):
     resp = _client(account_fixture).post(
-        URL, _payload(recordUrl='https://video.example.test/rec/1'), format='json')
+        URL, _payload(recordUrl='https://video.example.test/rec/2'), format='json')
     assert resp.status_code == 200, resp.json()
-    assert _group_lessons(group_fixture).get().record_url == 'https://video.example.test/rec/1'
+    assert _group_lessons(group_fixture).get().record_url == 'https://video.example.test/rec/2'
+
+
+def test_record_url_is_trimmed(account_fixture, group_fixture, student_fixture, cleanup):
+    resp = _client(account_fixture).post(
+        URL, _payload(recordUrl='  https://vk.com/video-1_2  '), format='json')
+    assert resp.status_code == 200, resp.json()
+    assert _group_lessons(group_fixture).get().record_url == 'https://vk.com/video-1_2'
+
+
+@pytest.mark.parametrize('record_url', [
+    None,                      # ключа нет совсем
+    '',
+    '   ',
+    'запись урока',
+    'vk.com/video-1_2',        # без схемы — не ссылка
+    'ftp://files.example.test/rec.mp4',
+    'javascript:alert(1)',
+    'https://',
+    'http://localhost',        # без домена верхнего уровня
+])
+def test_record_url_required_and_must_be_link(
+    record_url, account_fixture, group_fixture, student_fixture, cleanup,
+):
+    """Ссылка на запись обязательна и должна быть адресом http(s): иначе 400 с
+    ошибкой по полю recordUrl, урок и отзыв не пишутся."""
+    resp = _client(account_fixture).post(URL, _payload(recordUrl=record_url), format='json')
+    assert resp.status_code == 400, resp.json()
+    assert 'recordUrl' in resp.json().get('details', {}), resp.json()
+    assert not _group_lessons(group_fixture).exists()
+    assert not LessonFeedback.objects.filter(group_id=group_fixture).exists()
 
 
 def test_substitute_is_feedback_author(

@@ -15,7 +15,7 @@ import pytest
 from django.db import connection
 
 from apps.teacher_spa.tests.test_teacher_spa_api import _client, _get_lesson_id
-from apps.teacher_spa.tests.payloads import VALID_FEEDBACK, with_feedback
+from apps.teacher_spa.tests.payloads import VALID_FEEDBACK, VALID_RECORD_URL, with_feedback
 
 pytestmark = pytest.mark.django_db
 
@@ -90,6 +90,7 @@ def test_submit_by_id_marks_exact_namesake(teacher_fixture, account_fixture, gro
     first, second = namesakes
     resp = _client('teacher', account_fixture).post('/api/submitLesson', {
         'feedback': VALID_FEEDBACK,
+        'recordUrl': VALID_RECORD_URL,
         'group': GROUP_NAME,
         'date': '2026-06-10',
         'students': [
@@ -109,6 +110,7 @@ def test_submit_ambiguous_name_without_id_refused(
 ):
     resp = _client('teacher', account_fixture).post('/api/submitLesson', {
         'feedback': VALID_FEEDBACK,
+        'recordUrl': VALID_RECORD_URL,
         'group': GROUP_NAME,
         'date': '2026-06-10',
         'students': [{'name': NAME, 'present': True}],
@@ -125,6 +127,7 @@ def test_submit_ambiguous_name_without_id_refused(
 def _submit(account_id: int, students: list[dict]):
     return _client('teacher', account_id).post('/api/submitLesson', {
         'feedback': VALID_FEEDBACK,
+        'recordUrl': VALID_RECORD_URL,
         'group': GROUP_NAME, 'date': '2026-06-10', 'students': students,
     }, format='json')
 

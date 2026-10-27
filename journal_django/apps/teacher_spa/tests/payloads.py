@@ -1,6 +1,6 @@
 """Общие куски тела POST /api/submitLesson для тестов teacher_spa.
 
-Отзыв по уроку обязателен (этап 3 Eduson, раздел A), поэтому каждый тест,
+Отзыв по уроку и ссылка на запись обязательны (этап 3 Eduson, раздел A), поэтому каждый тест,
 которому нужен успешно записанный урок, обязан его прислать. Тесты, которые
 проверяют сам отзыв, лежат в test_submit_feedback.py.
 """
@@ -14,6 +14,11 @@ VALID_FEEDBACK = {
 }
 
 
+# Ссылка на запись урока тоже обязательна — без неё урок не записывается.
+VALID_RECORD_URL = 'https://video.example.test/rec/1'
+
+
 def with_feedback(payload: dict) -> dict:
-    """Тело запроса с валидным отзывом (свой отзыв в payload не перетирается)."""
-    return {'feedback': dict(VALID_FEEDBACK), **payload}
+    """Тело запроса с валидными отзывом и ссылкой на запись (свои значения в
+    payload не перетираются)."""
+    return {'feedback': dict(VALID_FEEDBACK), 'recordUrl': VALID_RECORD_URL, **payload}

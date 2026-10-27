@@ -44,14 +44,29 @@ function parseFeedbackErrors(details: unknown): { fields: FbErrors; general: str
   return { fields, general: null };
 }
 
-/** Похожа ли строка на http(s)-ссылку — только мягкая подсказка, не блокирует сохранение. */
+const RECORD_URL_REQUIRED = 'Вставьте ссылку на запись урока.';
+const RECORD_URL_INVALID = 'Нужна ссылка на запись: адрес вида https://…';
+
+/**
+ * Ссылка на запись урока — обязательна (решение владельца 27.10.2026). То же
+ * правило, что на сервере (teacher_spa/serializers.py, validate_recordUrl):
+ * только http(s) и домен с точкой. Сервер проверяет всё равно — это слой UX.
+ */
 function looksLikeUrl(value: string): boolean {
   try {
     const u = new URL(value);
-    return u.protocol === 'http:' || u.protocol === 'https:';
+    return (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname.includes('.');
   } catch {
     return false;
   }
+}
+
+/** Ошибка поля recordUrl из 400 «Validation failed»; null — её нет. */
+function parseRecordUrlError(details: unknown): string | null {
+  if (!details || typeof details !== 'object') return null;
+  const v = (details as Record<string, unknown>).recordUrl;
+  if (Array.isArray(v) && v.length > 0) return String(v[0]);
+  return typeof v === 'string' ? v : null;
 }
 
 type BlockReason = 'skip' | 'unpaid' | 'locked';
@@ -128,6 +143,11 @@ export function LessonForm({
   const todayIso = useMemo(() => isoDate(todayMsk()), []);
   const [date, setDate] = useState(initialDate ?? todayIso);
   const [recordUrl, setRecordUrl] = useState('');
+  const [serverRecordError, setServerRecordError] = useState<string | null>(null);
+  // Фокус через блок, как у отзыва (fbRef): общий TextInput ref не принимает.
+  const recordRef = useRef<HTMLDivElement>(null);
+  const focusRecord = () => recordRef.current?.querySelector<HTMLInputElement>('input')?.focus();
+  const recordErrorId = useId();
   // По умолчанию «пришли все»; заблокированных гасит presentOf (ниже), а не это
   // состояние: номер урока, от которого зависят блокировки, может приехать позже
   // самого первого рендера (карта направлений грузится асинхронно).
@@ -155,6 +175,14 @@ export function LessonForm({
     comment: comment.trim() === '',
   };
   const fbComplete = !FB_ORDER.some((k) => fbMissing[k]);
+  const recordTrimmed = recordUrl.trim();
+  const recordValid = looksLikeUrl(recordTrimmed);
+  const recordError: string | undefined = serverRecordError
+    ?? (fbAttempted && !recordValid
+      ? (recordTrimmed === '' ? RECORD_URL_REQUIRED : RECORD_URL_INVALID)
+      : undefined);
+  // Форма готова к сохранению: отзыв заполнен и есть ссылка на запись.
+  const formComplete = fbComplete && recordValid;
   const fbError = (k: FbField): string | undefined =>
     serverFbErrors[k] ?? (fbAttempted && fbMissing[k] ? FB_REQUIRED_MSG : undefined);
   // Сбрасываем серверную ошибку поля, как только его изменили.
@@ -252,9 +280,11 @@ export function LessonForm({
     if (limitExceeded || noOnePresent || submitLesson.isPending) return;
     // Блок обратной связи не заполнен: кнопка выглядит неактивной, но клик по ней
     // показывает, чего именно не хватает, и ведёт к первому пустому полю.
-    if (!fbComplete) {
+    if (!formComplete) {
       setFbAttempted(true);
-      focusFirstInvalid(FB_ORDER.filter((k) => fbMissing[k]));
+      // Отзыв на экране выше ссылки — фокус к первому пустому полю сверху.
+      if (!fbComplete) focusFirstInvalid(FB_ORDER.filter((k) => fbMissing[k]));
+      else focusRecord();
       return;
     }
     setSubmitError(null);
@@ -270,7 +300,7 @@ export function LessonForm({
         techProblems: techProblems as boolean,
         comment: comment.trim(),
       },
-      ...(recordUrl.trim() ? { recordUrl: recordUrl.trim() } : {}),
+      recordUrl: recordTrimmed,
       ...(plannedLessonId != null ? { plannedLessonId } : {}),
     };
 
@@ -318,10 +348,14 @@ export function LessonForm({
           // Ошибки блока обратной связи показываем у полей, а не общим
           // «Validation failed».
           const fb = err.status === 400 ? parseFeedbackErrors(err.details) : null;
+          const recordErr = err.status === 400 ? parseRecordUrlError(err.details) : null;
+          if (recordErr) setServerRecordError(recordErr);
           if (fb) {
             setServerFbErrors(fb.fields);
             setSubmitError(fb.general ?? (Object.keys(fb.fields).length ? null : err.message));
             focusFirstInvalid(Object.keys(fb.fields) as FbField[]);
+          } else if (recordErr) {
+            focusRecord();
           } else {
             setSubmitError(err.message);
           }
@@ -470,12 +504,11 @@ export function LessonForm({
         </FeedbackQuestion>
       </div>
 
-      <div className="lf-record">
+      <div className="lf-record" ref={recordRef}>
         <div className="lf-record-head">
-          <span className="t-sec-label">Ссылка на запись урока</span>
-          <span className="lf-record-optional">(необязательно)</span>
+          <span className="t-sec-label">Ссылка на запись урока<span className="field-req"> *</span></span>
         </div>
-        <div className={`lf-record-box${recordUrl.trim() ? (looksLikeUrl(recordUrl.trim()) ? ' is-valid' : ' is-suspect') : ''}`}>
+        <div className={`lf-record-box${recordError ? ' is-invalid' : recordTrimmed ? (recordValid ? ' is-valid' : ' is-suspect') : ''}`}>
           <svg className="lf-record-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
@@ -484,8 +517,11 @@ export function LessonForm({
             className="lf-record-input"
             type="url"
             inputMode="url"
+            required
+            aria-invalid={recordError ? true : undefined}
+            aria-describedby={recordError ? recordErrorId : undefined}
             value={recordUrl}
-            onChange={(e) => setRecordUrl(e.target.value)}
+            onChange={(e) => { setRecordUrl(e.target.value); setServerRecordError(null); }}
             placeholder="Вставьте ссылку на запись занятия…"
             aria-label="Ссылка на запись урока"
           />
@@ -493,7 +529,7 @@ export function LessonForm({
             <button
               type="button"
               className="lf-record-clear"
-              onClick={() => setRecordUrl('')}
+              onClick={() => { setRecordUrl(''); setServerRecordError(null); }}
               aria-label="Очистить ссылку"
               title="Очистить"
             >
@@ -501,7 +537,9 @@ export function LessonForm({
             </button>
           )}
         </div>
-        {recordUrl.trim() !== '' && !looksLikeUrl(recordUrl.trim()) && (
+        {recordError ? (
+          <div className="field-error" id={recordErrorId} role="alert">{recordError}</div>
+        ) : recordTrimmed !== '' && !recordValid && (
           <span className="lf-record-hint">Похоже, это не ссылка — проверьте, что скопировали адрес целиком.</span>
         )}
       </div>
@@ -531,10 +569,10 @@ export function LessonForm({
         </button>
         <button
           type="button"
-          className={`btn-save${fbComplete ? '' : ' is-incomplete'}`}
+          className={`btn-save${formComplete ? '' : ' is-incomplete'}`}
           // Не disabled, а aria-disabled: клик по неготовой форме должен подсветить
           // пустые поля и увести фокус к первому, а disabled-кнопка клика не получает.
-          aria-disabled={!fbComplete || undefined}
+          aria-disabled={!formComplete || undefined}
           disabled={limitExceeded || noOnePresent || submitLesson.isPending}
           onClick={handleSubmit}
         >

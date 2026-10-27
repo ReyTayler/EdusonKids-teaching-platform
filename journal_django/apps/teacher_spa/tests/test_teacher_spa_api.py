@@ -22,7 +22,7 @@ from django.conf import settings
 from django.db import connection
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
-from apps.teacher_spa.tests.payloads import VALID_FEEDBACK, with_feedback
+from apps.teacher_spa.tests.payloads import VALID_FEEDBACK, VALID_RECORD_URL, with_feedback
 
 pytestmark = pytest.mark.django_db
 
@@ -371,6 +371,7 @@ class TestSubmitLesson:
         try:
             resp = _client('teacher', account_fixture).post('/api/submitLesson', {
                 'feedback': VALID_FEEDBACK,
+                'recordUrl': VALID_RECORD_URL,
                 'group': group_name, 'date': '2026-06-10',
                 'students': [{'name': '__spa_test_student__', 'present': True}],
             }, format='json')
@@ -1451,6 +1452,7 @@ class TestMyLessons:
 
         submit = _client('teacher', account_fixture).post('/api/submitLesson', {
             'feedback': VALID_FEEDBACK,
+            'recordUrl': VALID_RECORD_URL,
             'group': group_name, 'date': '2026-06-10',
             'students': [{'name': '__spa_test_student__', 'present': True}],
         }, format='json')

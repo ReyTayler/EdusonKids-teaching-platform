@@ -21,12 +21,13 @@ export default function TeacherFormModal({ initial, onClose }: Props) {
   const [email, setEmail] = useState(initial?.email || '');
   const [phone, setPhone] = useState(initial?.phone || '');
   const [callUrl, setCallUrl] = useState(initial?.call_url || '');
+  const [vkUrl, setVkUrl] = useState(initial?.vk_url || '');
   const [active, setActive] = useState(initial?.active ?? true);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const body: Partial<Teacher> = { name, email: email || null, phone: phone || null,
-      call_url: callUrl.trim() || null };
+      call_url: callUrl.trim() || null, vk_url: vkUrl.trim() || null };
     if (!isNew) body.active = active;
     try {
       if (isNew) {
@@ -66,6 +67,10 @@ export default function TeacherFormModal({ initial, onClose }: Props) {
         <Field label="Ссылка на звонок" full>
           <TextInput type="url" value={callUrl} onChange={(e) => setCallUrl(e.target.value)}
             placeholder="https://telemost.yandex.ru/j/…" />
+        </Field>
+        <Field label="VK" full>
+          <TextInput type="url" value={vkUrl} onChange={(e) => setVkUrl(e.target.value)}
+            placeholder="https://vk.com/…" />
         </Field>
         {!isNew && (
           <Field label="Активен">

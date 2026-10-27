@@ -16,7 +16,7 @@ import { fmtDate, todayMSK } from '../../lib/format';
 import type { Teacher } from '../../lib/types';
 import TeacherFormModal from './TeacherFormModal';
 import { TeacherTelegramBlock } from './TeacherTelegramBlock';
-import { TeacherCallLink } from './TeacherCallLink';
+import { TeacherContacts } from './TeacherContacts';
 import TeacherStatsRow from './TeacherStatsRow';
 import TeacherDirectionsBreakdown from './TeacherDirectionsBreakdown';
 import TeacherMonthDetails from './TeacherMonthDetails';
@@ -74,6 +74,12 @@ export default function TeacherDetailPage() {
         ? <a href={r.call_url} target="_blank" rel="noopener noreferrer">{r.call_url}</a>
         : '—',
     },
+    {
+      key: 'vk_url', label: 'VK',
+      cell: (r) => r.vk_url
+        ? <a href={r.vk_url} target="_blank" rel="noopener noreferrer">{r.vk_url}</a>
+        : '—',
+    },
     { key: 'active', label: 'Статус', cell: (r) => r.active ? 'Активен' : 'Архив' },
     { key: 'created_at', label: 'Добавлен', cell: (r) => fmtDate(r.created_at) },
   ];
@@ -95,7 +101,6 @@ export default function TeacherDetailPage() {
 
   const activeGroups = groups.filter((g) => g.active);
   const directionsCount = new Set(activeGroups.map((g) => g.direction_id)).size;
-  const contacts = [teacher.email, teacher.phone].filter(Boolean).join(' · ');
 
   // У преподавателя нет направления, откуда EntityHero берёт цвет у группы, —
   // берём детерминированный тон из имени (та же формула, что у Avatar).
@@ -116,7 +121,6 @@ export default function TeacherDetailPage() {
           <HeroChip mono>
             {activeGroups.length} {plural(activeGroups.length, 'группа', 'группы', 'групп')}
           </HeroChip>
-          {contacts && <HeroChip>{contacts}</HeroChip>}
         </>
       }
       actions={
@@ -146,7 +150,7 @@ export default function TeacherDetailPage() {
           value: stats?.last_lesson_date ? fmtDate(stats.last_lesson_date) : '—',
         },
       ]}
-      extra={<TeacherCallLink teacher={teacher} />}
+      extra={<TeacherContacts teacher={teacher} />}
       aside={<TeacherTelegramBlock teacher={teacher} />}
     />
   );

@@ -133,13 +133,15 @@ def test_teacher_contacts_reported_without_values(tmp_path):
         assert secret not in text
 
 
-def test_teacher_telemost_becomes_call_url(tmp_path):
+def test_teacher_telemost_and_vk_become_links(tmp_path):
     db = EdusonDB(tmp_path / 'e.db')
-    db.teacher(1, 'Анна Тестова', telemost=' https://telemost.example/j/1 ')
+    db.teacher(1, 'Анна Тестова', telemost=' https://telemost.example/j/1 ', vk='https://vk.example/anna')
     db.teacher(2, 'Борис Тестов')
     ctx = _run(db)
-    assert _teacher(ctx, 1).call_url == 'https://telemost.example/j/1'
-    assert _teacher(ctx, 2).call_url is None
+    assert (_teacher(ctx, 1).call_url, _teacher(ctx, 1).vk_url) == (
+        'https://telemost.example/j/1', 'https://vk.example/anna')
+    assert (_teacher(ctx, 2).call_url, _teacher(ctx, 2).vk_url) == (None, None)
+    assert 'vk' not in '\n'.join(ctx.report)              # перенесено, в архив не пишется
 
 
 # ── учётки ──────────────────────────────────────────────────────────────────

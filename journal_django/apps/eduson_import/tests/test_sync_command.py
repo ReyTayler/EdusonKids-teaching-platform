@@ -154,15 +154,20 @@ def test_empty_source_value_keeps_platform_value(db):
     assert Student.objects.get(id=misha.id).email == 'misha@example.org'
 
 
-def test_teacher_call_url_follows_eduson_but_empty_keeps_platform_value(db):
+def test_teacher_links_follow_eduson_but_empty_keeps_platform_value(db):
     teacher = Teacher.objects.get(name='Анна Тестова')
-    Teacher.objects.filter(id=teacher.id).update(call_url='https://example.org/platform-call')
+    Teacher.objects.filter(id=teacher.id).update(
+        call_url='https://example.org/platform-call', vk_url='https://example.org/platform-vk')
     _sync(db)
-    assert Teacher.objects.get(id=teacher.id).call_url == 'https://example.org/platform-call'
+    teacher.refresh_from_db()
+    assert (teacher.call_url, teacher.vk_url) == (
+        'https://example.org/platform-call', 'https://example.org/platform-vk')
 
-    db.con.execute("UPDATE teachers SET telemost='https://telemost.example/j/2' WHERE id=1")
+    db.con.execute("UPDATE teachers SET telemost='https://telemost.example/j/2', "
+                   "vk='https://vk.example/anna' WHERE id=1")
     _sync(db)
-    assert Teacher.objects.get(id=teacher.id).call_url == 'https://telemost.example/j/2'
+    teacher.refresh_from_db()
+    assert (teacher.call_url, teacher.vk_url) == ('https://telemost.example/j/2', 'https://vk.example/anna')
 
 
 def test_vanished_group_goes_to_archive_without_facts(db):

@@ -79,6 +79,7 @@ def create_teacher(data: dict) -> dict:
         email=data.get('email') or None,
         phone=data.get('phone') or None,
         call_url=data.get('call_url') or None,
+        vk_url=data.get('vk_url') or None,
         created_at=Now(),
     )
     return dictrow(Teacher.objects.filter(pk=obj.pk).values())
@@ -92,7 +93,7 @@ def update_teacher(teacher_id: int, data: dict) -> Optional[dict]:
     - email: COALESCE(NULLIF(%s,''), email)  → set если ключ есть и значение непусто.
     - phone: COALESCE(NULLIF(%s,''), phone)  → set если ключ есть и значение непусто.
     - active: COALESCE(%s, active)           → set если ключ есть и значение не None.
-    - call_url: ключ есть → set, пустая строка/None → NULL (ссылку можно стереть).
+    - call_url, vk_url: ключ есть → set, пустая строка/None → NULL (ссылку можно стереть).
     """
     obj = Teacher.objects.filter(id=teacher_id).first()
     if obj is None:
@@ -104,8 +105,9 @@ def update_teacher(teacher_id: int, data: dict) -> Optional[dict]:
         obj.email = data['email']
     if data.get('phone'):
         obj.phone = data['phone']
-    if 'call_url' in data:
-        obj.call_url = data['call_url'] or None
+    for link in ('call_url', 'vk_url'):
+        if link in data:
+            setattr(obj, link, data[link] or None)
     if data.get('active') is not None and 'active' in data:
         obj.active = data['active']
 

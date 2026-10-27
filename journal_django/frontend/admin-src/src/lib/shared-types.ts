@@ -22,6 +22,8 @@ export interface Teacher {
   phone: string | null;
   /** Постоянная ссылка на звонок (Телемост, ВК Звонок…); null — не указана. */
   call_url: string | null;
+  /** Страница ВКонтакте; null — не указана. */
+  vk_url: string | null;
   active: boolean;
   created_at: string;
   /** null — аккаунт не привязан. */

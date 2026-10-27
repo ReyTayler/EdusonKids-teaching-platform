@@ -208,9 +208,27 @@ def test_patch_call_url_sets_and_clears(superadmin_client):
 
 
 @pytest.mark.django_db
+def test_patch_vk_url_sets_and_clears(superadmin_client):
+    from apps.teachers import repository
+    teacher = repository.create_teacher({'name': '__test_vk_url_patch__', 'vk_url': 'https://vk.com/id1'})
+    url = f"{BASE_URL}/{teacher['id']}"
+    try:
+        assert teacher['vk_url'] == 'https://vk.com/id1'
+        resp = superadmin_client.patch(url, {'vk_url': 'https://vk.com/id2'}, format='json')
+        assert resp.status_code == 200
+        assert resp.json()['vk_url'] == 'https://vk.com/id2'
+
+        resp = superadmin_client.patch(url, {'vk_url': None}, format='json')
+        assert resp.json()['vk_url'] is None
+    finally:
+        _cleanup_teacher(teacher['id'])
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('field', ['call_url', 'vk_url'])
 @pytest.mark.parametrize('bad', ['javascript:alert(1)', 'ftp://example.org/x', 'telemost'])
-def test_call_url_rejects_non_http_links(superadmin_client, bad):
-    resp = superadmin_client.post(BASE_URL, {'name': '__test_call_url_bad__', 'call_url': bad}, format='json')
+def test_links_reject_non_http(superadmin_client, field, bad):
+    resp = superadmin_client.post(BASE_URL, {'name': '__test_link_bad__', field: bad}, format='json')
     assert resp.status_code == 400
 
 

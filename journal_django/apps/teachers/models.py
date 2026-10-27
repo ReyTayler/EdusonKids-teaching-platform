@@ -31,6 +31,8 @@ class Teacher(models.Model):
     # Постоянная ссылка на звонок (Телемост, ВК Звонок и т.п.), по которой
     # преподаватель проводит уроки. В старом Eduson — колонка teachers.telemost.
     call_url = models.URLField(max_length=500, null=True, blank=True)
+    # Страница преподавателя ВКонтакте. В старом Eduson — колонка teachers.vk.
+    vk_url = models.URLField(max_length=500, null=True, blank=True)
     active = models.BooleanField(default=True)
     # Служебная запись, а не живой человек. Такая одна — «Архив (импорт
     # истории)»: на неё повешены архивные группы вида «Python — архив», куда

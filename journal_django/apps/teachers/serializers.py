@@ -13,9 +13,16 @@ from __future__ import annotations
 from django.core.validators import URLValidator
 from rest_framework import serializers
 
-# Ссылка рендерится как <a href>: только http(s), иначе в карточку можно
+# Ссылки рендерятся как <a href>: только http(s), иначе в карточку можно
 # положить что-то вроде ftp:// или вовсе не адрес.
-_CALL_URL_VALIDATORS = [URLValidator(schemes=['http', 'https'])]
+_LINK_VALIDATORS = [URLValidator(schemes=['http', 'https'])]
+
+
+def _link_field() -> serializers.CharField:
+    return serializers.CharField(
+        allow_null=True, allow_blank=True, required=False, max_length=500,
+        validators=_LINK_VALIDATORS,
+    )
 
 
 class TeacherReadSerializer(serializers.Serializer):
@@ -28,6 +35,7 @@ class TeacherReadSerializer(serializers.Serializer):
     email = serializers.CharField(allow_null=True)
     phone = serializers.CharField(allow_null=True)
     call_url = serializers.CharField(allow_null=True)
+    vk_url = serializers.CharField(allow_null=True)
     active = serializers.BooleanField()
     created_at = serializers.DateTimeField()
 
@@ -45,10 +53,8 @@ class TeacherWriteSerializer(serializers.Serializer):
     name = serializers.CharField(min_length=1)
     email = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     phone = serializers.CharField(allow_null=True, allow_blank=True, required=False)
-    call_url = serializers.CharField(
-        allow_null=True, allow_blank=True, required=False, max_length=500,
-        validators=_CALL_URL_VALIDATORS,
-    )
+    call_url = _link_field()
+    vk_url = _link_field()
 
     def validate_name(self, value: str) -> str:
         return value.strip()
@@ -74,11 +80,9 @@ class TeacherUpdateSerializer(serializers.Serializer):
     email = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     phone = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     # В отличие от email/phone пустое значение СТИРАЕТ ссылку: звонки
-    # пересоздают, и старую ссылку нужно уметь убрать.
-    call_url = serializers.CharField(
-        allow_null=True, allow_blank=True, required=False, max_length=500,
-        validators=_CALL_URL_VALIDATORS,
-    )
+    # пересоздают, страницы меняют — старую ссылку нужно уметь убрать.
+    call_url = _link_field()
+    vk_url = _link_field()
     active = serializers.BooleanField(required=False)
 
     def validate_name(self, value: str) -> str:

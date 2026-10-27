@@ -109,34 +109,43 @@
   gap: var(--space-2);
   margin-top: var(--space-2);
 }
-/* Ссылка на звонок преподавателя — строка под чипами (TeacherCallLink). */
-.call-link {
-  display: flex; align-items: center; gap: 6px;
-  max-width: 460px; min-width: 0;
-  margin-top: var(--space-2);
-  color: var(--text3);
+/* Контакты преподавателя под чипами (TeacherContacts): подпись | значение | копировать. */
+.contacts {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-4); row-gap: 2px;
+  max-width: 480px;
+  margin: var(--space-3) 0 0;
 }
-.call-link__icon { flex: none; }
-.call-link__url {
+.contacts__row { display: contents; }
+.contacts__label {
+  font-size: var(--fs-xs); color: var(--text3);
+  line-height: 24px;
+}
+.contacts__value {
+  margin: 0; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+}
+.contacts__link {
   min-width: 0;
   font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   text-decoration: none;
 }
-.call-link__url:hover { text-decoration: underline; }
-.call-link__empty { font-size: var(--fs-xs); color: var(--text3); }
-.call-link__copy {
+.contacts__link:hover { text-decoration: underline; }
+.contacts__empty { font-size: var(--fs-xs); color: var(--text4); line-height: 24px; }
+.contacts__copy {
   flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px;
   background: transparent;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: var(--r-sm);
   color: var(--text3);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
 }
-.call-link__copy:hover { background: var(--bg3); color: var(--text); }
+.contacts__copy:hover { background: var(--bg3); border-color: var(--line); color: var(--text); }
 /* .btn-save по умолчанию прижат вправо (margin-left:auto) — в шапке не нужно. */
 .ehero__actions .btn-save { margin-left: 0; }
 

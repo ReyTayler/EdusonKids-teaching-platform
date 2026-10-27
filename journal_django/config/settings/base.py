@@ -354,6 +354,9 @@ PAYMENT_BALANCE_GUARD: bool = env('PAYMENT_BALANCE_GUARD')
 EDUSON_PROD_REFRESH_BUTTON: bool = env.bool('EDUSON_PROD_REFRESH_BUTTON', default=False)
 EDUSON_REFRESH_BASH: str = env('EDUSON_REFRESH_BASH', default='')
 EDUSON_REFRESH_SCRIPT: Path = REPO_ROOT / 'scripts' / 'refresh_from_prod.sh'
+# SSH-алиас сервера staging: задан — тот же снимок после локального синка уходит и на
+# staging (шаг скрипта; здесь — только чтобы кнопка сказала об этом).
+EDUSON_STAGING_SSH: str = env('EDUSON_STAGING_SSH', default='')
 # Каталог снимков, лога и лока скрипта — тот же, что у самого скрипта (EDUSON_SNAPSHOT_DIR,
 # относительный путь — от platform/). Снимки — ПДн, каталог вне репозитория.
 _snapshot_dir = Path(env('EDUSON_SNAPSHOT_DIR', default='../data/prod-snapshots'))

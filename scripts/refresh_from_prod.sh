@@ -29,6 +29,13 @@
 # уроки до запуска старой системы. Не заданы ID или не скачалось — импорт идёт без
 # таблиц, с предупреждением в лог: обновление из-за таблиц не валится.
 #
+# STAGING (EDUSON_STAGING_SSH, только мягкий режим). Задан SSH-алиас сервера staging —
+# после локального синка тот же снимок и таблицы уходят tar-потоком по SSH прямо в
+# контейнер app staging (на диск сервера не пишутся), там — sync_eduson с тем же
+# --as-of, временный каталог в контейнере удаляется. Перед синком — страховочный
+# pg_dump базы staging (один, последний: $EDUSON_STAGING_DIR/backup/pre-refresh.dump).
+# Синк staging — своя транзакция: упал — staging как был, локальная уже обновлена.
+#
 # ВЫВОД И ЛОГ — без ПДн и секретов: ни адреса сервера, ни DATABASE_URL, ни почт
 # --superadmin, ни ID таблиц. Отчёт импорта сам по себе без ПДн (только id Eduson, коды групп, числа).
 set -Eeuo pipefail
@@ -40,7 +47,8 @@ case "${1:-}" in
   *) echo "использование: bash scripts/refresh_from_prod.sh [--soft]" >&2; exit 2 ;;
 esac
 [ "$#" -le 1 ] || { echo "использование: bash scripts/refresh_from_prod.sh [--soft]" >&2; exit 2; }
-# Шагов: полная — снимок, скачивание, таблицы, migrate, импорт, подмена; мягкая — первые три + синк.
+# Шагов: полная — снимок, скачивание, таблицы, migrate, импорт, подмена; мягкая — первые три
+# + синк (+ staging, если задан EDUSON_STAGING_SSH — STEPS уточняется после чтения конфига).
 if [ "$MODE" = soft ]; then STEPS=4; else STEPS=6; fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # platform/
@@ -85,6 +93,10 @@ SNAP_DIR="$(conf EDUSON_SNAPSHOT_DIR ../data/prod-snapshots)"
 KEEP="$(conf EDUSON_SNAPSHOT_KEEP 7)"
 SUPERADMINS="$(conf EDUSON_SUPERADMINS '')"
 DBURL="$(conf DATABASE_URL '')"
+STAGING_SSH="$(conf EDUSON_STAGING_SSH '')"
+STAGING_DIR="$(conf EDUSON_STAGING_DIR /opt/eduson-staging)"
+if [ "$MODE" = full ]; then STAGING_SSH=""; fi       # полная пересборка staging не трогает
+if [ -n "$STAGING_SSH" ]; then STEPS=5; fi
 
 [ -n "$SSH_TARGET" ] || die "не задан EDUSON_PROD_SSH (user@host сервера старой системы) — в окружении или $ENV_FILE"
 # Значения уходят в командную строку на сервере — только безопасные символы, без кавычек
@@ -95,6 +107,11 @@ DBURL="$(conf DATABASE_URL '')"
 [[ "$PROD_DB" =~ ^/[A-Za-z0-9_./-]+$ ]] || die "EDUSON_PROD_DB: ожидается абсолютный путь внутри контейнера"
 [[ "$KEEP" =~ ^[1-9][0-9]*$ ]] || die "EDUSON_SNAPSHOT_KEEP: ожидается целое ≥ 1"
 [ -n "$DBURL" ] || die "не найден DATABASE_URL (окружение или $ENV_FILE)"
+if [ -n "$STAGING_SSH" ]; then
+  # Те же правила, что у EDUSON_PROD_SSH: значения уходят в командную строку на сервере.
+  [[ "$STAGING_SSH" =~ ^([A-Za-z0-9._][A-Za-z0-9._-]*@)?[A-Za-z0-9._][A-Za-z0-9._-]*$ ]] || die "EDUSON_STAGING_SSH: ожидается алиас или user@host"
+  [[ "$STAGING_DIR" =~ ^/[A-Za-z0-9_./-]+$ ]] || die "EDUSON_STAGING_DIR: ожидается абсолютный путь"
+fi
 
 # Снимки — ПДн: только вне репозитория. Относительный путь — от platform/.
 case "$SNAP_DIR" in /*|[A-Za-z]:*) ;; *) SNAP_DIR="$ROOT/$SNAP_DIR" ;; esac
@@ -386,6 +403,44 @@ if [ "$MODE" = soft ]; then
     grep -E "преподаватели:|учётки:|группы:|ученики:" "$IMPORT_OUT" || true
   } | tee -a "$LOG_FILE"
   rm -f "$IMPORT_OUT"; IMPORT_OUT=""
+
+  if [ -n "$STAGING_SSH" ]; then
+    log "5/$STEPS staging: страховочная копия базы и тот же синк"
+    # Копия — до синка; при ошибке синк откатывается сам, копия — на случай «прошёл, но не то».
+    # Внутри контейнера db: локальный сокет, пользователь/база — из его же окружения.
+    BACKUP_CMD="cd $STAGING_DIR && umask 077 && mkdir -p backup"
+    BACKUP_CMD+=" && docker compose exec -T db sh -c 'pg_dump -Fc -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\"'"
+    BACKUP_CMD+=" > backup/pre-refresh.dump.part && mv -f backup/pre-refresh.dump.part backup/pre-refresh.dump"
+    ssh "${SSH_OPTS[@]}" "$STAGING_SSH" "$BACKUP_CMD" \
+      || die "staging: страховочная копия не снята — staging не тронут (локальная база уже обновлена)"
+    # Снимок и таблицы — tar-потоком в контейнер app, во временный каталог, удаляемый при выходе.
+    # Внешние кавычки раскрываются здесь ($STAGING_DIR, $TODAY_MSK), \$ — уже в контейнере.
+    IN_APP="set -e; d=\$(mktemp -d); trap \"rm -rf \$d\" EXIT; tar -xf - -C \$d"
+    IN_APP+="; set -- \$d/okk.db --as-of $TODAY_MSK"
+    IN_APP+="; if [ -d \$d/sheets ]; then set -- \"\$@\" --sheets-dir \$d/sheets; fi"
+    IN_APP+="; python manage.py sync_eduson \"\$@\""
+    STAGING_CMD="cd $STAGING_DIR && docker compose exec -T app sh -c '$IN_APP'"
+    tar_args=(-cf - -C "$(dirname "$SNAPSHOT")" --transform "s|^$(basename "$SNAPSHOT")\$|okk.db|" "$(basename "$SNAPSHOT")")
+    if [ -n "$SHEETS_DIR" ]; then
+      tar_args+=(-C "$(dirname "$SHEETS_DIR")" --transform "s|^$(basename "$SHEETS_DIR")|sheets|" "$(basename "$SHEETS_DIR")")
+    fi
+    IMPORT_OUT="$(mktemp)"
+    rc=0
+    tar "${tar_args[@]}" | ssh "${SSH_OPTS[@]}" "$STAGING_SSH" "$STAGING_CMD" >"$IMPORT_OUT" 2>&1 || rc=$?
+    cat "$IMPORT_OUT" >>"$LOG_FILE"
+    if [ "$rc" -ne 0 ]; then
+      tail -n 30 "$IMPORT_OUT" >&2
+      rm -f "$IMPORT_OUT"; IMPORT_OUT=""
+      die "staging не обновлён — его транзакция откатана, staging как был; локальная база уже обновлена (вывод — в $LOG_FILE)"
+    fi
+    {
+      echo "  staging обновлён тем же снимком (копия до синка — $STAGING_DIR/backup/pre-refresh.dump)."
+      grep -E "преподаватели:|учётки:|группы:|ученики:" "$IMPORT_OUT" | sed 's/^/  staging /' || true
+    } | tee -a "$LOG_FILE"
+    rm -f "$IMPORT_OUT"; IMPORT_OUT=""
+    elapsed=$((SECONDS - started))
+  fi
+
   log "=== мягкое обновление завершено за ${elapsed} с ==="
   exit 0
 fi

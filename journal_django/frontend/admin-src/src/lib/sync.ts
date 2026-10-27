@@ -36,6 +36,8 @@ export interface SyncRunResponse {
 export interface ProdRefreshStatus {
   /** Кнопка включена флагом EDUSON_PROD_REFRESH_BUTTON (только локально). */
   enabled: boolean;
+  /** Тот же снимок уходит и на staging (задан EDUSON_STAGING_SSH). */
+  staging: boolean;
   running: boolean;
   started_at: string | null;
   /** Итог последнего запуска по логу; null — идёт или запусков не было. */

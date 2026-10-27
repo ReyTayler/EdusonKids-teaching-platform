@@ -101,6 +101,7 @@ def status() -> dict:
     lines = [] if since is not None and not (_dir() / LOCK_NAME).exists() else _last_run_lines()
     return {
         'enabled': settings.EDUSON_PROD_REFRESH_BUTTON,
+        'staging': bool(settings.EDUSON_STAGING_SSH),
         'running': since is not None,
         'started_at': since.isoformat() if since else None,
         'last': None if since else _result(lines),

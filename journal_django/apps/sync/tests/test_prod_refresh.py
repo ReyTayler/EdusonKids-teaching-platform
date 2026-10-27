@@ -50,6 +50,14 @@ def test_disabled_flag(superadmin_client, snap, popen, settings):
 
 
 @pytest.mark.django_db
+def test_status_says_whether_staging_is_refreshed_too(superadmin_client, snap, settings):
+    settings.EDUSON_STAGING_SSH = ''
+    assert superadmin_client.get(URL).data['staging'] is False
+    settings.EDUSON_STAGING_SSH = 'staging-alias'
+    assert superadmin_client.get(URL).data['staging'] is True
+
+
+@pytest.mark.django_db
 def test_start_runs_soft_script(superadmin_client, snap, popen, settings):
     _log(snap, '2026-10-20 06:30:00 === обновление eduson из прода Eduson (20261020-0630 МСК) ===',
          '2026-10-20 06:31:00 ОШИБКА: снимок на проде не снят')

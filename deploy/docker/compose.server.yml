@@ -8,17 +8,29 @@
 #   - TLS и настоящий сертификат — у nginx сервера; контейнер web слушает
 #     обычный HTTP только на 127.0.0.1:8090. Docker открывает опубликованные
 #     порты В ОБХОД ufw, поэтому наружу контейнеры не публикуются никогда;
-#   - секреты — app.env (приложение) и db.env (только пароль базы); их кладёт
-#     deploy-staging.sh sync, плейбук их не пишет и не читает;
+#   - секреты — app.env (приложение), db.env (только пароль базы) и bot.env
+#     (токен бота и секрет журнал↔бот); их кладёт deploy-staging.sh sync,
+#     плейбук их не пишет и не читает;
 #   - конфиги nginx смонтированы файлами: после их замены нужен
 #     «docker compose restart web» (release делает это сам).
 #
+# Сервисы: db, redis (брокер Celery и кэш), migrate (разово), app (Django + gunicorn),
+# worker и beat (Celery: очередь уведомлений, дайджесты, коды входа), web (nginx,
+# 127.0.0.1:8090) и bot (Telegram, long polling; ходит в app по сети compose).
+# Бот и воркеры наружу не публикуются: у них нет ports.
+#
 # Управление (на сервере, из /opt/eduson-staging):
-#   docker compose ps -a | logs -f app | restart app | down
+#   docker compose ps -a | logs -f app | logs -f bot | restart worker | down
 #
 # Откат: в .env указать прежний TAG (хранятся 3 последние версии) и
 # «docker compose up -d». ⚠️ Миграции назад не откатываются — откат на образ
 # старше последней миграции небезопасен.
+#
+# Бот — отдельный образ, он появился не во всех версиях. Откат на версию СТАРШЕ
+# коммита, в котором бот уже есть, даст «образ не найден» и уронит `up` целиком.
+# Тогда в .env рядом с прежним TAG добавить BOT_TAG=<текущий тег> (версия, где бот
+# есть): образ бота возьмётся из неё, остальное откатится. Без BOT_TAG бот берёт TAG.
+# Пока BOT_TAG задан, deploy-staging.sh не удаляет образ бота с этим тегом.
 
 name: eduson-staging
 
@@ -34,8 +46,14 @@ x-app: &app-common
   env_file: app.env
   volumes:
     - media:/srv/media
+  # Настройки при старте используют Redis (кэш), поэтому redis — обязательная
+  # зависимость и для migrate, и для всех сервисов приложения.
+  # YAML-слияние «<<» вложенный depends_on НЕ сливает: сервис, который задаёт
+  # свой depends_on, обязан выписать полный набор условий сам.
   depends_on:
     db:
+      condition: service_healthy
+    redis:
       condition: service_healthy
 
 services:
@@ -63,6 +81,31 @@ services:
     cpus: 0.5
     restart: unless-stopped
 
+  redis:
+    logging: *logging
+    # Образ привозится вместе с остальными (docker save), как и образ базы.
+    image: redis:7.4-alpine
+    # Брокер Celery и кэш. Без записи на диск: очередь уведомлений живёт в
+    # PostgreSQL (outbox), потеря Redis при рестарте безопасна.
+    # Вытесняются ТОЛЬКО ключи с TTL (volatile-lru): кэш Django и результаты задач
+    # Celery (CELERY_RESULT_EXPIRES). Очереди kombu TTL не имеют и не вытесняются
+    # никогда. allkeys-lru недопустим — он выкинул бы и очереди. Если память
+    # кончилась, а ключей с TTL нет, Redis вернёт ошибку записи, а не молча
+    # потеряет задачи.
+    command: ["redis-server", "--save", "", "--appendonly", "no",
+              "--maxmemory", "64mb", "--maxmemory-policy", "volatile-lru"]
+    environment:
+      TZ: Europe/Moscow
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Запас над maxmemory 64 МБ: фрагментация памяти и буферы клиентов.
+    mem_limit: 96m
+    cpus: 0.25
+    restart: unless-stopped
+
   migrate:
     <<: *app-common
     command: ["python", "manage.py", "migrate", "--noinput"]
@@ -71,7 +114,12 @@ services:
 
   app:
     <<: *app-common
+    # Полный набор условий (см. комментарий у x-app): миграции применены и Redis жив.
     depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     healthcheck:
@@ -82,6 +130,43 @@ services:
       start_period: 15s
     mem_limit: 400m
     cpus: 0.5
+    restart: unless-stopped
+
+  worker:
+    <<: *app-common
+    # Те же ключи, что юнит KOTOKOD journal-celery-worker; concurrency 1 —
+    # staging делит сервер с продом KOTOKOD. interactive — коды входа (OTP).
+    # Очередь default — прогревы кэша, отправка уведомлений, фоновые задачи.
+    command: ["celery", "-A", "config", "worker", "--loglevel=info",
+              "-Q", "interactive,default", "--concurrency=1",
+              "--prefetch-multiplier=1", "--max-tasks-per-child=200"]
+    # TZ=Europe/Moscow — из образа app (ENV в Dockerfile): расписание beat и даты в задачах — по МСК.
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 300m
+    cpus: 0.5
+    restart: unless-stopped
+
+  beat:
+    <<: *app-common
+    # Один beat на систему. Файл расписания — во временном каталоге контейнера
+    # (не в рабочем каталоге: образ работает от непривилегированного пользователя).
+    command: ["celery", "-A", "config", "beat", "--loglevel=info",
+              "--schedule=/tmp/celerybeat-schedule"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 128m
+    cpus: 0.25
     restart: unless-stopped
 
   web:
@@ -98,6 +183,22 @@ services:
       - ./nginx/server.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/proxy-headers-server.conf:/etc/nginx/snippets/proxy-headers-server.conf:ro
     mem_limit: 64m
+    cpus: 0.25
+    restart: unless-stopped
+
+  bot:
+    logging: *logging
+    # Telegram-бот (long polling). Образ собирает deploy-staging.sh release, версия — та же TAG.
+    # Токен и секрет журнала — в bot.env (кладёт sync). Портов нет: бот только исходящие запросы.
+    # BOT_TAG — только для отката (см. шапку): образ бота версии, где он уже был.
+    image: eduson-staging-bot:${BOT_TAG:-${TAG:?TAG не задан в .env}}
+    env_file: bot.env
+    environment:
+      TZ: Europe/Moscow
+    depends_on:
+      app:
+        condition: service_healthy
+    mem_limit: 96m
     cpus: 0.25
     restart: unless-stopped
 

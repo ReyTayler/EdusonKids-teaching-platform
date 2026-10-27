@@ -38,3 +38,9 @@ docs
 
 # Пароль входа на staging-сайт и секреты сервера
 deploy/docker/.staging-basic-auth
+
+# Бот: локальный .env (BOT_TOKEN) и env-файл compose (bot.env) — секреты, в образ не идут.
+# Тесты бота в образ не нужны (этап bot копирует только main.py и пакет bot/).
+bot/.env
+deploy/docker/bot.env
+bot/tests

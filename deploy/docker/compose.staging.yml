@@ -11,12 +11,20 @@
 #
 # Сервисы:
 #   db      — PostgreSQL 15; при первом запуске заливает seed/eduson.dump, если он есть;
+#   redis   — брокер Celery и кэш (REDIS_URL); без записи на диск;
 #   migrate — разово применяет миграции и завершается;
 #   app     — Django + gunicorn (стартует только после успешных миграций);
-#   web     — nginx: фронт + прокси /api в app; единственный, кто виден снаружи.
+#   worker  — Celery-воркер: OTP-письма входа, прогрев кэша, очередь уведомлений;
+#   beat    — Celery beat: раз в минуту разгребает очередь уведомлений, дайджесты 08:00/21:00;
+#   web     — nginx: фронт + прокси /api в app; единственный, кто виден снаружи;
+#   bot     — Telegram-бот (long polling) — ТОЛЬКО в профиле bot, см. ниже.
 #
-# Redis и Celery не поднимаются: без REDIS_URL Eduson работает синхронно и
-# кеширует в памяти процесса — для staging этого достаточно.
+# Уведомления преподавателям (Telegram) отправляет сам журнал через beat/worker;
+# бот только отвечает на команды и сообщает журналу привязку аккаунтов.
+#
+# Бот: одним токеном опрашивать Telegram может только один процесс. Пока бот
+# работает на сервере, локально его не поднимать; `docker compose --profile bot up -d` —
+# только со своим тестовым ботом (его токен — в bot.env рядом, по образцу bot.env.example).
 
 name: eduson-staging
 
@@ -39,8 +47,14 @@ x-app: &app-common
   env_file: .env.staging
   volumes:
     - media:/srv/media
+  # Настройки при старте используют Redis (кэш), поэтому redis — обязательная
+  # зависимость и для migrate, и для всех сервисов приложения.
+  # YAML-слияние «<<» вложенный depends_on НЕ сливает: сервис, который задаёт
+  # свой depends_on, обязан выписать полный набор условий сам.
   depends_on:
     db:
+      condition: service_healthy
+    redis:
       condition: service_healthy
 
 services:
@@ -68,6 +82,30 @@ services:
     cpus: 0.5
     restart: unless-stopped
 
+  redis:
+    logging: *logging
+    image: redis:7.4-alpine
+    # Брокер Celery и кэш. Без записи на диск: очередь уведомлений живёт в
+    # PostgreSQL (outbox), потеря Redis при рестарте безопасна.
+    # Вытесняются ТОЛЬКО ключи с TTL (volatile-lru): кэш Django и результаты задач
+    # Celery (CELERY_RESULT_EXPIRES). Очереди kombu TTL не имеют и не вытесняются
+    # никогда. allkeys-lru недопустим — он выкинул бы и очереди. Если память
+    # кончилась, а ключей с TTL нет, Redis вернёт ошибку записи, а не молча
+    # потеряет задачи.
+    command: ["redis-server", "--save", "", "--appendonly", "no",
+              "--maxmemory", "64mb", "--maxmemory-policy", "volatile-lru"]
+    environment:
+      TZ: Europe/Moscow
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Запас над maxmemory 64 МБ: фрагментация памяти и буферы клиентов.
+    mem_limit: 96m
+    cpus: 0.25
+    restart: unless-stopped
+
   migrate:
     <<: *app-common
     command: ["python", "manage.py", "migrate", "--noinput"]
@@ -76,7 +114,12 @@ services:
 
   app:
     <<: *app-common
+    # Полный набор условий (см. комментарий у x-app): миграции применены и Redis жив.
     depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     healthcheck:
@@ -89,6 +132,43 @@ services:
       start_period: 15s
     mem_limit: 400m
     cpus: 0.5
+    restart: unless-stopped
+
+  worker:
+    <<: *app-common
+    # Те же ключи, что юнит KOTOKOD journal-celery-worker; concurrency 1 —
+    # staging делит сервер с продом KOTOKOD. interactive — коды входа (OTP).
+    # Очередь default — прогревы кэша, отправка уведомлений, фоновые задачи.
+    command: ["celery", "-A", "config", "worker", "--loglevel=info",
+              "-Q", "interactive,default", "--concurrency=1",
+              "--prefetch-multiplier=1", "--max-tasks-per-child=200"]
+    # TZ=Europe/Moscow — из образа app (ENV в Dockerfile): расписание beat и даты в задачах — по МСК.
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 300m
+    cpus: 0.5
+    restart: unless-stopped
+
+  beat:
+    <<: *app-common
+    # Один beat на систему. Файл расписания — во временном каталоге контейнера
+    # (не в рабочем каталоге: образ работает от непривилегированного пользователя).
+    command: ["celery", "-A", "config", "beat", "--loglevel=info",
+              "--schedule=/tmp/celerybeat-schedule"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 128m
+    cpus: 0.25
     restart: unless-stopped
 
   web:
@@ -109,6 +189,27 @@ services:
       - media:/srv/media:ro
       - certs:/etc/nginx/certs
     mem_limit: 64m
+    cpus: 0.25
+    restart: unless-stopped
+
+  bot:
+    logging: *logging
+    image: eduson-staging-bot:latest
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: bot
+    # Одним токеном опрашивать Telegram может только один процесс. Пока бот работает
+    # на сервере, локально его не поднимать; `docker compose --profile bot up -d` —
+    # только со своим тестовым ботом. Вне профиля сервис не запускается и не собирается.
+    profiles: ["bot"]
+    env_file: bot.env
+    environment:
+      TZ: Europe/Moscow
+    depends_on:
+      app:
+        condition: service_healthy
+    mem_limit: 96m
     cpus: 0.25
     restart: unless-stopped
 

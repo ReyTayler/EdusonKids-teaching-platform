@@ -1,15 +1,19 @@
 # syntax=docker/dockerfile:1
 #
-# Образы Eduson Kids. Одна сборка — три этапа (multi-stage), два итоговых образа:
+# Образы Eduson Kids. Одна сборка — четыре этапа (multi-stage), три итоговых образа:
 #
 #   front — собирает оба SPA (Node.js нужен ТОЛЬКО здесь, в итоговые образы не попадает);
 #   app   — Django + gunicorn: Python 3.11 и зависимости, без Node.js и без исходников фронта;
-#   web   — nginx: раздаёт собранный фронт и проксирует /api в app.
+#           тот же образ запускает migrate, worker и beat (разные команды в compose);
+#   web   — nginx: раздаёт собранный фронт и проксирует /api в app;
+#   bot   — Telegram-бот (platform/bot): отдельный лёгкий образ без Django и без фронта.
 #
 # Собирается из корня репозитория (контекст = platform/):
 #   docker build --target app -t eduson-app .
 #   docker build --target web -t eduson-web .
+#   docker build --target bot -t eduson-bot .
 # Обычно — через compose: docker compose -f deploy/docker/compose.staging.yml build
+# (бот вне профиля не собирается: docker compose ... --profile bot build bot)
 #
 # Порядок слоёв: сначала то, что меняется редко (зависимости), потом код. Docker
 # переиспользует закешированные слои, пока их вход не изменился, поэтому правка
@@ -110,3 +114,38 @@ COPY deploy/docker/nginx/proxy-headers.conf /etc/nginx/snippets/proxy-headers.co
 COPY deploy/docker/nginx/staging.conf /etc/nginx/conf.d/default.conf
 COPY deploy/docker/nginx/10-self-signed-cert.sh /docker-entrypoint.d/10-self-signed-cert.sh
 RUN chmod +x /docker-entrypoint.d/10-self-signed-cert.sh
+
+# ---------------------------------------------------------------------------
+# Этап 4: Telegram-бот (platform/bot) — отдельный лёгкий образ без Django
+# ---------------------------------------------------------------------------
+# Бот — отдельный процесс (long polling). Он ходит в журнал по сети compose
+# (http://app:8000), наружу не публикуется и не знает про Django: ни кода журнала,
+# ни его зависимостей здесь нет.
+FROM python:3.11-slim-bookworm AS bot
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TZ=Europe/Moscow
+
+# tzdata — чтобы TZ=Europe/Moscow реально действовал (время в ответах бота — по МСК).
+# Тот же непривилегированный пользователь (uid 1000), что и в образе app.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends tzdata \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 1000 eduson \
+ && useradd --system --uid 1000 --gid eduson --home-dir /bot --shell /usr/sbin/nologin eduson
+
+WORKDIR /bot
+# Сначала зависимости: слой с pip переустанавливается только при смене requirements.txt.
+COPY bot/requirements.txt .
+RUN pip install -r requirements.txt
+
+# Только код бота. Тесты, .env и локальное окружение сюда не попадают (.dockerignore).
+COPY --chown=eduson:eduson bot/main.py ./
+COPY --chown=eduson:eduson bot/bot ./bot
+
+USER eduson
+# Логи — в stdout, их собирает Docker (ротация — в compose, логгинг по умолчанию).
+CMD ["python", "main.py"]

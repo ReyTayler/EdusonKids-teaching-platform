@@ -240,6 +240,11 @@ CELERY_BROKER_URL = REDIS_URL or 'redis://localhost:6379/2'
 # из backend'а. apps.sync.views.SyncStatusView — первый потребитель, которому это
 # нужно и в dev/тестах (REDIS_URL не задан, Redis намеренно не поднят локально).
 CELERY_RESULT_BACKEND = REDIS_URL or 'cache+memory://'
+# Срок хранения результатов задач (в Celery по умолчанию — 24 ч). Результат отчёта несёт
+# готовый xlsx в base64: держать его сутки в общем Redis — значит копить мегабайты и
+# выжимать память брокера. Фронт отчётов скачивает файл сразу после SUCCESS (ReportPage),
+# поэтому часа с запасом достаточно. Истёкший результат — штатный 404 «срок хранения».
+CELERY_RESULT_EXPIRES = 3600
 CELERY_TIMEZONE = 'Europe/Moscow'
 CELERY_ENABLE_UTC = False
 CELERY_TASK_ALWAYS_EAGER = not REDIS_URL

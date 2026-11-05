@@ -1,0 +1,172 @@
+# Основной сервер Eduson Kids (каталог /opt/eduson-prod), рядом с чужими проектами.
+#
+# Отличия от compose.server.yml (staging):
+#   - TLS держит общий Caddy сервера в своём контейнере. Контейнер web не публикует
+#     порт, а подключён к сети eduson-edge, куда подключён и Caddy. Порт 8090 на этом
+#     сервере занят;
+#   - api.telegram.org с сервера недоступен: журнал и бот ходят через Worker (TELEGRAM_API_BASE).
+#
+# Адрес и домен сервера в репозиторий не попадают: они только в секретах на сервере.
+# Образы собираются на машине разработчика и привозятся готовыми, версия — TAG в .env.
+#
+# Управление (из /opt/eduson-prod): docker compose ps -a | logs -f app | restart worker
+# Откат версии: прежний TAG в .env и «docker compose up -d». Миграции назад не откатываются.
+
+name: eduson-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app-common
+  logging: *logging
+  image: eduson-prod-app:${TAG:?TAG не задан в .env}
+  env_file: app.env
+  volumes:
+    - media:/srv/media
+  # YAML-слияние «<<» вложенный depends_on НЕ сливает: сервис, который задаёт
+  # свой depends_on, обязан выписать полный набор условий сам.
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  db:
+    logging: *logging
+    image: postgres:15-alpine
+    env_file: db.env
+    environment:
+      POSTGRES_DB: eduson
+      POSTGRES_USER: eduson
+      TZ: Europe/Moscow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+      - ./seed:/seed:ro
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30", "-c", "work_mem=4MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U eduson -d eduson && test ! -f /var/lib/postgresql/data/RESTORE_FAILED"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 384m
+    cpus: 0.75
+    restart: unless-stopped
+
+  redis:
+    logging: *logging
+    image: redis:7.4-alpine
+    # Вытесняются ТОЛЬКО ключи с TTL: очереди kombu TTL не имеют и не теряются.
+    command: ["redis-server", "--save", "", "--appendonly", "no",
+              "--maxmemory", "64mb", "--maxmemory-policy", "volatile-lru"]
+    environment:
+      TZ: Europe/Moscow
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 96m
+    cpus: 0.25
+    restart: unless-stopped
+
+  migrate:
+    <<: *app-common
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    mem_limit: 400m
+    restart: "no"
+
+  app:
+    <<: *app-common
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/health', headers={'X-Forwarded-Proto': 'https'}), timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+
+  worker:
+    <<: *app-common
+    command: ["celery", "-A", "config", "worker", "--loglevel=info",
+              "-Q", "interactive,default", "--concurrency=1",
+              "--prefetch-multiplier=1", "--max-tasks-per-child=200"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 300m
+    cpus: 0.5
+    restart: unless-stopped
+
+  beat:
+    <<: *app-common
+    command: ["celery", "-A", "config", "beat", "--loglevel=info",
+              "--schedule=/tmp/celerybeat-schedule"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+
+  web:
+    logging: *logging
+    image: eduson-prod-web:${TAG:?TAG не задан в .env}
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      default: {}
+      edge:
+        aliases: [eduson-web]
+    volumes:
+      - media:/srv/media:ro
+      - ./nginx/server.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/proxy-headers-server.conf:/etc/nginx/snippets/proxy-headers-server.conf:ro
+    mem_limit: 64m
+    cpus: 0.25
+    restart: unless-stopped
+
+  bot:
+    logging: *logging
+    # Long polling через Worker (TELEGRAM_API_BASE в bot.env), входящих портов нет.
+    # Токеном опрашивать Telegram может только один процесс.
+    image: eduson-prod-bot:${TAG:?TAG не задан в .env}
+    env_file: bot.env
+    environment:
+      TZ: Europe/Moscow
+    depends_on:
+      app:
+        condition: service_healthy
+    mem_limit: 96m
+    cpus: 0.25
+    restart: unless-stopped
+
+networks:
+  edge:
+    name: eduson-edge
+
+volumes:
+  pgdata:
+  media:

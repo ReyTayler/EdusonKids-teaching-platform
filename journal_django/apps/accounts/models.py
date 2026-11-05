@@ -172,8 +172,6 @@ class Account(AbstractUser):
         return self.role in roles
 
 
-# AccountInvite и AccountRecoveryCode — без изменений, 
-# только обновляем related_name если нужно
 class AccountInvite(models.Model):
     """Invite-токен для первоначальной установки пароля."""
 
@@ -202,24 +200,4 @@ class AccountInvite(models.Model):
                 name='ai_one_active_per_account',
                 condition=models.Q(used_at__isnull=True, revoked_at__isnull=True),
             ),
-        ]
-
-
-class AccountRecoveryCode(models.Model):
-    """Recovery-код для 2FA-сброса."""
-
-    id = models.AutoField(primary_key=True)
-    account = models.ForeignKey(
-        Account,
-        on_delete=models.CASCADE,
-        related_name='recovery_codes',
-    )
-    code_hash = models.TextField()
-    used_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        managed = True
-        db_table = 'account_recovery_codes'
-        indexes = [
-            models.Index(fields=['account'], name='arc_account_idx'),
         ]

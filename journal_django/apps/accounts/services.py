@@ -135,7 +135,7 @@ def reset_password(account_id: int, actor_account_id: int, request: Request) -> 
 
 
 def reset_twofa(account_id: int, actor_account_id: int, request: Request) -> bool:
-    """Сброс 2FA + recovery-кодов. False если не найдена. Порт accounts.js reset-2fa."""
+    """Сброс 2FA. False если не найдена. Порт accounts.js reset-2fa."""
     acc = repository.reset_twofa(account_id)
     if acc is None:
         return False

@@ -147,7 +147,7 @@ def authenticate(self, request: Request):
    ← Проверка кода: OK
    → НОВАЯ сессия через issue_session(acc)  ← authenticated session
    ← Set-Cookie: session=...
-   ← {recovery_codes: [...], redirect: '/teacher'}
+   ← {redirect: '/teacher'}
 ```
 
 #### Почему это важно
@@ -436,7 +436,6 @@ trusted_devices (
 - Смены пароля
 - Смены email
 - Включения/отключения/смены метода 2FA
-- Просмотра recovery-кодов
 - Создания/удаления/изменения других аккаунтов
 - Просмотра audit-log
 - Массовых операций
@@ -447,7 +446,6 @@ trusted_devices (
 - Смене пароля
 - Сбросе пароля
 - Включении/отключении/смене 2FA
-- Восстановлении через recovery-код
 - Деактивации аккаунта
 
 ```sql

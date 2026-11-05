@@ -109,7 +109,6 @@ def _delete_account(acc_id: int, teacher_id=None) -> None:
             [acc_id, acc_id],
         )
         cur.execute('DELETE FROM account_invites WHERE account_id = %s', [acc_id])
-        cur.execute('DELETE FROM account_recovery_codes WHERE account_id = %s', [acc_id])
         cur.execute('DELETE FROM accounts WHERE id = %s', [acc_id])
         if teacher_id:
             cur.execute('DELETE FROM teachers WHERE id = %s', [teacher_id])

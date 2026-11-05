@@ -144,7 +144,7 @@ class AccountResetPasswordView(APIView):
 
 
 class AccountReset2faView(APIView):
-    """POST /:id/reset-2fa — сброс 2FA + recovery-кодов."""
+    """POST /:id/reset-2fa — сброс 2FA."""
 
     permission_classes = [IsSuperAdmin]
 

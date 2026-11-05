@@ -257,8 +257,6 @@ def test_full_flow_create_to_login(admin_account, settings):
                content_type='application/json')
     assert r.status_code == 200
     assert 'session' in r.cookies  # теперь есть сессия!
-    recovery_codes = r.json()['recovery_codes']
-    assert len(recovery_codes) > 0
     
     # 6. Проверка: может входить с новой сессией
     c.cookies['session'] = r.cookies['session']

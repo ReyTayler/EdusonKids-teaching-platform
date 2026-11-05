@@ -293,7 +293,7 @@ class TestInviteAPI:
 # ---------------------------------------------------------------------------
 
 def test_e2e_accept_enroll_login(invite_factory):
-    """Полный happy-path: invite → accept → 2FA-enroll (TOTP) → JWT access cookie + recovery."""
+    """Полный happy-path: invite → accept → 2FA-enroll (TOTP) → JWT access cookie."""
     import pyotp
     from django.conf import settings as dj_settings
 
@@ -317,11 +317,11 @@ def test_e2e_accept_enroll_login(invite_factory):
                    {'challenge_token': challenge, 'method': 'totp'}, format='json').json()
     code = pyotp.TOTP(setup['secret']).now()
 
-    # 4. enable → JWT access cookie + recovery-коды
+    # 4. enable → JWT access cookie, резервных кодов нет
     en = c.post(f'{BASE_AUTH}/2fa/enable',
                 {'challenge_token': challenge, 'code': code}, format='json')
     assert en.status_code == 200
     assert access_cookie in en.cookies
     body = en.json()
     assert body['redirect'] == '/admin'
-    assert isinstance(body.get('recovery_codes'), list) and body['recovery_codes']
+    assert 'recovery_codes' not in body

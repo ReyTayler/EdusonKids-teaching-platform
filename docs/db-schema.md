@@ -14,7 +14,7 @@
 | 010 | `pagination_indexes.sql` | lessons_date_desc, payroll_lesson_id, payments_paid_at_desc |
 | 011 | `discounts.sql` | name + amount(0..1) + active |
 | 012 | `lesson_attendance_student_idx.sql` | индекс по student_id |
-| 013 | `accounts.sql` | accounts + account_recovery_codes; email UNIQUE, password_hash, role, teacher_id, 2FA, lockout |
+| 013 | `accounts.sql` | accounts (account_recovery_codes удалена в 2026-11); email UNIQUE, password_hash, role, teacher_id, 2FA, lockout |
 | 014 | `security_audit_log.sql` | журнал событий безопасности |
 | ~~015~~ | ~~`students_consent.sql`~~ | ~~consent_* колонки (согласие на ПДн)~~ — **фича удалена 2026-07** (колонки сброшены Django-миграцией `students/0002`) |
 

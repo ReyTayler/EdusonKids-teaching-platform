@@ -36,7 +36,7 @@ def teacher_fixture():
 @pytest.fixture
 def account_factory():
     """
-    Фабрика учёток с автоочисткой (recovery-коды + audit + сама учётка).
+    Фабрика учёток с автоочисткой (audit + сама учётка).
 
     factory(email=..., role='manager', teacher_id=None, twofa=False) → account_id.
 
@@ -67,11 +67,6 @@ def account_factory():
                 ],
             )
             acc_id = cur.fetchone()[0]
-            if twofa:
-                cur.execute(
-                    'INSERT INTO account_recovery_codes (account_id, code_hash) VALUES (%s, %s)',
-                    [acc_id, 'hash1'],
-                )
         created.append(acc_id)
         return acc_id
 
@@ -80,7 +75,6 @@ def account_factory():
     with connection.cursor() as cur:
         for acc_id in created:
             cur.execute('DELETE FROM account_invites WHERE account_id = %s', [acc_id])
-            cur.execute('DELETE FROM account_recovery_codes WHERE account_id = %s', [acc_id])
             cur.execute('DELETE FROM security_audit_log WHERE target_id = %s OR account_id = %s',
                         [acc_id, acc_id])
             cur.execute('DELETE FROM accounts WHERE id = %s', [acc_id])
@@ -98,7 +92,6 @@ def cleanup_email():
             if row:
                 aid = row[0]
                 cur.execute('DELETE FROM account_invites WHERE account_id = %s', [aid])
-                cur.execute('DELETE FROM account_recovery_codes WHERE account_id = %s', [aid])
                 cur.execute('DELETE FROM security_audit_log WHERE target_id = %s OR account_id = %s',
                             [aid, aid])
                 cur.execute('DELETE FROM accounts WHERE id = %s', [aid])

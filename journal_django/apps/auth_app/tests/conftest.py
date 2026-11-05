@@ -49,7 +49,7 @@ def _reset_rate_limiter():
 @pytest.fixture
 def account_factory():
     """
-    Фабрика учёток с автоочисткой (recovery-коды + audit + учётка).
+    Фабрика учёток с автоочисткой (audit + учётка).
 
     Использует AbstractUser-колонки: password (не password_hash), is_active (не active).
     factory(email, role, teacher_id, password, twofa_method, twofa_secret, twofa_enabled, is_active)
@@ -100,7 +100,6 @@ def account_factory():
         for item in created:
             acc_id = item['id']
             cur.execute('DELETE FROM account_invites WHERE account_id = %s', [acc_id])
-            cur.execute('DELETE FROM account_recovery_codes WHERE account_id = %s', [acc_id])
             cur.execute(
                 'DELETE FROM security_audit_log WHERE target_id = %s OR account_id = %s',
                 [acc_id, acc_id],

@@ -18,7 +18,7 @@ from django.utils import timezone
 
 from apps.core.utils.orm import dictrow, dictrows
 
-from .models import Account, AccountInvite, AccountRecoveryCode
+from .models import Account, AccountInvite
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +189,6 @@ def set_active(account_id: int, active: bool) -> bool:
 
 def reset_twofa(account_id: int) -> Optional[dict]:
     with transaction.atomic():
-        AccountRecoveryCode.objects.filter(account_id=account_id).delete()
         Account.objects.filter(id=account_id).update(
             twofa_method=None, twofa_secret=None,
             twofa_enabled=False, twofa_confirmed_at=None,
@@ -254,27 +253,6 @@ def register_login_failure(
     if row is None:
         return None
     return {'failed_login_count': row[0], 'locked_until': row[1]}
-
-
-def replace_recovery_codes(account_id: int, hashes: list[str]) -> None:
-    with transaction.atomic():
-        AccountRecoveryCode.objects.filter(account_id=account_id).delete()
-        if hashes:
-            AccountRecoveryCode.objects.bulk_create([
-                AccountRecoveryCode(account_id=account_id, code_hash=h) for h in hashes
-            ])
-
-
-def list_recovery_codes(account_id: int) -> list[dict]:
-    return dictrows(
-        AccountRecoveryCode.objects.filter(account_id=account_id)
-        .order_by('id')
-        .values('id', 'account_id', 'code_hash', 'used_at')
-    )
-
-
-def mark_recovery_used(rc_id: int) -> None:
-    AccountRecoveryCode.objects.filter(id=rc_id).update(used_at=Now())
 
 
 # ---------------------------------------------------------------------------

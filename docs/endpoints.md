@@ -8,7 +8,7 @@
 | POST | `/api/auth/login/2fa` | Подтверждение 2FA → Set-Cookie `session`. Rate-limited |
 | POST | `/api/auth/2fa/email/send` | Отправить email-OTP. Rate-limited |
 | POST | `/api/auth/2fa/setup` | Сгенерировать TOTP-secret + QR |
-| POST | `/api/auth/2fa/enable` | Включить TOTP → recovery-codes |
+| POST | `/api/auth/2fa/enable` | Включить выбранный способ 2FA |
 | POST | `/api/auth/2fa/disable` | Отключить 2FA (за сессией) |
 | POST | `/api/auth/logout` | Очистить cookie |
 | GET  | `/api/auth/me` | `{ me: {account_id, role, ...} }` |

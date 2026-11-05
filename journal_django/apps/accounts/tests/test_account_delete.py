@@ -1,4 +1,4 @@
-"""Hard-delete учётки: строка исчезает физически, инвайты/recovery каскадно удаляются."""
+"""Hard-delete учётки: строка исчезает физически, инвайты каскадно удаляются."""
 from __future__ import annotations
 
 import pytest

@@ -5,10 +5,10 @@ test_auth_api.py — E2E тесты для /api/auth/* (DRF APIClient, реал�
   - POST /login: teacher без 2FA → twofa_enrollment_required.
     неверный пароль, роль не совпала, locked-аккаунт, twofa_required (totp),
     twofa_enrollment_required (manager без 2FA).
-  - POST /login/2fa: TOTP, recovery-код, неверный код.
+  - POST /login/2fa: TOTP, неверный код.
   - email-OTP флоу.
   - POST /2fa/setup totp → secret+qr.
-  - POST /2fa/enable с валидным TOTP → recovery_codes + access-cookie.
+  - POST /2fa/enable с валидным TOTP → access-cookie, без резервных кодов.
   - POST /2fa/disable с верным/неверным паролем.
   - GET /me → правильный shape.
   - POST /logout → clears cookie.
@@ -294,42 +294,6 @@ def test_login_2fa_totp_wrong_code(account_factory):
     assert 'error' in resp.data
 
 
-def test_login_2fa_recovery_code(account_factory):
-    """Recovery-код проходит вместо TOTP."""
-    from apps.auth_app import twofa as twofa_module
-
-    secret_key = pyotp.random_base32()
-    acc = account_factory(
-        email='__auth_2fa_rec__@example.com',
-        role='manager',
-        password=_PASSWORD,
-        twofa_method='totp',
-        twofa_secret=secret_key,
-        twofa_enabled=True,
-    )
-    rc = twofa_module.generate_recovery_codes(n=1)
-    with connection.cursor() as cur:
-        cur.execute('DELETE FROM account_recovery_codes WHERE account_id=%s', [acc['id']])
-        cur.execute(
-            'INSERT INTO account_recovery_codes (account_id, code_hash) VALUES (%s, %s)',
-            [acc['id'], rc['hashes'][0]],
-        )
-
-    login_resp = APIClient().post(f'{BASE}/login', {
-        'email': '__auth_2fa_rec__@example.com',
-        'password': _PASSWORD,
-        'role': 'admin',
-    }, format='json')
-    challenge_token = login_resp.data['challenge_token']
-
-    resp = APIClient().post(f'{BASE}/login/2fa', {
-        'challenge_token': challenge_token,
-        'code': rc['plain'][0],
-    }, format='json')
-    assert resp.status_code == 200
-    assert _ACCESS_COOKIE in resp.cookies
-
-
 # ---------------------------------------------------------------------------
 # POST /2fa/email/send
 # ---------------------------------------------------------------------------
@@ -409,7 +373,7 @@ def test_twofa_setup_totp(account_factory):
 
 
 def test_twofa_enable_totp(account_factory):
-    """Полный enrollment: setup → enable с валидным TOTP → recovery_codes + access-cookie."""
+    """Полный enrollment: setup → enable с валидным TOTP → access-cookie, без резервных кодов."""
     account_factory(
         email='__auth_enable__@example.com',
         role='manager',
@@ -435,7 +399,7 @@ def test_twofa_enable_totp(account_factory):
         'code': code,
     }, format='json')
     assert enable_resp.status_code == 200
-    assert len(enable_resp.data.get('recovery_codes', [])) == 8
+    assert 'recovery_codes' not in enable_resp.data
     # JWT access-cookie выдана
     assert _ACCESS_COOKIE in enable_resp.cookies
 
@@ -468,7 +432,7 @@ def test_twofa_enable_wrong_code(account_factory):
 
 
 def test_twofa_enable_email(account_factory):
-    """Email-enrollment: setup email → код из письма → enable → 200 + recovery + access-cookie."""
+    """Email-enrollment: setup email → код из письма → enable → 200 + access-cookie."""
     account_factory(
         email='__auth_en_email__@example.com',
         role='manager',
@@ -497,7 +461,7 @@ def test_twofa_enable_email(account_factory):
         'code': code,
     }, format='json')
     assert enable_resp.status_code == 200
-    assert len(enable_resp.data.get('recovery_codes', [])) == 8
+    assert 'recovery_codes' not in enable_resp.data
     assert _ACCESS_COOKIE in enable_resp.cookies
 
 

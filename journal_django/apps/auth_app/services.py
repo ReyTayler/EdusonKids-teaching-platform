@@ -213,7 +213,6 @@ def login_2fa(
     # Попытка email-challenge
     email_res = twofa_module.verify_email_challenge(challenge_token, code)
     account_id = email_res['account_id'] if email_res.get('ok') else None
-    via_recovery = False
 
     if not account_id:
         ch = raw if (raw and raw.get('kind') == 'login_challenge') else None
@@ -224,15 +223,6 @@ def login_2fa(
                     acc.get('twofa_secret'), code
                 ):
                     account_id = acc['id']
-                else:
-                    for rc in accounts_repo.list_recovery_codes(acc['id']):
-                        if not rc.get('used_at') and twofa_module.verify_recovery(
-                            code, rc.get('code_hash')
-                        ):
-                            accounts_repo.mark_recovery_used(rc['id'])
-                            account_id = acc['id']
-                            via_recovery = True
-                            break
 
     if not account_id:
         if candidate_id:
@@ -242,13 +232,7 @@ def login_2fa(
 
     acc = accounts_repo.get_by_id(account_id)
     accounts_repo.register_login_success(acc['id'])
-    log_event(
-        'login_success',
-        account_id=acc['id'],
-        actor_email=acc['email'],
-        meta={'viaRecovery': via_recovery},
-        request=request,
-    )
+    log_event('login_success', account_id=acc['id'], actor_email=acc['email'], request=request)
     # Возвращаем account_id, чтобы view мог получить объект User
     from apps.accounts.models import Account
     user = Account.objects.get(id=acc['id'])
@@ -318,7 +302,7 @@ def twofa_enable(
     code: str,
     request=None,
 ) -> Tuple[dict, int, Optional[object]]:
-    """Enrollment: подтвердить код, включить 2FA, выдать recovery-коды."""
+    """Enrollment: подтвердить код и включить 2FA."""
     raw = read_challenge(challenge_token)
     candidate_id = raw['account_id'] if (raw and raw.get('account_id')) else None
 
@@ -347,8 +331,6 @@ def twofa_enable(
         confirmed=True,
     )
     accounts_repo.bump_token_version(acc['id'])
-    rc = twofa_module.generate_recovery_codes()
-    accounts_repo.replace_recovery_codes(acc['id'], rc['hashes'])
     accounts_repo.register_login_success(acc['id'])
     log_event('2fa_enabled', account_id=acc['id'], actor_email=acc['email'], request=request)
 
@@ -357,7 +339,6 @@ def twofa_enable(
     return {
         'role': user.role,
         'redirect': redirect_for(user.role),
-        'recovery_codes': rc['plain'],
     }, 200, user
 
 

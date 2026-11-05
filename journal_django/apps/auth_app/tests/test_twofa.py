@@ -1,8 +1,8 @@
 """
 test_twofa.py — юнит-тесты для twofa.py.
 
-Покрывает: verify_totp, generate_recovery_codes, verify_email_challenge,
-issue_email_challenge, verify_recovery, generate_email_code.
+Покрывает: verify_totp, verify_email_challenge, issue_email_challenge,
+generate_email_code.
 """
 from __future__ import annotations
 
@@ -101,39 +101,6 @@ def test_verify_email_challenge_tampered():
     tampered = result['challenge'] + 'X'
     res = twofa_module.verify_email_challenge(tampered, result['code'])
     assert res['ok'] is False
-
-
-# ---------------------------------------------------------------------------
-# Recovery codes
-# ---------------------------------------------------------------------------
-
-def test_generate_recovery_codes_count():
-    rc = twofa_module.generate_recovery_codes(n=8)
-    assert len(rc['plain']) == 8
-    assert len(rc['hashes']) == 8
-
-
-def test_generate_recovery_codes_format():
-    rc = twofa_module.generate_recovery_codes(n=3)
-    for code in rc['plain']:
-        # secrets.token_hex(5) → 10 hex символов
-        assert len(code) == 10
-        assert all(c in '0123456789abcdef' for c in code)
-
-
-def test_verify_recovery_valid():
-    rc = twofa_module.generate_recovery_codes(n=1)
-    assert twofa_module.verify_recovery(rc['plain'][0], rc['hashes'][0]) is True
-
-
-def test_verify_recovery_invalid():
-    rc = twofa_module.generate_recovery_codes(n=1)
-    assert twofa_module.verify_recovery('wrongcode', rc['hashes'][0]) is False
-
-
-def test_verify_recovery_empty():
-    assert twofa_module.verify_recovery('', None) is False
-    assert twofa_module.verify_recovery(None, 'hash') is False
 
 
 # ---------------------------------------------------------------------------

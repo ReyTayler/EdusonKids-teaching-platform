@@ -1,19 +1,16 @@
 """
 twofa.py — порт services/twofa.js.
 
-Зависимости: pyotp (TOTP), qrcode (QR PNG), bcrypt (обратная совместимость legacy recovery-хешей).
+Зависимости: pyotp (TOTP), qrcode (QR PNG).
 Отличия от otplib:
   - pyotp.TOTP.verify(valid_window=1) ≈ otplib epochTolerance=30s (±1 шаг 30 с).
   - generate_secret() через pyotp.random_base32() → base32 строка (otplib.generateSecret тоже base32).
-  - generate_recovery_codes: secrets.token_hex(5) — точный порт crypto.randomBytes(5).toString('hex').
 
 Фаза 2 (architecture_v2.md):
   - _verify_with_secret (ручной HMAC-порт auth.js) УДАЛЁН — заменён на django.core.signing.
   - issue_email_challenge / verify_email_challenge переведены на TimestampSigner.sign_object /
     unsign_object(max_age=...) — тот же паттерн, что в auth_app/services.py.
   - email-OTP code_hash: make_password / check_password вместо bcrypt (эфемерный токен, 5 мин).
-  - recovery-коды: НОВЫЕ хеши — make_password; СТАРЫЕ bcrypt-хеши ($2a$/$2b$/$2y$) — legacy-ветка
-    через bcrypt.checkpw для обратной совместимости. Убрать legacy после миграции всех recovery-кодов.
 """
 from __future__ import annotations
 
@@ -22,7 +19,6 @@ import io
 import secrets
 from typing import Optional
 
-import bcrypt
 import pyotp
 import qrcode
 from django.contrib.auth.hashers import check_password, make_password
@@ -126,44 +122,3 @@ def verify_email_challenge(challenge: str, code) -> dict:
     if ok:
         return {'ok': True, 'account_id': payload['account_id']}
     return {'ok': False}
-
-
-# ---------------------------------------------------------------------------
-# Recovery codes
-# ---------------------------------------------------------------------------
-
-def generate_recovery_codes(n: int = 8) -> dict:
-    """
-    Генерировать recovery-коды. Порт generateRecoveryCodes.
-
-    plain: [secrets.token_hex(5) ...] — точный порт crypto.randomBytes(5).toString('hex')
-    hashes: make_password каждого (Django hasher).
-    """
-    plain = [secrets.token_hex(5) for _ in range(n)]
-    hashes = [make_password(c) for c in plain]
-    return {'plain': plain, 'hashes': hashes}
-
-
-def verify_recovery(code, code_hash: Optional[str]) -> bool:
-    """
-    Проверить recovery-код. Порт verifyRecovery.
-
-    Обратная совместимость: recovery-коды, созданные до Фазы 2, хранят bcrypt-хеши
-    вида $2a$/$2b$/$2y$ (bcrypt.hashpw cost=8). Django check_password их не распознаёт.
-    Поэтому: если prefix — bcrypt, проверяем через bcrypt.checkpw (legacy-ветка).
-    Иначе — check_password (новые хеши Django hasher).
-    Убрать legacy-ветку после миграции всех recovery-кодов на Django hasher.
-    """
-    if not code or not code_hash:
-        return False
-    # Legacy: bcrypt-хеши, сгенерированные до Фазы 2 (прямой bcrypt.hashpw cost=8).
-    if code_hash.startswith(('$2a$', '$2b$', '$2y$')):
-        try:
-            return bcrypt.checkpw(str(code).encode('utf-8'), code_hash.encode('utf-8'))
-        except Exception:  # noqa: BLE001
-            return False
-    # Новые хеши Django hasher (make_password).
-    try:
-        return check_password(str(code), code_hash)
-    except Exception:  # noqa: BLE001
-        return False

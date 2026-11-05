@@ -29,7 +29,6 @@
 ## Таблица accounts (миграция 013)
 
 `email` UNIQUE, `password_hash` (bcrypt), `role`, `teacher_id`, 2FA-поля, lockout-поля.  
-`account_recovery_codes` — одноразовые коды восстановления.
 
 ## Зависимости
 

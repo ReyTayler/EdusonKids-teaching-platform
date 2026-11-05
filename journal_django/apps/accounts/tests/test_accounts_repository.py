@@ -75,21 +75,14 @@ def test_soft_delete(account_factory):
     assert repository.soft_delete(999_999_999) is False
 
 
-def test_reset_twofa_clears_fields_and_codes(account_factory):
+def test_reset_twofa_clears_fields(account_factory):
     acc_id = account_factory(email='__acc_2fa__@example.com', twofa=True)
-    # Перед сбросом есть recovery-код
-    with connection.cursor() as cur:
-        cur.execute('SELECT COUNT(*) FROM account_recovery_codes WHERE account_id = %s', [acc_id])
-        assert cur.fetchone()[0] == 1
 
     row = repository.reset_twofa(acc_id)
     assert row['twofa_method'] is None
     assert row['twofa_secret'] is None
     assert row['twofa_enabled'] is False
     assert row['twofa_confirmed_at'] is None
-    with connection.cursor() as cur:
-        cur.execute('SELECT COUNT(*) FROM account_recovery_codes WHERE account_id = %s', [acc_id])
-        assert cur.fetchone()[0] == 0
 
 
 def test_reset_twofa_missing_none():

@@ -136,20 +136,30 @@ $('email-resend').addEventListener('click', async () => {
   }
 });
 
-// 4. Подтверждение кода. enroll → 2fa/enable (включить новую 2FA + recovery);
+// 4. Подтверждение кода. enroll → 2fa/enable (включить новую 2FA);
 //    verify → login/2fa (подтвердить уже настроенную 2FA). Оба выдают сессию + redirect.
 $('twofa-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
+  const input = $('f-code');
+  if (Otp.isBusy(input)) return;
   clr('twofa-err');
-  const code = $('f-code').value.trim();
+  const code = input.value.trim();
   if (!code) return err('twofa-err', 'Введите код');
   const path = enroll ? '/api/auth/2fa/enable' : '/api/auth/login/2fa';
   const tok = enroll ? enableToken : challenge;
-  const { ok, j } = await req('POST', path, { challenge_token: tok, code });
-  if (!ok || !j) return err('twofa-err', (j && j.error) || 'Неверный код');
-  if (enroll && j.recovery_codes) {
-    window.RecoveryCodes.show(j.recovery_codes, j.redirect || '/');
-    return;
+  Otp.setState(input, 'loading');
+  let res;
+  try {
+    res = await req('POST', path, { challenge_token: tok, code });
+  } catch (_) {
+    Otp.setState(input, 'fail');
+    return err('twofa-err', 'Нет связи с сервером, попробуйте ещё раз');
   }
+  const { ok, j } = res;
+  if (!ok || !j) {
+    Otp.setState(input, 'fail');
+    return err('twofa-err', (j && j.error) || 'Неверный код');
+  }
+  Otp.setState(input, 'done');
   window.location = j.redirect || '/';
 });

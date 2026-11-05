@@ -51,10 +51,6 @@ function openTwofa(method) {
   $('twofa-choose').classList.add('hidden');
   $('twofa-enter').classList.remove('hidden');
   $('twofa-back').classList.add('hidden');
-  // Резервный код доступен только при ВХОДЕ: при первичной настройке (enrollment)
-  // кодов ещё нет — их выдаёт сам факт включения 2FA.
-  setRecoveryMode(false);
-  $('use-recovery').classList.remove('hidden');
   $('twofa-h').textContent = 'Введите код';
   if (method === 'email') {
     $('twofa-hint').textContent = 'Мы отправили код на вашу почту.';
@@ -66,33 +62,10 @@ function openTwofa(method) {
   show('twofa');
 }
 
-// --- Резервный код: отдельное поле вместо сегментированного ---
-// otp.js превращает #f-code в 6 ячеек и вырезает всё, кроме цифр, поэтому
-// резервный код (10 символов с буквами) туда физически не ввести. Переключатель
-// прячет сегментированное поле и показывает обычное текстовое; запрос уходит тот
-// же — сервер сам сверяет сначала TOTP, потом резервные коды.
-let recoveryMode = false;
-
-function setRecoveryMode(on) {
-  recoveryMode = on;
-  const code = $('f-code');
-  const rec = $('f-recovery');
-  const cells = code.closest('.otp');   // обёртка, созданная otp.js (может отсутствовать)
-  (cells || code).classList.toggle('hidden', on);
-  rec.classList.toggle('hidden', !on);
-  $('use-recovery').textContent = on ? '← Ввести код подтверждения' : 'Ввести резервный код';
-  clr('twofa-err');
-  if (on) { rec.value = ''; rec.focus(); } else { code.value = ''; }
-}
-
-$('use-recovery').addEventListener('click', () => setRecoveryMode(!recoveryMode));
-
 // --- Enrollment: явный выбор метода 2FA (без метода по умолчанию) ---
 function openEnroll() {
   clr('twofa-err'); $('twofa-form').reset();
   $('twofa-h').textContent = 'Настройте 2FA';
-  setRecoveryMode(false);
-  $('use-recovery').classList.add('hidden');
   showChoose();
   show('twofa');
 }
@@ -139,21 +112,29 @@ async function chooseMethod(method) {
 $('twofa-back').addEventListener('click', showChoose);
 
 $('twofa-form').addEventListener('submit', async (ev) => {
-  ev.preventDefault(); clr('twofa-err');
-  // Дефисы в резервном коде — оформление показа (recovery.js), сервер их не знает.
-  const code = recoveryMode
-    ? $('f-recovery').value.trim().replace(/[\s-]/g, '')
-    : $('f-code').value.trim();
-  if (!code) return err('twofa-err', recoveryMode ? 'Введите резервный код' : 'Введите код');
+  ev.preventDefault();
+  const input = $('f-code');
+  if (Otp.isBusy(input)) return;
+  clr('twofa-err');
+  const code = input.value.trim();
+  if (!code) return err('twofa-err', 'Введите код');
   const path = enroll ? '/api/auth/2fa/enable' : '/api/auth/login/2fa';
   const token = enroll ? enableToken : challenge;
-  const { ok, j } = await post(path, { challenge_token: token, code });
-  if (!ok) return err('twofa-err', (j && j.error) || 'Неверный код');
-  if (enroll && j.recovery_codes) {
-    window.RecoveryCodes.show(j.recovery_codes, j.redirect);
-    return;
+  Otp.setState(input, 'loading');
+  let res;
+  try {
+    res = await post(path, { challenge_token: token, code });
+  } catch (_) {
+    Otp.setState(input, 'fail');
+    return err('twofa-err', 'Нет связи с сервером, попробуйте ещё раз');
   }
-  if (j.redirect) window.location = j.redirect;
+  const { ok, j } = res;
+  if (!ok || !j) {
+    Otp.setState(input, 'fail');
+    return err('twofa-err', (j && j.error) || 'Неверный код');
+  }
+  Otp.setState(input, 'done');
+  window.location = j.redirect || '/';
 });
 
 $('email-resend').addEventListener('click', async () => {

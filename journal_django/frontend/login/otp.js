@@ -6,9 +6,51 @@
 // autocomplete="one-time-code" и чтение/запись .value продолжают работать.
 // Логику входа (login.js / set-password.js) не трогаем: они по-прежнему читают
 // и обнуляют $('f-code').value, а ячейки перерисовываются автоматически.
+//
+// window.Otp.setState(input, state) — состояние отправки кода:
+//   idle    обычный ввод;
+//   loading волна по ячейкам, форма заблокирована (повторно код не отправить);
+//   done    код принят, идёт переход в кабинет;
+//   fail    ячейки вздрагивают и краснеют; снимается, как только код начали править.
 (function () {
   'use strict';
   var LEN = 6; // TOTP и email-код — 6 цифр
+  var LABELS = { loading: 'Проверяем…', done: '✓ Вход выполнен' };
+
+  function setState(input, state) {
+    var wrap = input.closest('.otp');
+    if (!wrap) return;
+    var locked = state === 'loading' || state === 'done';
+    if (state === 'idle') delete wrap.dataset.state;
+    else wrap.dataset.state = state;
+    input.readOnly = locked;
+    if (input.form) input.form.setAttribute('aria-busy', String(locked));
+
+    // «Назад» лежит вне формы, поэтому блокируем кнопки всего экрана.
+    var scope = input.closest('.panel') || input.form;
+    if (scope) {
+      scope.querySelectorAll('button').forEach(function (b) { b.disabled = locked; });
+    }
+
+    var submit = input.form && input.form.querySelector('[type="submit"]');
+    if (submit) {
+      if (!submit.dataset.label) submit.dataset.label = submit.textContent;
+      submit.textContent = LABELS[state] || submit.dataset.label;
+      submit.classList.toggle('is-busy', locked);
+    }
+
+    if (state === 'fail') {
+      input.focus();
+      input.select(); // следующая цифра заменит неверный код целиком
+    }
+  }
+
+  function isBusy(input) {
+    var wrap = input.closest('.otp');
+    return !!wrap && (wrap.dataset.state === 'loading' || wrap.dataset.state === 'done');
+  }
+
+  window.Otp = { setState: setState, isBusy: isBusy };
 
   function enhance(input) {
     if (input.dataset.otp) return;
@@ -51,6 +93,7 @@
     input.addEventListener('input', function () {
       var clean = (input.value || '').replace(/\D/g, '').slice(0, LEN);
       if (clean !== input.value) input.value = clean; // отфильтровать нецифры
+      if (wrap.dataset.state === 'fail') setState(input, 'idle');
       render();
     });
     input.addEventListener('focus', render);
@@ -65,11 +108,25 @@
         configurable: true,
         enumerable: desc.enumerable,
         get: function () { return desc.get.call(this); },
-        set: function (val) { desc.set.call(this, val); render(); },
+        set: function (val) {
+          desc.set.call(this, val);
+          if (!val && wrap.dataset.state === 'fail') setState(input, 'idle');
+          render();
+        },
       });
     }
     // form.reset() обнуляет значение на нативном уровне в обход сеттера — ловим отдельно.
-    if (input.form) input.form.addEventListener('reset', function () { setTimeout(render, 0); });
+    if (input.form) {
+      input.form.addEventListener('reset', function () {
+        setState(input, 'idle');
+        setTimeout(render, 0);
+      });
+    }
+    // Возврат кнопкой «Назад» из кабинета поднимает страницу из кеша браузера как есть,
+    // и без этого форма осталась бы заблокированной.
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted) setState(input, 'idle');
+    });
 
     render();
   }

@@ -6,7 +6,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <title>Вход — Eduson Kids</title>
-  <link rel="stylesheet" href="/login/styles.css" />
+  <link rel="stylesheet" href="/login/styles.css?v=2" />
   <!-- Внешние скрипты (не inline) ради CSP script-src 'self'. Порядок важен:
        тема применяется до отрисовки, затем — редирект уже авторизованного. -->
   <script src="/login/theme-init.js"></script>
@@ -99,34 +99,11 @@
           <div id="twofa-qr-wrap" class="qr hidden"><img id="twofa-qr" alt="QR" /></div>
           <form id="twofa-form" novalidate>
             <input id="f-code" class="field code" inputmode="numeric" placeholder="Код" required />
-            <!-- Резервный код (10 символов с буквами) не помещается в сегментированное
-                 поле выше: otp.js режет ввод до 6 цифр. Поэтому отдельное поле. -->
-            <input id="f-recovery" class="field mono hidden" type="text" spellcheck="false"
-                   autocomplete="off" placeholder="Резервный код" />
             <button class="primary" type="submit">Подтвердить</button>
             <button class="ghost hidden" type="button" id="email-resend">Отправить код на почту</button>
-            <button class="ghost hidden" type="button" id="use-recovery">Ввести резервный код</button>
             <button class="ghost hidden" type="button" id="twofa-back">← Выбрать другой способ</button>
             <div class="err hidden" id="twofa-err"></div>
           </form>
-        </div>
-
-        <!-- Шаг после включения 2FA: коды показываются ЕДИНСТВЕННЫЙ раз (в БД хеши) -->
-        <div id="recovery-save" class="hidden">
-          <p class="muted">
-            Каждый код работает один раз и заменяет код подтверждения входа, если
-            телефон или почта недоступны. Повторно мы их не покажем.
-          </p>
-          <ul id="recovery-list" class="recovery recovery-list"></ul>
-          <div class="recovery-actions">
-            <button class="ghost" type="button" id="recovery-copy">Скопировать</button>
-            <a class="ghost" id="recovery-download" href="#" download>Скачать файлом</a>
-          </div>
-          <label class="recovery-ack">
-            <input type="checkbox" id="recovery-ack" />
-            <span>Я сохранил коды в надёжном месте</span>
-          </label>
-          <button class="primary" type="button" id="recovery-continue" disabled>Продолжить</button>
         </div>
       </div>
     </section>
@@ -135,8 +112,7 @@
   <footer class="foot">© <span id="yr"></span> Eduson Kids</footer>
 
   <script src="/login/theme.js"></script>
-  <script src="/login/otp.js"></script>
-  <script src="/login/recovery.js"></script>
-  <script src="/login/login.js"></script>
+  <script src="/login/otp.js?v=2"></script>
+  <script src="/login/login.js?v=2"></script>
 </body>
 </html>

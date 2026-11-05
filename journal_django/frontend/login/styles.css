@@ -285,6 +285,7 @@ body {
   transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .back:hover { color: var(--text); background: var(--bg4); }
+.back:disabled { opacity: 0.5; cursor: default; background: transparent; }
 
 /* Карточка: 380px, r12, рамка, без тени, паддинг 28 */
 .login-card {
@@ -369,6 +370,8 @@ body {
 
 .primary:disabled,
 .ghost:disabled { opacity: 0.5; cursor: default; transform: none; }
+/* Кнопка на время проверки кода: подпись должна читаться, это не «недоступно». */
+.primary.is-busy:disabled { opacity: 1; cursor: progress; background: var(--accent); border-color: var(--accent); }
 
 .muted { color: var(--text2); font-size: 13px; margin: 0 0 14px; }
 
@@ -393,81 +396,6 @@ body {
   background: #fff; /* сканер требует тёмный код на светлом фоне, тема не важна */
   border: 1px solid var(--border);
   border-radius: var(--r);
-}
-
-/* ── Резервные коды: mono в панели --bg3 с рамкой ── */
-.recovery {
-  margin-top: 14px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--bg3);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  color: var(--text);
-}
-
-/* ── Резервные коды: экран сохранения (recovery.js) ──
-   Показываются один раз, их переписывают или копируют — отсюда сетка в две
-   колонки вместо сплошной строки и моноширинный шрифт с разрядкой. */
-.recovery-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px 12px;
-  margin: 0 0 4px;
-  padding: 14px;
-  list-style: none;
-  white-space: normal;
-}
-.recovery-code {
-  font-size: 14px;
-  letter-spacing: 0.04em;
-  text-align: center;
-  user-select: all;   /* клик выделяет код целиком */
-}
-@media (max-width: 380px) {
-  .recovery-list { grid-template-columns: 1fr; }
-}
-
-.recovery-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-.recovery-actions .ghost {
-  margin-top: 0;
-  text-align: center;
-  text-decoration: none;
-  line-height: 1.2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.recovery-ack {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 16px 0 4px;
-  color: var(--text2);
-  font-size: 14px;
-  cursor: pointer;
-}
-.recovery-ack input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
-  cursor: pointer;
-  flex: none;
-}
-
-/* Поле ввода резервного кода: 10 символов с буквами, не сегментированное. */
-.field.mono {
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
-  text-align: center;
 }
 
 /* ── Сегментированный ввод кода (otp.js) ──
@@ -541,6 +469,39 @@ body {
 .otp input.code::placeholder,
 .otp input.field::placeholder { color: transparent; }
 
+/* ── Состояния отправки кода (Otp.setState в otp.js) ── */
+.otp[data-state="loading"] input.code,
+.otp[data-state="done"] input.code { pointer-events: none; }
+.otp[data-state] .otp-cell.is-active { box-shadow: none; }
+.otp[data-state="loading"] .otp-cell.is-active { border-color: var(--border-strong); }
+/* Поле прозрачное, но выделение браузер рисует всё равно: после ошибки код выделен. */
+.otp input.code::selection { background: transparent; color: transparent; }
+.otp[data-state] .otp-cell.is-active:empty::after { content: none; }
+
+/* Проверка: волна идёт по ячейкам слева направо. */
+.otp[data-state="loading"] .otp-cell { animation: otp-wave 900ms ease-in-out infinite; }
+.otp[data-state="loading"] .otp-cell:nth-child(2) { animation-delay: 90ms; }
+.otp[data-state="loading"] .otp-cell:nth-child(3) { animation-delay: 180ms; }
+.otp[data-state="loading"] .otp-cell:nth-child(4) { animation-delay: 270ms; }
+.otp[data-state="loading"] .otp-cell:nth-child(5) { animation-delay: 360ms; }
+.otp[data-state="loading"] .otp-cell:nth-child(6) { animation-delay: 450ms; }
+
+/* Код принят: все ячейки залиты, пока открывается кабинет. */
+.otp[data-state="done"] .otp-cell {
+  animation: none;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Код не принят: ряд вздрагивает, ячейки красные, пока код не начнут править. */
+.otp[data-state="fail"] .otp-cells { animation: otp-shake 320ms ease-in-out; }
+.otp[data-state="fail"] .otp-cell {
+  animation: none;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 /* ── Подвал ── */
 /* Футер скрыт визуально (полностью прозрачный), но остаётся в DOM:
    в нём <span id="yr">, который читают login.js / set-password.js. */
@@ -571,6 +532,19 @@ body {
   60%  { transform: scale(1.04); }
   100% { transform: scale(1); }
 }
+@keyframes otp-wave {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% {
+    transform: translateY(-4px);
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+  }
+}
+@keyframes otp-shake {
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
 @keyframes caret {
   0%, 50%   { opacity: 1; }
   51%, 100% { opacity: 0; }
@@ -590,4 +564,6 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+  /* Волны нет: ожидание показывают приглушённые цифры и подпись кнопки. */
+  .otp[data-state="loading"] .otp-cell { color: var(--text3); }
 }

@@ -43,6 +43,7 @@ env = environ.Env(
     SMTP_FROM=(str, ''),
     # Telegram-уведомления (спека 2026-08-03)
     TELEGRAM_BOT_TOKEN=(str, ''),
+    TELEGRAM_API_BASE=(str, ''),
     TELEGRAM_GENERAL_CHAT_ID=(int, 0),
     BOT_SERVICE_TOKEN=(str, ''),
     NOTIFICATIONS_HISTORY_LIMIT=(int, 200),
@@ -315,6 +316,9 @@ if crontab is not None:
 # Токен Telegram-бота школы. Отправлять с одним токеном
 # может несколько процессов — ограничение Telegram касается только getUpdates.
 TELEGRAM_BOT_TOKEN: str = env('TELEGRAM_BOT_TOKEN')
+# Адрес Bot API. Меняется, когда api.telegram.org недоступен с сервера напрямую.
+# Пустая строка в .env = адрес по умолчанию (иначе запрос ушёл бы на «/bot…»).
+TELEGRAM_API_BASE: str = env('TELEGRAM_API_BASE') or 'https://api.telegram.org'
 # Общий чат сотрудников: сюда дублируются точечные уведомления об изменениях.
 # Дайджесты сюда НЕ идут (см. спеку, п. 2.5).
 TELEGRAM_GENERAL_CHAT_ID: int = env('TELEGRAM_GENERAL_CHAT_ID')

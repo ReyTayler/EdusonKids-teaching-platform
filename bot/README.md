@@ -60,6 +60,7 @@ Email-писем преподавателям нет. Чтобы уведомл�
 | `BOT_SERVICE_TOKEN` | Общий секрет с журналом (заголовок `X-Bot-Token`), должен совпадать |
 | `JOURNAL_API_URL` | Адрес журнала. Локально `http://127.0.0.1:8100`, в Docker `http://app:8000` |
 | `JOURNAL_HOST` | Домен из `ALLOWED_HOSTS` журнала (в Docker); локально пусто |
+| `TELEGRAM_API_BASE` | Адрес Bot API без `/` в конце, когда `api.telegram.org` недоступен напрямую; пусто — он и используется |
 | `TIMEZONE` | Таймзона отображения времени, по умолчанию `Europe/Moscow` |
 | `LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 

@@ -121,6 +121,8 @@ cmd_sync() {
   {
     printf 'BOT_TOKEN=%s\n' "$(secret TELEGRAM_BOT_TOKEN)"
     printf 'BOT_SERVICE_TOKEN=%s\n' "$(secret BOT_SERVICE_TOKEN)"
+    # Журналу адрес приходит через app.env, боту — отсюда. Один на оба процесса.
+    printf 'TELEGRAM_API_BASE=%s\n' "$(secret TELEGRAM_API_BASE)"
     printf 'JOURNAL_API_URL=http://app:8000\nJOURNAL_HOST=%s\nTIMEZONE=Europe/Moscow\nLOG_LEVEL=INFO\n' "$DOMAIN"
   } | ssh "$HOST" "umask 077 && cat > $REMOTE/bot.env"
 

@@ -8,7 +8,7 @@ import logging
 
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 
-from bot.config import BOT_TOKEN, setup_logging
+from bot.config import BOT_TOKEN, TELEGRAM_API_BASE, setup_logging
 from bot.handlers.common import help_command, start, unknown
 from bot.handlers.identify import identify
 from bot.handlers.my import my
@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def build_application():
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(set_commands).build()
+    builder = ApplicationBuilder().token(BOT_TOKEN).post_init(set_commands)
+    if TELEGRAM_API_BASE:
+        builder = builder.base_url(f'{TELEGRAM_API_BASE}/bot')
+    app = builder.build()
 
     # group=-1: срабатывает раньше команд и им не мешает.
     app.add_handler(MessageHandler(filters.ALL, identify), group=-1)

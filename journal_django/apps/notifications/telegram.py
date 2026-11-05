@@ -14,8 +14,9 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-API_URL = 'https://api.telegram.org/bot{token}/sendMessage'
-TIMEOUT_SECONDS = 10
+# Обычный ответ приходит за доли секунды. Таймаут держит слот Celery-воркера,
+# общего с письмами входа, поэтому долго ждать зависший запрос нельзя.
+TIMEOUT_SECONDS = 5
 
 # Описания, означающие «этому адресату писать бесполезно, пока он сам не вернётся».
 _PERMANENT_MARKERS = (
@@ -45,7 +46,7 @@ def send_message(*, chat_id: int, text: str) -> SendResult:
 
     try:
         response = requests.post(
-            API_URL.format(token=token),
+            f'{settings.TELEGRAM_API_BASE.rstrip("/")}/bot{token}/sendMessage',
             json={
                 'chat_id': chat_id,
                 'text': text,
@@ -55,7 +56,9 @@ def send_message(*, chat_id: int, text: str) -> SendResult:
             timeout=TIMEOUT_SECONDS,
         )
     except requests.RequestException as exc:
-        return SendResult(ok=False, error=str(exc))
+        # Текст исключения requests содержит полный URL, а в URL — токен.
+        # error уходит в last_error, то есть в БД и раздел «Уведомления».
+        return SendResult(ok=False, error=str(exc).replace(token, '***'))
 
     try:
         payload = response.json()

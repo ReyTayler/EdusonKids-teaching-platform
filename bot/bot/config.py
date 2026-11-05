@@ -24,6 +24,9 @@ def _require(key: str) -> str:
 
 BOT_TOKEN: str = _require('BOT_TOKEN')
 
+# Адрес Bot API без / в конце. Пусто → api.telegram.org.
+TELEGRAM_API_BASE: str = os.getenv('TELEGRAM_API_BASE', '').rstrip('/')
+
 TIMEZONE: str = os.getenv('TIMEZONE', 'Europe/Moscow')
 
 LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO').upper()

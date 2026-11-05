@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import requests
 from django.test import override_settings
 
 from apps.notifications import telegram
@@ -78,3 +79,20 @@ def test_missing_token_does_not_call_network():
     post.assert_not_called()
     assert result.ok is False
     assert result.blocked is False
+
+
+@override_settings(TELEGRAM_BOT_TOKEN='secret-token')
+def test_network_error_does_not_expose_token():
+    error = requests.ConnectTimeout('Max retries exceeded with url: /botsecret-token/sendMessage')
+    with patch('apps.notifications.telegram.requests.post', side_effect=error):
+        result = telegram.send_message(chat_id=1, text='привет')
+    assert result.ok is False
+    assert 'secret-token' not in result.error
+
+
+@override_settings(TELEGRAM_BOT_TOKEN='tkn', TELEGRAM_API_BASE='https://relay.example/')
+def test_custom_api_base_is_used():
+    with patch('apps.notifications.telegram.requests.post',
+               return_value=_Resp(200, {'ok': True})) as post:
+        telegram.send_message(chat_id=1, text='привет')
+    assert post.call_args.args[0] == 'https://relay.example/bottkn/sendMessage'

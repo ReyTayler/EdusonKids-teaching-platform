@@ -105,6 +105,9 @@ class NotificationMessage(models.Model):
         related_name='notification_messages',
     )
     text = models.TextField()
+    # Оформленная версия письма. Пусто — у Telegram и у писем, поставленных в
+    # очередь до её появления: они уходят простым текстом.
+    html = models.TextField(null=True, blank=True)
     # Ключ идемпотентности: повторная постановка того же сообщения молча ничего
     # не делает (ON CONFLICT DO NOTHING). Защита на уровне БД, а не кода.
     dedup_key = models.TextField(unique=True)

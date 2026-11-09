@@ -182,3 +182,40 @@ def test_trim_spares_fresh_emails_but_removes_old_ones():
     assert NotificationMessage.objects.filter(pk__in=[r.pk for r in fresh]).count() == 3
     assert not NotificationMessage.objects.filter(pk=old.pk).exists()
     assert NotificationMessage.objects.filter(channel=CHANNEL_DM).count() == 1
+
+
+# --- HTML-версия письма -------------------------------------------------------
+
+def _html_alternatives(msg) -> list[str]:
+    return [c for c, mime in msg.alternatives if mime == 'text/html']
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+def test_dispatch_sends_stored_html_next_to_text(db):
+    mail.outbox.clear()
+    services.enqueue_email(
+        kind=KIND_PARENT_DAY_BEFORE, to=TO, subject='Тема', text='Текст',
+        html='<p>Оформленный текст</p>', dedup_key='html-1')
+
+    dispatcher.dispatch()
+
+    letter = mail.outbox[0]
+    assert letter.body == 'Текст'
+    assert _html_alternatives(letter) == ['<p>Оформленный текст</p>']
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+def test_dispatch_row_without_html_goes_as_plain_text(db):
+    """Строки, поставленные в очередь до появления HTML, уходят как раньше."""
+    mail.outbox.clear()
+    _email('html-2')
+
+    dispatcher.dispatch()
+
+    assert mail.outbox[0].body == 'Текст письма'
+    assert _html_alternatives(mail.outbox[0]) == []
+
+
+def test_html_is_not_exposed_in_notifications_api(db):
+    message = _email('html-3')
+    assert 'html' not in NotificationMessageSerializer(message).data

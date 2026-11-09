@@ -143,7 +143,8 @@ def _send(message: NotificationMessage) -> telegram.SendResult:
     """Отправить сообщение транспортом его канала."""
     if message.channel == CHANNEL_EMAIL:
         return email_transport.send_email(
-            to=message.recipient_email, subject=message.subject, body=message.text)
+            to=message.recipient_email, subject=message.subject, body=message.text,
+            html=message.html)
     return telegram.send_message(chat_id=message.chat_id, text=message.text)
 
 

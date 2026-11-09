@@ -75,7 +75,7 @@ def enqueue(*, kind: str, channel: str, chat_id: int, text: str, dedup_key: str,
 
 
 def enqueue_email(*, kind: str, to: str, subject: str, text: str, dedup_key: str,
-                  recipient_teacher_id: int | None = None,
+                  html: str | None = None, recipient_teacher_id: int | None = None,
                   source_kind: str | None = None, source_id: int | None = None) -> bool:
     """
     Поставить письмо в очередь. Возвращает True, если строка создана.
@@ -87,7 +87,7 @@ def enqueue_email(*, kind: str, to: str, subject: str, text: str, dedup_key: str
         dedup_key=dedup_key,
         defaults=dict(
             kind=kind, channel=CHANNEL_EMAIL, chat_id=None,
-            recipient_email=to, subject=subject, text=text,
+            recipient_email=to, subject=subject, text=text, html=html,
             recipient_teacher_id=recipient_teacher_id,
             source_kind=source_kind, source_id=source_id,
         ),

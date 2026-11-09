@@ -76,6 +76,13 @@ SMTP_FROM: str = env('SMTP_FROM')
 
 # ---------------------------------------------------------------------------
 # Email — django.core.mail (Фаза 2)
+# Шаблоны — только для HTML-версии писем (apps/core/templates/emails). Страниц
+# Django не отдаёт, поэтому контекст-процессоры не нужны.
+TEMPLATES = [{
+    'BACKEND': 'django.template.backends.django.DjangoTemplates',
+    'APP_DIRS': True,
+}]
+
 # Маппинг существующих SMTP_* переменных на стандартные Django EMAIL_*.
 # Транспорт (EMAIL_BACKEND) переопределяется в development.py / production.py.
 # ---------------------------------------------------------------------------

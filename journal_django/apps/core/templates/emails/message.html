@@ -1,0 +1,59 @@
+{% comment %}
+Единое оформление писем Eduson Kids. Вёрстка таблицами и стили в атрибутах —
+это не устаревший приём, а требование почтовых программ: внешние стили, flex
+и веб-шрифты в них не работают. Блок <style> нужен только тёмной теме; почта,
+которая его вырезает, просто покажет светлую версию.
+Цвета — зеркало токенов страницы входа (frontend/login/styles.css).
+{% endcomment %}<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>{{ title }}</title>
+<style>
+@media (prefers-color-scheme: dark) {
+  .em-bg { background: #0a0a0a !important; }
+  .em-card { background: #161616 !important; border-color: #2a2a2a !important; }
+  .em-text { color: #ededed !important; }
+  .em-soft { color: #a1a1a1 !important; }
+  .em-panel { background: #222222 !important; color: #ededed !important; }
+  .em-mark { background: #ffffff !important; color: #000000 !important; }
+  .em-line { border-color: #2a2a2a !important; }
+}
+</style>
+</head>
+<body class="em-bg" style="margin:0;padding:0;background:#fafafa;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{ preheader }}</div>
+<table role="presentation" class="em-bg" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fafafa" style="background:#fafafa;">
+<tr><td align="center" style="padding:32px 16px;">
+  <table role="presentation" class="em-card" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background:#ffffff;border:1px solid #eaeaea;border-radius:12px;">
+    <tr><td style="padding:28px 28px 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td class="em-mark" width="30" height="30" align="center" bgcolor="#000000" style="background:#000000;color:#ffffff;border-radius:7px;font:600 14px 'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;">E</td>
+        <td class="em-text" style="padding-left:10px;font:600 15px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#000000;">Eduson Kids</td>
+      </tr></table>
+    </td></tr>
+    <tr><td style="padding:24px 28px 0;">
+      <div class="em-soft" style="font:500 11px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#666666;">{{ kicker }}</div>
+      <div class="em-text" style="font:600 21px/1.25 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#000000;padding-top:6px;">{{ title }}</div>
+      <div class="em-soft" style="font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#666666;padding-top:6px;">{{ lead }}</div>
+    </td></tr>
+    <tr><td style="padding:18px 28px 0;">
+      {% if code %}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td class="em-panel" align="center" bgcolor="#f4f4f4" style="background:#f4f4f4;border-radius:8px;padding:18px 8px;font:600 34px/1 'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;letter-spacing:8px;color:#000000;">{{ code }}</td>
+      </tr></table>{% endif %}
+      {% if facts %}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{% for label, value in facts %}
+        <tr>
+          <td class="em-soft em-line" width="88" valign="top" style="padding:10px 0;{% if not forloop.first %}border-top:1px solid #eaeaea;{% endif %}font:14px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#666666;">{{ label }}</td>
+          <td class="em-text em-line" valign="top" style="padding:10px 0;{% if not forloop.first %}border-top:1px solid #eaeaea;{% endif %}font:600 14px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#000000;">{{ value }}</td>
+        </tr>{% endfor %}
+      </table>{% endif %}
+    </td></tr>
+    <tr><td class="em-soft" style="padding:16px 28px 28px;font:13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#666666;">{{ note }}</td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>

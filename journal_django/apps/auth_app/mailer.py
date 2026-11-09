@@ -14,6 +14,8 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.mail import send_mail
 
+from apps.core.emails import render_email_html
+
 
 def send_otp_email(to: str, code: str) -> None:
     """
@@ -21,6 +23,7 @@ def send_otp_email(to: str, code: str) -> None:
 
     Subject: 'Код входа Eduson Kids'
     Body: 'Ваш одноразовый код входа: {code}\\nКод действует 5 минут. Если вы не входили — проигнорируйте письмо.'
+    HTML: те же данные в общем оформлении (apps.core.emails).
     From: DEFAULT_FROM_EMAIL (из settings, маппинг SMTP_FROM → DEFAULT_FROM_EMAIL в base.py).
     """
     body = (
@@ -30,6 +33,14 @@ def send_otp_email(to: str, code: str) -> None:
     send_mail(
         subject='Код входа Eduson Kids',
         message=body,
+        html_message=render_email_html(
+            preheader='Код действует 5 минут.',
+            kicker='Подтверждение входа',
+            title='Ваш код для входа',
+            lead='Введите его на странице входа.',
+            code=code,
+            note='Код действует 5 минут. Если вы не входили, проигнорируйте письмо.',
+        ),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[to],
         fail_silently=False,

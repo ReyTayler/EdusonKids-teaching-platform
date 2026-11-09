@@ -22,7 +22,7 @@ from apps.notifications.telegram import SendResult
 logger = logging.getLogger(__name__)
 
 
-def send_email(*, to: str, subject: str, body: str) -> SendResult:
+def send_email(*, to: str, subject: str, body: str, html: str | None = None) -> SendResult:
     """
     Отправить одно письмо. Исключения наружу не выпускаются.
 
@@ -32,7 +32,7 @@ def send_email(*, to: str, subject: str, body: str) -> SendResult:
     """
     try:
         send_mail(
-            subject=subject, message=body,
+            subject=subject, message=body, html_message=html,
             from_email=settings.DEFAULT_FROM_EMAIL or None,
             recipient_list=[to], fail_silently=False,
         )

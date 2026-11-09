@@ -72,12 +72,12 @@ def _send_family(rows: list[dict], *, kind: str, build) -> int:
             # Сбой сборки стоит одного письма, а не рассылки всей школе; в журнал
             # доставки не пишем (адрес семьи там ни к чему), только в лог.
             try:
-                subject, text = build(r, entry['children'])
+                subject, text, html = build(r, entry['children'])
             except Exception:  # noqa: BLE001
                 logger.exception('Не удалось собрать письмо семье, занятие id=%s', r['id'])
                 continue
             queued += int(services.enqueue_email(
-                kind=kind, to=entry['to'], subject=subject, text=text,
+                kind=kind, to=entry['to'], subject=subject, text=text, html=html,
                 dedup_key=f'email:{kind}:{r["id"]}:{key}',
                 source_kind=SOURCE_PLANNED, source_id=r['id'],
             ))

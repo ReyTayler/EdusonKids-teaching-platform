@@ -58,3 +58,35 @@ def test_send_otp_email_code_in_body():
 
     msg = django.core.mail.outbox[0]
     assert '777666' in msg.body
+
+
+def _html(msg) -> str:
+    """HTML-версия письма; AssertionError, если её нет."""
+    alternatives = [c for c, mime in msg.alternatives if mime == 'text/html']
+    assert len(alternatives) == 1
+    return alternatives[0]
+
+
+@pytest.mark.django_db
+def test_send_otp_email_has_html_version_with_code():
+    """Кроме простого текста уходит оформленная версия с тем же кодом."""
+    django.core.mail.outbox.clear()
+
+    send_otp_email('user@example.com', '777666')
+
+    html = _html(django.core.mail.outbox[0])
+    assert '777666' in html
+    assert 'Eduson Kids' in html
+    assert 'Ваш код для входа' in html
+    assert '<script' not in html.lower()
+
+
+@pytest.mark.django_db
+def test_send_otp_email_keeps_plain_text_for_clients_without_html():
+    """Почта без HTML показывает текстовую часть: код и срок действия на месте."""
+    django.core.mail.outbox.clear()
+
+    send_otp_email('user@example.com', '777666')
+
+    body = django.core.mail.outbox[0].body
+    assert '777666' in body and '5 минут' in body and '<' not in body

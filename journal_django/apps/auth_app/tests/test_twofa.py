@@ -122,3 +122,36 @@ def test_qr_data_url_format():
     uri = twofa_module.provisioning_uri(secret, 'test@example.com')
     qr = twofa_module.qr_data_url(uri)
     assert qr.startswith('data:image/png;base64,')
+
+
+# ---------------------------------------------------------------------------
+# start_twofa_setup — запись способа только у выключенной 2FA (гонка/повтор)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_start_twofa_setup_writes_when_disabled():
+    from apps.accounts import repository as accounts_repo
+    from apps.accounts.models import Account
+    acc = Account.objects.create(email='__start_ok__@example.com', role='manager',
+                                 twofa_enabled=False)
+
+    assert accounts_repo.start_twofa_setup(acc.id, 'totp', 'SECRET234') is True
+
+    acc.refresh_from_db()
+    assert acc.twofa_method == 'totp' and acc.twofa_secret == 'SECRET234'
+    assert acc.twofa_enabled is False
+
+
+@pytest.mark.django_db
+def test_start_twofa_setup_refuses_when_already_enabled():
+    from apps.accounts import repository as accounts_repo
+    from apps.accounts.models import Account
+    acc = Account.objects.create(email='__start_no__@example.com', role='manager',
+                                 twofa_method='totp', twofa_secret='KEEPME789',
+                                 twofa_enabled=True)
+
+    assert accounts_repo.start_twofa_setup(acc.id, 'email', None) is False
+
+    acc.refresh_from_db()
+    assert acc.twofa_method == 'totp' and acc.twofa_secret == 'KEEPME789'
+    assert acc.twofa_enabled is True

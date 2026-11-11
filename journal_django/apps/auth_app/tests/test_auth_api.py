@@ -644,3 +644,60 @@ def test_legacy_teacher_without_2fa_enrolls(account_factory):
     assert resp.data.get('twofa_enrollment_required') is True
     assert 'challenge_token' in resp.data
     assert _ACCESS_COOKIE not in resp.cookies
+
+
+def _enroll_totp(email):
+    """Пройти полный enrollment totp; вернуть (challenge_token, secret)."""
+    account_marker = APIClient()
+    login_resp = account_marker.post(f'{BASE}/login', {
+        'email': email, 'password': _PASSWORD, 'role': 'admin',
+    }, format='json')
+    challenge_token = login_resp.data['challenge_token']
+    setup_resp = APIClient().post(f'{BASE}/2fa/setup', {
+        'challenge_token': challenge_token, 'method': 'totp',
+    }, format='json')
+    secret = setup_resp.data['secret']
+    enable_resp = APIClient().post(f'{BASE}/2fa/enable', {
+        'challenge_token': challenge_token, 'code': pyotp.TOTP(secret).now(),
+    }, format='json')
+    assert enable_resp.status_code == 200
+    return challenge_token, secret
+
+
+def test_twofa_setup_blocked_after_2fa_already_enabled(account_factory):
+    """Повторный /2fa/setup по ещё живому enroll-токену не сбрасывает включённую 2FA."""
+    account_factory(email='__auth_reguard__@example.com', role='manager',
+                    password=_PASSWORD, twofa_enabled=False)
+    challenge_token, secret = _enroll_totp('__auth_reguard__@example.com')
+
+    resp = APIClient().post(f'{BASE}/2fa/setup', {
+        'challenge_token': challenge_token, 'method': 'email',
+    }, format='json')
+
+    assert resp.status_code == 409
+    from apps.accounts.models import Account
+    acc = Account.objects.get(email='__auth_reguard__@example.com')
+    assert acc.twofa_enabled is True
+    assert acc.twofa_method == 'totp'
+    assert acc.twofa_secret == secret
+
+
+def test_twofa_setup_change_method_before_enable_still_works(account_factory):
+    """До подтверждения кода сменить способ (totp → email) по-прежнему можно."""
+    account_factory(email='__auth_switch__@example.com', role='manager',
+                    password=_PASSWORD, twofa_enabled=False)
+    login_resp = APIClient().post(f'{BASE}/login', {
+        'email': '__auth_switch__@example.com', 'password': _PASSWORD, 'role': 'admin',
+    }, format='json')
+    challenge_token = login_resp.data['challenge_token']
+
+    first = APIClient().post(f'{BASE}/2fa/setup', {
+        'challenge_token': challenge_token, 'method': 'totp',
+    }, format='json')
+    assert first.status_code == 200
+    with patch('apps.auth_app.services.send_otp_email'):
+        second = APIClient().post(f'{BASE}/2fa/setup', {
+            'challenge_token': challenge_token, 'method': 'email',
+        }, format='json')
+    assert second.status_code == 200
+    assert second.data['method'] == 'email'

@@ -218,6 +218,23 @@ def set_twofa(
     return dictrow(Account.objects.filter(id=account_id).values())
 
 
+def start_twofa_setup(account_id: int, method: str, secret: Optional[str]) -> bool:
+    """
+    Записать выбранный способ 2FA, НО только если она ещё не включена.
+
+    Фильтр twofa_enabled=False и запись — одним UPDATE: между проверкой и записью
+    не может вклиниться второй запрос (гонка) или повторный /2fa/setup по ещё живому
+    enroll-токену. Так уже включённая 2FA не сбрасывается (её сброс — только через
+    reset_twofa администратором). Возвращает True, если строка записана.
+    """
+    updated = Account.objects.filter(id=account_id, twofa_enabled=False).update(
+        twofa_method=method,
+        twofa_secret=secret,
+        twofa_confirmed_at=None,
+    )
+    return bool(updated)
+
+
 def bump_token_version(account_id: int) -> None:
     Account.objects.filter(id=account_id).update(token_version=F('token_version') + 1)
 

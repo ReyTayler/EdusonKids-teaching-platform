@@ -278,7 +278,13 @@ def twofa_setup(
 
     if method == 'totp':
         secret_key = twofa_module.generate_secret()
-        accounts_repo.set_twofa(acc['id'], 'totp', secret_key, enabled=False, confirmed=False)
+        # Запись способа + защита от сброса уже включённой 2FA одним UPDATE:
+        # повторный /2fa/setup по ещё живому enroll-токену (или гонка) не стирает
+        # действующую 2FA. Сброс включённой 2FA — только reset_twofa админом.
+        if not accounts_repo.start_twofa_setup(acc['id'], 'totp', secret_key):
+            log_event('2fa_setup_blocked', account_id=acc['id'],
+                      actor_email=acc['email'], request=request)
+            return {'error': 'Двухфакторная защита уже настроена. Войдите заново.'}, 409
         uri = twofa_module.provisioning_uri(secret_key, acc['email'])
         return {
             'method': 'totp',
@@ -287,7 +293,10 @@ def twofa_setup(
         }, 200
 
     # email
-    accounts_repo.set_twofa(acc['id'], 'email', None, enabled=False, confirmed=False)
+    if not accounts_repo.start_twofa_setup(acc['id'], 'email', None):
+        log_event('2fa_setup_blocked', account_id=acc['id'],
+                  actor_email=acc['email'], request=request)
+        return {'error': 'Двухфакторная защита уже настроена. Войдите заново.'}, 409
     result = twofa_module.issue_email_challenge(acc['id'])
     send_otp_email(acc['email'], result['code'])
     return {'method': 'email', 'challenge_token': result['challenge']}, 200

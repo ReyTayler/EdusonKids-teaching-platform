@@ -101,9 +101,11 @@ def test_cancel_with_record_locks_plan_then_record_then_money(plan_group):
     from apps.scheduling import repository
     gid, tid = plan_group
     row3 = PlannedLesson.objects.get(group_id=gid, seq=3)  # 21.07
+    from apps.cancellations.models import CancellationReason
+    reason = CancellationReason.objects.create(side='teacher', name='Тест', position=0)
     draft = CancellationDraft(
-        lesson_date=datetime.date(2026, 7, 21), side='teacher', reason_id=None,
-        reason_name=None, reason_compensation=False, other_text='тест',
+        lesson_date=datetime.date(2026, 7, 21), side='teacher', reason_id=reason.id,
+        reason_name=reason.name, reason_compensation=False, details='',
         notified_on=None, created_by_id=None)
     with CaptureQueriesContext(connection) as ctx:
         repository.cancel_lesson(gid, lesson_id=row3.id, record=draft)

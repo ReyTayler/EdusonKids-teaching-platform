@@ -133,13 +133,15 @@ def test_cancel_with_compensation_pays_motivation_with_reason(manager_client, pg
     assert pay.rule_note.endswith('Отмена: 50 % от 500 ₽ = 250 ₽')
 
 
-def test_other_reason_text_never_in_rule_note(manager_client, pgroup):
-    """Свободный текст «Другой» может содержать ПДн (имя клиента), а пояснение
-    начисления видит преподаватель в кабинете — в rule_note только «Другая причина»."""
-    marker = _cancel(manager_client, pgroup, side='teacher', other_text=OTHER_WITH_NAME)
+def test_details_never_in_rule_note(manager_client, pgroup, make_reason):
+    """Детали могут содержать ПДн (имя клиента), а пояснение начисления видит
+    преподаватель в кабинете — в rule_note только название причины."""
+    reason = make_reason(side='teacher', name='Отпуск', compensation=False)
+    marker = _cancel(manager_client, pgroup, side='teacher', reason_id=reason.id,
+                     details=OTHER_WITH_NAME)
     pay = _pay(marker)
     assert pay.payment == D('0.00')
-    assert pay.rule_note == 'Без компенсации: Преподаватель — Другая причина'
+    assert pay.rule_note == 'Без компенсации: Преподаватель — Отпуск'
     assert 'Иванов' not in pay.rule_note
 
 

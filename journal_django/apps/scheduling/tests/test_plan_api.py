@@ -94,9 +94,14 @@ def _by_seq(plan):
 
 def _cancel_body(row, **over):
     """Валидное тело отмены (с 2026-10-23 обязательно): дата занятия, как её
-    видит клиент, + сторона и «Другая причина»."""
+    видит клиент, + сторона и причина из справочника."""
+    from apps.cancellations.models import CancellationReason
+
+    reason, _ = CancellationReason.objects.get_or_create(
+        side='teacher', name='Тест', deleted_at=None,
+        defaults={'compensation': False, 'position': 0})
     return {'lesson_date': row['scheduled_date'], 'side': 'teacher',
-            'other_text': 'тест', **over}
+            'reason_id': reason.id, **over}
 
 
 # ---------------------------------------------------------------------------

@@ -459,6 +459,12 @@ def test_plan_cancel_summary_other_reason_hides_free_text():
     assert 'Ивановым' not in out
 
 
+def test_plan_cancel_summary_hides_details():
+    """Детали — свободный текст с возможными ПДн: в описание ленты не попадают."""
+    out = build_summary('plan.cancel', _cancel_events(details='Звонила мама Ивановых'), _RLK)
+    assert out == 'Отменено занятие ПИ1012 10.11.2026 18:00 — Клиент: Заболел'
+
+
 def test_plan_cancel_summary_long_reason_is_truncated():
     out = build_summary('plan.cancel', _cancel_events(reason_text='Я' * 300), _RLK)
     assert out.endswith('Клиент: ' + 'Я' * 100 + '…')

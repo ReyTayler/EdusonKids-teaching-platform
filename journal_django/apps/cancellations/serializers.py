@@ -71,8 +71,9 @@ class GroupCancellationRowSerializer(serializers.ModelSerializer):
     """Строка вкладки группы «Отмены уроков» (read-only).
 
     compensated не отдаётся ни одной роли (В3): колонки компенсации во вкладке
-    нет, а флаг решает о деньгах преподавателя. reason_text у «Другой причины» —
-    полный текст: вкладку читают менеджеры, а не преподаватель."""
+    нет, а флаг решает о деньгах преподавателя. details и reason_text старых
+    записей с «Другой причиной» — полный текст: вкладку читают менеджеры, а не
+    преподаватель."""
 
     # '%H:%M', как время урока в плане группы: секунды у слота всегда нулевые.
     scheduled_time = serializers.TimeField(format='%H:%M', read_only=True)
@@ -84,7 +85,8 @@ class GroupCancellationRowSerializer(serializers.ModelSerializer):
         model = LessonCancellation
         fields = [
             'id', 'lesson_date', 'scheduled_time', 'side', 'reason_text', 'is_other',
-            'notified_on', 'teacher_id', 'teacher_name', 'created_at', 'created_by_name',
+            'details', 'lesson_seq', 'notified_on', 'teacher_id', 'teacher_name',
+            'created_at', 'created_by_name',
         ]
         read_only_fields = fields
 

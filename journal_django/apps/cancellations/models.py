@@ -28,10 +28,7 @@ _SIDES = [CancellationSide.TEACHER, CancellationSide.CLIENT]
 
 @pghistory.track(pghistory.InsertEvent(), pghistory.UpdateEvent(), pghistory.DeleteEvent())
 class CancellationReason(models.Model):
-    """Пункт справочника причин отмены одной стороны.
-
-    «Другая причина» здесь не хранится: это постоянный последний пункт формы
-    каждой стороны, компенсации по ней нет никогда (спека §3.1)."""
+    """Пункт справочника причин отмены одной стороны."""
 
     id = models.BigAutoField(primary_key=True)
     side = models.CharField(max_length=16, choices=CancellationSide.choices)
@@ -113,15 +110,23 @@ class LessonCancellation(models.Model):
         db_column='planned_lesson_id', related_name='cancellation_record',
     )
     side = models.CharField(max_length=16, choices=CancellationSide.choices)
-    # NULL — «Другая причина». PROTECT: причины удаляются только мягко.
+    # NULL — только у старых записей с «Другой причиной» (пункт убран из формы
+    # 2026-11-10, новые записи всегда со справочником). PROTECT: причины
+    # удаляются только мягко.
     reason = models.ForeignKey(
         CancellationReason, on_delete=models.PROTECT, null=True, blank=True,
         db_column='reason_id', related_name='cancellations',
     )
-    # Снимок: название причины на момент отмены либо текст «Другой причины».
-    # Переименование причины в настройках прошлые записи не меняет.
+    # Снимок: название причины на момент отмены; у старых записей с «Другой
+    # причиной» — её текст. Переименование причины прошлые записи не меняет.
     reason_text = models.CharField(max_length=1000)
     is_other = models.BooleanField()
+    # Необязательные подробности о причине. Свободный текст, возможны ПДн: только
+    # во вкладку группы, в пояснение начисления и описание ленты не попадает.
+    details = models.CharField(max_length=1000, blank=True, default='', db_default='')
+    # Номер занятия на момент отмены (seq строки плана): строка уезжает в конец
+    # курса и перенумеровывается, у маркера номера нет. NULL — запись до 2026-11-10.
+    lesson_seq = models.IntegerField(null=True, blank=True)
     # Когда клиент сообщил об отмене; только для стороны «Клиент».
     notified_on = models.DateField(null=True, blank=True)
     # Снимок решения о компенсации на момент отмены (спека §4): позднейшая

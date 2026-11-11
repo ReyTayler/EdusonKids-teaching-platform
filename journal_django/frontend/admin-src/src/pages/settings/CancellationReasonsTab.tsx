@@ -114,12 +114,6 @@ export function CancellationReasonsTab() {
                         </td>
                       </tr>
                     ))}
-                    {/* Системная строка: есть всегда, не редактируется, компенсации нет по правилу. */}
-                    <tr>
-                      <td className="settings-note">{CANCELLATION_LABELS.otherReason}</td>
-                      <td className="settings-muted">{CANCELLATION_LABELS.noCompensation}</td>
-                      <td />
-                    </tr>
                   </tbody>
                 </table>
               </div>

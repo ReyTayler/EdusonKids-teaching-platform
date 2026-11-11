@@ -81,6 +81,16 @@ def _first_pending(gid: int):
             .order_by('seq').first())
 
 
+def _plain_reason(side: str = 'teacher') -> int:
+    """Причина без компенсации — для тестов не про справочник."""
+    from apps.cancellations.models import CancellationReason
+
+    return CancellationReason.objects.get_or_create(
+        side=side, name='Тест без компенсации', deleted_at=None,
+        defaults={'compensation': False, 'position': 0},
+    )[0].id
+
+
 def _cancel_url(gid: int, lid: int) -> str:
     return f'/api/admin/groups/{gid}/plan/{lid}/cancel'
 
@@ -152,8 +162,6 @@ BRANCHES = [
     ('c_on_same', 'client', 'Заболел ребёнок', 0, True, 'Клиент — Заболел ребёнок · '),
     ('c_on_after', 'client', 'Заболел ребёнок', 1, True, 'Клиент — Заболел ребёнок · '),
     ('c_off_same', 'client', 'Нет желания', 0, False, 'Без компенсации: Клиент — Нет желания'),
-    ('t_other', 'teacher', None, None, False, 'Без компенсации: Преподаватель — Другая причина'),
-    ('c_other', 'client', None, 0, False, 'Без компенсации: Клиент — Другая причина'),
 ]
 
 
@@ -173,45 +181,42 @@ def test_full_cycle_all_branches_tab_admin_payroll_and_teacher_cabinet(
     assert [r['name'] for r in listing['client']] == ['Заболел ребёнок', 'Нет желания']
     assert all('compensation' not in r for r in listing['client'] + listing['teacher'])
 
-    expected: dict[str, tuple[str, bool, str, bool]] = {}  # дата → (side, платят, note, other)
+    expected: dict[str, tuple[str, bool, str]] = {}  # дата → (side, платят, note)
     for key, side, name, shift, paid, note in BRANCHES:
-        body: dict = {'side': side}
-        if name is None:
-            body['other_text'] = SECRET_TEXT
-        else:
-            body['reason_id'] = reasons[(side, name)]['id']
+        body: dict = {'side': side, 'reason_id': reasons[(side, name)]['id'],
+                      'details': SECRET_TEXT}
         row_day = _first_pending(eg['gid']).scheduled_date
         if side == 'client':
             body['notified_on'] = _iso(row_day, shift)
         day = _cancel_first(manager_client, eg, **body)
         assert day == row_day
-        expected[day.isoformat()] = (side, paid, note, name is None)
+        expected[day.isoformat()] = (side, paid, note)
 
-    # Вкладка группы: все восемь, новые сверху, «Другая» — полным текстом, без флага.
+    # Вкладка группы: все ветки, новые сверху, детали — полным текстом, без флага.
     tab = _tab(manager_client, eg['gid'])
     assert len(tab) == len(BRANCHES)
     assert [r['lesson_date'] for r in tab] == sorted(expected, reverse=True)
     for r in tab:
-        side, _paid, _note, other = expected[r['lesson_date']]
-        assert r['side'] == side and r['is_other'] is other
+        side, _paid, _note = expected[r['lesson_date']]
+        assert r['side'] == side and r['is_other'] is False
         assert 'compensated' not in r and 'compensation' not in r
-        assert (r['reason_text'] == SECRET_TEXT) is other
+        assert r['details'] == SECRET_TEXT and r['reason_text'] != SECRET_TEXT
         assert (r['notified_on'] is None) is (side == 'teacher')
 
     # Admin «Зарплата» (superadmin): сумма и пояснение по каждой ветке.
     admin_rows = _admin_pay_rows(superadmin_client, eg['gid'])
     assert set(admin_rows) == set(expected)
-    for day, (_side, paid, note, other) in expected.items():
+    for day, (_side, paid, note) in expected.items():
         pay = admin_rows[day]
         assert D(pay['payment']) == (D('250') if paid else D('0')), (day, pay)
         assert pay['is_manual'] is False
         assert pay['rule_note'].startswith(note), (day, pay['rule_note'])
         assert SECRET_TEXT not in pay['rule_note']
 
-    # Кабинет преподавателя: то же самое, текст «Другой» не утекает никуда.
+    # Кабинет преподавателя: то же самое, текст деталей не утекает никуда.
     cab_rows, raw = _teacher_pay_rows(own_teacher_client)
     assert set(cab_rows) == set(expected)
-    for day, (_side, paid, note, _other) in expected.items():
+    for day, (_side, paid, note) in expected.items():
         row = cab_rows[day]
         assert D(row['payment']) == (D('250') if paid else D('0')), (day, row)
         assert row['ruleNote'].startswith(note), (day, row['ruleNote'])
@@ -476,7 +481,7 @@ def test_future_notified_on_is_400_by_msk_date_not_utc(eg, day_group, manager_cl
     before = list(PlannedLesson.objects.filter(group_id=eg['gid']).values_list(
         'id', 'scheduled_date', 'status'))
     resp = manager_client.post(_cancel_url(eg['gid'], row.id), {
-        'lesson_date': '2026-10-24', 'side': 'client', 'other_text': 'Уехали',
+        'lesson_date': '2026-10-24', 'side': 'client', 'reason_id': _plain_reason('client'),
         'notified_on': '2026-10-24'}, format='json')
     assert resp.status_code == 400, resp.content
     assert 'будущем' in json.dumps(resp.json(), ensure_ascii=False)
@@ -507,7 +512,7 @@ def test_msk_date_comes_from_real_msk_now_across_utc_midnight(eg, day_group, man
     assert dates.msk_now().date() == datetime.date(2026, 10, 23)  # предпосылка
 
     row = day_group[datetime.date(2026, 10, 24)]
-    body = {'lesson_date': '2026-10-24', 'side': 'client', 'other_text': 'Уехали'}
+    body = {'lesson_date': '2026-10-24', 'side': 'client', 'reason_id': _plain_reason('client')}
     assert manager_client.post(_cancel_url(eg['gid'], row.id),
                                {**body, 'notified_on': '2026-10-24'},
                                format='json').status_code == 400
@@ -523,7 +528,7 @@ def test_notified_on_becomes_valid_after_msk_midnight(eg, day_group, manager_cli
     """23:59 МСК 23-го: 24-е — будущее (400); через две минуты, в 00:01 МСК 24-го
     (21:01 UTC 23-го), та же дата уже допустима."""
     row = day_group[datetime.date(2026, 10, 24)]
-    body = {'lesson_date': '2026-10-24', 'side': 'client', 'other_text': 'Уехали',
+    body = {'lesson_date': '2026-10-24', 'side': 'client', 'reason_id': _plain_reason('client'),
             'notified_on': '2026-10-24'}
     _fake_msk_now(monkeypatch, BEFORE_MIDNIGHT_MSK)
     assert manager_client.post(_cancel_url(eg['gid'], row.id), body,
@@ -541,7 +546,7 @@ def test_teacher_side_future_notified_on_is_ignored_not_400(eg, day_group, manag
     _fake_msk_now(monkeypatch, AFTER_MIDNIGHT_MSK)
     row = day_group[datetime.date(2026, 10, 24)]
     resp = manager_client.post(_cancel_url(eg['gid'], row.id), {
-        'lesson_date': '2026-10-24', 'side': 'teacher', 'other_text': 'Поездка',
+        'lesson_date': '2026-10-24', 'side': 'teacher', 'reason_id': _plain_reason('teacher'),
         'notified_on': '2030-01-01'}, format='json')
     assert resp.status_code == 200, resp.content
     assert LessonCancellation.objects.get(group_id=eg['gid']).notified_on is None
@@ -605,7 +610,7 @@ def test_permissions_cancel_and_group_tab(request, eg, role):
     row = _first_pending(eg['gid'])
     resp = client.post(_cancel_url(eg['gid'], row.id), {
         'lesson_date': row.scheduled_date.isoformat(), 'side': 'teacher',
-        'other_text': 'Поездка'}, format='json')
+        'reason_id': _plain_reason('teacher')}, format='json')
     tab = client.get(f'/api/admin/groups/{eg["gid"]}/cancellations')
     if role in ('anon_client', 'teacher_client'):
         assert resp.status_code in DENIED and tab.status_code in DENIED
@@ -663,7 +668,7 @@ def test_legacy_cancellation_without_record_paid_as_before_and_hidden_in_tab(
         created_at=timezone.now(), updated_at=timezone.now())
     recalculate_cancellations(group_ids=[eg['gid']])
     # Новая отмена с записью «без компенсации» рядом.
-    new_day = _cancel_first(manager_client, eg, side='teacher', other_text='Поездка')
+    new_day = _cancel_first(manager_client, eg, side='teacher', reason_id=_plain_reason('teacher'))
 
     admin_rows = _admin_pay_rows(superadmin_client, eg['gid'])
     legacy = admin_rows[legacy_day.isoformat()]

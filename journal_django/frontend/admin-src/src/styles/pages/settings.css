@@ -37,7 +37,6 @@
 @media (max-width: 640px) {
   .settings-table--reasons th:nth-child(2) { width: 120px; }
   .settings-table--reasons th:nth-child(3) { width: 56px; }
-  .settings-table--reasons .settings-muted { white-space: normal; }
 }
 
 .settings-summary {

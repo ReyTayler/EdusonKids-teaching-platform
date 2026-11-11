@@ -128,12 +128,13 @@ def makeup_cancelled(*, teacher_name: str, group: str, direction: str,
 
 
 def lesson_moved(*, group: str, direction: str, seq: int | None,
-                  from_day: datetime.date, to_day: datetime.date, time: str) -> str:
+                  from_day: datetime.date, from_time: str,
+                  to_day: datetime.date, time: str) -> str:
     number = f' — урок №{seq}' if seq is not None else ''
     return (
         'Занятие перенесено.\n\n'
         f'{escape(group)} ({escape(direction)}){number}\n'
-        f'Было: {_d(from_day)}\n'
+        f'Было: {_d(from_day)} {from_time}\n'
         f'Стало: {_d(to_day)} в {time}'
     )
 

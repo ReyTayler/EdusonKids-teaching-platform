@@ -13,6 +13,8 @@ export interface Column<T> {
   sortable?: boolean;
   sortKey?: string;
   width?: number | string;
+  /** Переносить длинный заголовок на несколько строк (обычно заголовки в одну строку). */
+  wrapHeader?: boolean;
 }
 
 export interface ServerPaginationState {
@@ -142,12 +144,12 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
                   {columns.map((c) => {
                     const sortKey = c.sortKey || c.key;
                     const isSortable = c.sortable !== false;
-                    const isActive = sp.sortBy === sortKey;
+                    const isActive = isSortable && sp.sortBy === sortKey;
                     return (
                       <th
                         key={c.key}
                         style={c.width ? { width: c.width } : undefined}
-                        className={isSortable ? 'sortable' : undefined}
+                        className={[isSortable && 'sortable', c.wrapHeader && 'th--wrap'].filter(Boolean).join(' ') || undefined}
                         onClick={isSortable ? () => handleSortClick(c) : undefined}
                       >
                         {c.label}
@@ -216,7 +218,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
             <thead>
               <tr>
                 {columns.map((c) => (
-                  <th key={c.key} style={c.width ? { width: c.width } : undefined}>{c.label}</th>
+                  <th key={c.key} className={c.wrapHeader ? 'th--wrap' : undefined} style={c.width ? { width: c.width } : undefined}>{c.label}</th>
                 ))}
                 {rowAction && (
                   <th className="col-actions">

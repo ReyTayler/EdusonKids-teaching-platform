@@ -46,21 +46,18 @@ def build_draft(data: dict, account) -> CancellationDraft:
     Причину читаем без лока: мягкое удаление в ту же секунду безвредно (FK
     PROTECT, снимок текста в записи), а лок причины добавил бы в отмену лишний
     ресурс в порядке блокировок. CancellationInvalid (ValueError) → 400."""
-    reason_id = data.get('reason_id')
-    reason = None
-    if reason_id is not None:
-        reason = repository.get_active(reason_id)
-        if reason is None:
-            raise CancellationInvalid(REASON_NOT_FOUND)
-        if reason.side != data['side']:
-            raise CancellationInvalid(REASON_WRONG_SIDE)
+    reason = repository.get_active(data['reason_id'])
+    if reason is None:
+        raise CancellationInvalid(REASON_NOT_FOUND)
+    if reason.side != data['side']:
+        raise CancellationInvalid(REASON_WRONG_SIDE)
     return CancellationDraft(
         lesson_date=_as_date(data['lesson_date']),
         side=data['side'],
-        reason_id=reason.id if reason else None,
-        reason_name=reason.name if reason else None,
-        reason_compensation=reason.compensation if reason else False,
-        other_text=None if reason else data.get('other_text'),
+        reason_id=reason.id,
+        reason_name=reason.name,
+        reason_compensation=reason.compensation,
+        details=data.get('details', ''),
         notified_on=_as_date(data.get('notified_on')),
         # request=None (команды, тесты сервиса) и аноним — без автора.
         created_by_id=getattr(account, 'id', None)

@@ -80,11 +80,11 @@ def test_makeup_assigned_states_who_what_when():
 def test_lesson_moved_shows_both_dates():
     text = messages.lesson_moved(
         group='СИ1027', direction='Scratch', seq=4,
-        from_day=datetime.date(2026, 8, 5), to_day=datetime.date(2026, 8, 12),
-        time='12:00',
+        from_day=datetime.date(2026, 8, 5), from_time='18:30',
+        to_day=datetime.date(2026, 8, 12), time='12:00',
     )
-    assert '05.08' in text
-    assert '12.08' in text
+    assert 'Было: 05.08 18:30' in text
+    assert 'Стало: 12.08 в 12:00' in text
     assert 'СИ1027' in text
 
 

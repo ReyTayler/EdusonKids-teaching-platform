@@ -368,6 +368,7 @@ FIELD_RU = {
     # Причины отмены и записи об отменах (apps.cancellations)
     'side': 'сторона', 'reason_id': 'причина', 'reason_text': 'причина',
     'is_other': 'другая причина', 'notified_on': 'когда сообщили',
+    'details': 'детали', 'lesson_seq': 'номер занятия',
     'compensation': 'компенсация', 'compensated': 'компенсация', 'position': 'порядок',
     # Учётки
     'role': 'роль', 'twofa_method': 'способ 2FA', 'twofa_enabled': '2FA включена',

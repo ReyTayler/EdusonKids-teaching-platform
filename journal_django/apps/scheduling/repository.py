@@ -1451,6 +1451,7 @@ def cancel_lesson(
     *,
     lesson_id: int,
     record=None,
+    move_to: tuple[datetime.date, datetime.time | None] | None = None,
 ) -> list[dict]:
     """
     Отмена «в конец курса»: (1) на исходную дату вставляется НЕ-курсовой маркер
@@ -1469,6 +1470,11 @@ def cancel_lesson(
     (нет открытого слота у группы) — шаг (2) пропускается: строка остаётся на
     месте, перенумерация всё равно проходит (тот же fallback, что раньше у
     relay: «нельзя развернуть каденцию»). Абонемент/баланс не трогаем.
+
+    move_to=(дата, время|None) — шаг (2) иначе: строка встаёт на указанные дату и
+    время (None — время отменённого занятия) как разовый перенос, а не в конец
+    курса. Шаг (3) выстраивает номера по датам: если новая дата раньше следующего
+    урока, номера не меняются. Занятое группой дата+время → ValueError до мутаций.
 
     Дата, время и преподаватель маркера берутся из ЗАЛОЧЕННОЙ строки lesson_id,
     а не от вызывающего: между ранним чтением строки и локом курса другой
@@ -1535,6 +1541,16 @@ def cancel_lesson(
             raise ValueError('На это время уже есть отменённое занятие. '
                              'Перенесите занятие на другое время и повторите.')
 
+        if move_to is not None:
+            # Любая строка на этом ключе — другой урок, маркер отмены или сам
+            # отменяемый урок (перенос «на то же место» переносом не является).
+            move_date, move_time = move_to[0], move_to[1] or marker_time
+            if PlannedLesson.objects.filter(
+                group_id=group_id, scheduled_date=move_date, scheduled_time=move_time,
+            ).exists():
+                raise ValueError('На это время у группы уже стоит занятие. '
+                                 'Выберите другую дату или время.')
+
         # (1) Маркер отмены на исходной дате (seq=NULL): календарь показывает
         # зачёркнутое занятие. Несёт время/преподавателя отменённого занятия.
         marker = PlannedLesson.objects.create(
@@ -1547,31 +1563,46 @@ def cancel_lesson(
             # Локальный импорт: cancellations ссылается на scheduling (FK на
             # маркер), обратная зависимость — только на время вызова.
             from apps.cancellations import repository as cancellations_repository
-            cancellations_repository.create_for_marker(marker, record)
+            cancellations_repository.create_for_marker(marker, record, lesson_seq=target.seq)
 
-        # (2) Переносим саму отменённую строку в конец курса — на первый
-        # свободный слот после текущей последней курсовой даты.
-        # course_rows уже залочены выше — повторный select_for_update не нужен.
-        last_date = max(p.scheduled_date for p in course_rows)
-        occupied = frozenset(
-            PlannedLesson.objects.filter(group_id=group_id)
-            .values_list('scheduled_date', flat=True)
-        )
-        next_slot = _next_slot_after(
-            after_date=last_date, occupied=occupied,
-            duration_minutes=g['lesson_duration_minutes'], open_slots=open_slots,
-        )
-        if next_slot is not None:
-            new_date, new_time = next_slot
-            target.scheduled_date = new_date
-            target.scheduled_time = new_time
-            target.substitute_teacher_id = None  # замена — свойство даты, не едет
-            target.moved_from_date = None
+        if move_to is not None:
+            moved = planner.reschedule(
+                _row_from_model(target), new_date=move_date, new_time=move_time)
+            date_changed = moved.scheduled_date != target.scheduled_date
+            target.scheduled_date = moved.scheduled_date
+            target.scheduled_time = moved.scheduled_time
+            target.moved_from_date = moved.moved_from_date
+            if date_changed:
+                target.substitute_teacher_id = None  # замена — свойство даты, не едет
             target.updated_at = now
             target.save(update_fields=[
                 'scheduled_date', 'scheduled_time', 'substitute_teacher',
                 'moved_from_date', 'updated_at',
             ])
+        else:
+            # (2) Переносим саму отменённую строку в конец курса — на первый
+            # свободный слот после текущей последней курсовой даты.
+            # course_rows уже залочены выше — повторный select_for_update не нужен.
+            last_date = max(p.scheduled_date for p in course_rows)
+            occupied = frozenset(
+                PlannedLesson.objects.filter(group_id=group_id)
+                .values_list('scheduled_date', flat=True)
+            )
+            next_slot = _next_slot_after(
+                after_date=last_date, occupied=occupied,
+                duration_minutes=g['lesson_duration_minutes'], open_slots=open_slots,
+            )
+            if next_slot is not None:
+                new_date, new_time = next_slot
+                target.scheduled_date = new_date
+                target.scheduled_time = new_time
+                target.substitute_teacher_id = None  # замена — свойство даты, не едет
+                target.moved_from_date = None
+                target.updated_at = now
+                target.save(update_fields=[
+                    'scheduled_date', 'scheduled_time', 'substitute_teacher',
+                    'moved_from_date', 'updated_at',
+                ])
 
         # (3) Перенумеровываем pending/overdue курсовые строки по дате,
         # продолжая от последней 'done' (или с 1/0, если done нет).

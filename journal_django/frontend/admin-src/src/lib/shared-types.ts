@@ -825,13 +825,18 @@ export interface CancellationReasonUpdatePayload {
   position?: number;
 }
 
-/** Тело POST /plan/<lid>/cancel: причина XOR свободный текст; notified_on — только для client. */
+/**
+ * Тело POST /plan/<lid>/cancel: details необязательны; notified_on — только для client;
+ * new_date/new_time — перенос на указанную дату вместо конца курса.
+ */
 export interface CancelLessonPayload {
   lesson_date: string;
   side: CancellationSide;
-  reason_id?: ID | null;
-  other_text?: string | null;
+  reason_id: ID;
+  details?: string;
   notified_on?: string | null;
+  new_date?: string;
+  new_time?: string;
 }
 
 /** Строка вкладки группы «Отмены уроков». */
@@ -841,7 +846,11 @@ export interface LessonCancellationRow {
   scheduled_time: string; // 'HH:MM'
   side: CancellationSide;
   reason_text: string;
+  /** true только у старых записей: reason_text — текст «Другой причины». */
   is_other: boolean;
+  details: string;
+  /** Номер занятия на момент отмены; null — запись сделана до появления поля. */
+  lesson_seq: number | null;
   notified_on: string | null;
   teacher_id: ID | null;
   teacher_name: string | null;

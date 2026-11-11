@@ -23,13 +23,20 @@ export function GroupCancellationsTab({ groupId }: { groupId: number }) {
 
   const columns: Column<LessonCancellationRow>[] = [
     {
-      key: 'lesson_date', label: CANCELLATION_LABELS.colLessonDate, sortable: false,
+      key: 'lesson_seq', label: CANCELLATION_LABELS.colLesson, sortable: false,
       cell: (r) => (
         <div className="cell-stack">
-          <span className="cell-stack__main num">{fmtDate(r.lesson_date)} {r.scheduled_time}</span>
+          <span className="cell-stack__main">
+            {r.lesson_seq != null ? CANCELLATION_LABELS.lessonNumber(r.lesson_seq) : '—'}
+          </span>
           {r.teacher_name && <span className="cell-stack__sub">{r.teacher_name}</span>}
         </div>
       ),
+    },
+    {
+      key: 'lesson_date', label: CANCELLATION_LABELS.colScheduledAt, sortable: false,
+      wrapHeader: true, width: 190,
+      cell: (r) => <span className="num">{fmtDate(r.lesson_date)} {r.scheduled_time}</span>,
     },
     {
       key: 'side', label: CANCELLATION_LABELS.colSide, sortable: false,
@@ -37,13 +44,15 @@ export function GroupCancellationsTab({ groupId }: { groupId: number }) {
     },
     {
       key: 'reason_text', label: CANCELLATION_LABELS.colReason, sortable: false,
-      // Для «Другой причины» reason_text — сам текст, возможно длинный.
-      cell: (r) => (
-        <div className="cell-stack">
-          {r.is_other && <span className="cell-stack__sub">{CANCELLATION_LABELS.otherReason}</span>}
-          <ClampText text={r.reason_text} className="clamp-text--column" />
-        </div>
-      ),
+      cell: (r) => (r.is_other ? CANCELLATION_LABELS.otherReason : r.reason_text),
+    },
+    {
+      key: 'details', label: CANCELLATION_LABELS.colDetails, sortable: false,
+      cell: (r) => {
+        // У старых записей с «Другой причиной» подробности лежат в reason_text.
+        const text = r.is_other ? r.reason_text : r.details;
+        return text ? <ClampText text={text} className="clamp-text--column" /> : '—';
+      },
     },
     {
       key: 'created_by_name', label: CANCELLATION_LABELS.colCancelledBy, sortable: false,
@@ -53,6 +62,10 @@ export function GroupCancellationsTab({ groupId }: { groupId: number }) {
           <span className="cell-stack__sub num">{fmtDateTime(r.created_at)}</span>
         </div>
       ),
+    },
+    {
+      key: 'notified_on', label: CANCELLATION_LABELS.notifiedOn, sortable: false,
+      cell: (r) => (r.notified_on ? <span className="num">{fmtDate(r.notified_on)}</span> : '—'),
     },
   ];
 

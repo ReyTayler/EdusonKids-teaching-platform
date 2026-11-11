@@ -116,35 +116,35 @@ class PlanCancelSerializer(StrictSerializer):
     # (сторона причины) и сама БД.
     side = serializers.ChoiceField(choices=[('teacher', 'Преподаватель'),
                                             ('client', 'Клиент')])
-    reason_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
-    # trim_whitespace: текст из одних пробелов становится пустым и не считается
-    # причиной; max_length — по обрезанному тексту, как его и сохранят.
-    other_text = serializers.CharField(required=False, allow_null=True, allow_blank=True,
-                                       max_length=1000, trim_whitespace=True)
+    reason_id = serializers.IntegerField(min_value=1, error_messages={
+        'required': 'Выберите причину.', 'null': 'Выберите причину.'})
+    # Необязательные подробности о причине. trim_whitespace: из одних пробелов —
+    # пустая строка; max_length — как у колонки.
+    details = serializers.CharField(required=False, allow_blank=True, max_length=1000,
+                                    trim_whitespace=True)
     notified_on = DateStringField(required=False, allow_null=True)
+    # Перенос отменяемого занятия на указанную дату вместо конца курса.
+    # Время не указано — время отменённого занятия.
+    new_date = DateStringField(required=False, allow_null=True)
+    new_time = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
-    def validate_other_text(self, value):
-        """Невидимые символы форматирования (Cf: ​, ﻿, ⁠…) вырезаются — иначе
-        «причина» из одного такого символа прошла бы как непустая. Переводы
-        строк сохраняются: описание бывает многострочным."""
-        if not value:
-            return value
+    def validate_new_time(self, value):
+        return _validate_time(value)
+
+    def validate_details(self, value):
+        """Невидимые символы форматирования (Cf: ​, ﻿, ⁠…) вырезаются — из одних
+        таких символов получаются пустые детали. Переводы строк сохраняются."""
         from apps.cancellations.serializers import drop_format_chars
-        cleaned = drop_format_chars(value).strip()
-        if not cleaned:
-            raise serializers.ValidationError(
-                'Описание причины не может состоять из невидимых символов.')
-        return cleaned
+        return drop_format_chars(value).strip()
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        has_reason = attrs.get('reason_id') is not None
-        has_other = bool(attrs.get('other_text'))
-        if has_reason == has_other:
+        new_date = attrs.get('new_date')
+        if attrs.get('new_time') and not new_date:
+            raise serializers.ValidationError({'new_date': 'Укажите дату переноса.'})
+        if new_date and datetime.date.fromisoformat(new_date) < msk_now().date():
             raise serializers.ValidationError(
-                'Укажите причину из списка или опишите другую причину.')
-        attrs.setdefault('reason_id', None)
-        attrs['other_text'] = attrs.get('other_text') or None
+                {'new_date': 'Дата переноса не может быть в прошлом.'})
         if attrs['side'] == 'teacher':
             # В7а: для стороны «Преподаватель» дата уведомления не нужна —
             # игнорируем, а не отказываем: форма могла прислать значение по умолчанию.

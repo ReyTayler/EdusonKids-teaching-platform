@@ -241,7 +241,7 @@ def _effective_teacher_id(row: dict) -> int | None:
 
 
 def _notify_planned(row: dict, kind: str, *, teacher_ids: list[int],
-                    substitute_name: str = '', from_day=None,
+                    substitute_name: str = '', from_day=None, from_time=None,
                     course_end=None) -> None:
     """
     Поставить уведомление об изменении расписания.
@@ -273,7 +273,9 @@ def _notify_planned(row: dict, kind: str, *, teacher_ids: list[int],
     for index, teacher_id in enumerate(dict.fromkeys(tid for tid in teacher_ids if tid)):
         if kind == KIND_LESSON_MOVED:
             text = notif_messages.lesson_moved(
-                **base, seq=row.get('seq'), from_day=from_day, to_day=day, time=time_str)
+                **base, seq=row.get('seq'), from_day=from_day,
+                from_time=from_time.strftime('%H:%M') if from_time else '—',
+                to_day=day, time=time_str)
         elif kind == KIND_LESSON_CANCELLED:
             text = notif_messages.lesson_cancelled(
                 **base, seq=row.get('seq'), day=day, time=time_str,
@@ -308,11 +310,11 @@ def _notify_planned(row: dict, kind: str, *, teacher_ids: list[int],
         )
 
 
-def _notify_moved(row: dict, from_day) -> None:
+def _notify_moved(row: dict, from_day, from_time) -> None:
     from apps.notifications.constants import KIND_LESSON_MOVED
 
-    _notify_planned(row, KIND_LESSON_MOVED,
-                    teacher_ids=[_effective_teacher_id(row)], from_day=from_day)
+    _notify_planned(row, KIND_LESSON_MOVED, teacher_ids=[_effective_teacher_id(row)],
+                    from_day=from_day, from_time=from_time)
 
 
 def _course_end_date(plan: list[dict]):
@@ -447,8 +449,8 @@ def reschedule(group_id: int, lesson_id: int, data: dict, request) -> dict | Non
     """
     new_teacher_id = data.get('new_teacher_id')
     with transaction.atomic():
-        # Состояние ДО мутации: строка сейчас переедет, и старой даты («было»)
-        # в ней уже не останется — moved_from_date перетирается своим же.
+        # Состояние ДО мутации: строка сейчас переедет, и старых даты и времени
+        # («было») в ней уже не останется — moved_from_date перетирается своим же.
         before = repository.notification_context(lesson_id)
         row = repository.reschedule_lesson(
             group_id,
@@ -460,7 +462,7 @@ def reschedule(group_id: int, lesson_id: int, data: dict, request) -> dict | Non
         if row is None:
             return None
         after = repository.notification_context(lesson_id)
-        _notify_moved(after, before['scheduled_date'])
+        _notify_moved(after, before['scheduled_date'], before['scheduled_time'])
     return row
 
 
@@ -536,11 +538,12 @@ def preview_permanent_change(group_id: int, from_seq: int, effective_from) -> li
 
 
 def cancel(group_id: int, lesson_id: int, data: dict, request) -> list[dict] | None:
-    """Отмена с причиной (перенос отменённого урока в конец курса + перенумерация
-    + запись LessonCancellation). from_date выводится из даты занятия lid.
+    """Отмена с причиной (перенос отменённого урока в конец курса или на указанную
+    дату + перенумерация + запись LessonCancellation). from_date выводится из даты
+    занятия lid.
 
-    data — validated_data PlanCancelSerializer: lesson_date, side, reason_id |
-    other_text, notified_on.
+    data — validated_data PlanCancelSerializer: lesson_date, side, reason_id,
+    details (необязательно), notified_on, new_date и new_time (необязательно).
 
     None → строки нет (404). ValueError (вкл. CancellationInvalid) → 400: якорь
     не курсовой/активный (отмена определена только для курсовых строк в статусе
@@ -564,6 +567,8 @@ def cancel(group_id: int, lesson_id: int, data: dict, request) -> list[dict] | N
     # Локальный импорт: cancellations зависит от scheduling (FK на маркер).
     from apps.cancellations.services import build_draft
     draft = build_draft(data, getattr(request, 'user', None))
+    new_date = _to_date(data.get('new_date'))
+    move_to = (new_date, _to_time(data.get('new_time'))) if new_date else None
     with transaction.atomic():
         # Контекст для текста берём ДО отмены: строка переедет в конец курса, а
         # хвост перенумеруется — после операции и дата, и номер были бы уже
@@ -572,6 +577,12 @@ def cancel(group_id: int, lesson_id: int, data: dict, request) -> list[dict] | N
         notify_row = repository.notification_context(lesson_id)
         # Дату, время и эффективного преподавателя маркера cancel_lesson берёт
         # из строки под локом курса, а не из anchor, прочитанного без лока.
-        plan = repository.cancel_lesson(group_id, lesson_id=lesson_id, record=draft)
-        _notify_cancelled(notify_row, course_end=_course_end_date(plan))
+        plan = repository.cancel_lesson(group_id, lesson_id=lesson_id, record=draft,
+                                        move_to=move_to)
+        if move_to is None:
+            _notify_cancelled(notify_row, course_end=_course_end_date(plan))
+        else:
+            # Одно сообщение о переносе: занятие для преподавателя не пропало.
+            _notify_moved(repository.notification_context(lesson_id),
+                          notify_row['scheduled_date'], notify_row['scheduled_time'])
     return plan

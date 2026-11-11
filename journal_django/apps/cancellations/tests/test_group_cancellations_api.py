@@ -56,7 +56,7 @@ def test_rows_shape_and_fixed_order(manager_client, school, make_record, make_re
                         lesson_date=D(2026, 10, 5), scheduled_time=T(9, 0))
     late = make_record(group_id=gid, teacher_id=tid, reason=reason,
                        lesson_date=D(2026, 10, 5), scheduled_time=T(18, 0),
-                       notified_on=D(2026, 10, 4))
+                       notified_on=D(2026, 10, 4), details='Звонила мама', lesson_seq=7)
     # Полный дубль даты и времени: тай-брейк по id DESC.
     late_dup = make_record(group_id=gid, teacher_id=tid, reason=reason,
                            lesson_date=D(2026, 10, 5), scheduled_time=T(18, 0))
@@ -72,6 +72,7 @@ def test_rows_shape_and_fixed_order(manager_client, school, make_record, make_re
     assert by_id[late.id] == {
         'id': late.id, 'lesson_date': '2026-10-05', 'scheduled_time': '18:00',
         'side': 'client', 'reason_text': 'Заболел', 'is_other': False,
+        'details': 'Звонила мама', 'lesson_seq': 7,
         'notified_on': '2026-10-04', 'teacher_id': tid,
         'teacher_name': 'Тест Преподаватель 1',
         'created_at': by_id[late.id]['created_at'], 'created_by_name': None,
@@ -83,6 +84,8 @@ def test_rows_shape_and_fixed_order(manager_client, school, make_record, make_re
     assert by_id[early.id]['notified_on'] is None
     assert by_id[early.id]['teacher_id'] is None and by_id[early.id]['teacher_name'] is None
     assert by_id[old.id]['created_by_name'] == 'Анна Менеджер'
+    # Запись до появления полей: деталей нет, номер занятия неизвестен.
+    assert by_id[old.id]['details'] == '' and by_id[old.id]['lesson_seq'] is None
 
 
 def test_created_by_name_falls_back_to_email(admin_client, school, make_record, author):
@@ -111,8 +114,9 @@ def test_compensated_never_exposed(request, client_name, school, make_record, ma
     text = resp.content.decode().lower()
     assert 'compensat' not in text and 'компенсац' not in text
     assert set(resp.json()['rows'][0]) == {
-        'id', 'lesson_date', 'scheduled_time', 'side', 'reason_text', 'is_other',
-        'notified_on', 'teacher_id', 'teacher_name', 'created_at', 'created_by_name',
+        'id', 'lesson_date', 'scheduled_time', 'side', 'reason_text', 'is_other', 'details',
+        'lesson_seq', 'notified_on', 'teacher_id', 'teacher_name', 'created_at',
+        'created_by_name',
     }
 
 

@@ -31,6 +31,8 @@ thead th {
   white-space: nowrap;
   max-width: 240px;
 }
+/* Column.wrapHeader: длинный заголовок переносится, а не уезжает под соседнюю колонку. */
+thead th.th--wrap { white-space: normal; }
 tbody td {
   max-width: 240px;
   word-break: break-word;

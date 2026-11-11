@@ -80,22 +80,22 @@ def create(*, side: str, name: str, compensation: bool) -> CancellationReason:
     )
 
 
-def create_for_marker(marker, draft: CancellationDraft) -> LessonCancellation:
+def create_for_marker(marker, draft: CancellationDraft, *, lesson_seq: int) -> LessonCancellation:
     """Запись об отмене для только что вставленного маркера.
 
     Вызывается из scheduling.repository.cancel_lesson ВНУТРИ его транзакции:
     после лока курса и INSERT маркера, до пересчёта начисления — порядок
     «план → запись отмены → деньги». compensated — снимок решения по дате
-    маркера (спека §4); teacher — эффективный преподаватель маркера."""
+    маркера (спека §4); teacher — эффективный преподаватель маркера; lesson_seq —
+    номер отменяемого занятия до его переноса в конец курса."""
     return LessonCancellation.objects.create(
         group_id=marker.group_id, lesson_date=marker.scheduled_date,
         scheduled_time=marker.scheduled_time, teacher_id=marker.teacher_id,
         planned_lesson=marker, side=draft.side, reason_id=draft.reason_id,
-        reason_text=draft.other_text if draft.is_other else draft.reason_name,
-        is_other=draft.is_other, notified_on=draft.notified_on,
+        reason_text=draft.reason_name, is_other=False, details=draft.details,
+        lesson_seq=lesson_seq, notified_on=draft.notified_on,
         compensated=is_compensated(
-            side=draft.side, is_other=draft.is_other,
-            reason_compensation=draft.reason_compensation,
+            side=draft.side, reason_compensation=draft.reason_compensation,
             notified_on=draft.notified_on, lesson_date=marker.scheduled_date,
         ),
         created_by_id=draft.created_by_id,
@@ -106,9 +106,9 @@ def create_for_marker(marker, draft: CancellationDraft) -> LessonCancellation:
 _RESOLVE_FIELDS = ('id', 'planned_lesson_id', 'group_id', 'lesson_date', 'scheduled_time',
                    'side', 'is_other', 'reason_text', 'compensated')
 
-# «Другая причина» в пояснении начисления — без введённого текста: свободный
-# текст может содержать ПДн (имя клиента), а пояснение видит преподаватель в
-# кабинете. Полный текст — только во вкладке группы.
+# Старые записи с «Другой причиной»: в пояснении начисления — без введённого
+# текста: свободный текст может содержать ПДн (имя клиента), а пояснение видит
+# преподаватель в кабинете. Полный текст — только во вкладке группы.
 _OTHER_REASON_NOTE = 'Другая причина'
 
 Key = tuple  # (group_id, lesson_date, scheduled_time) — естественный ключ отмены
@@ -206,7 +206,8 @@ def soft_delete(pk: int) -> bool:
 # Поля строки вкладки группы. compensated сюда не входит намеренно (В3): флаг —
 # часть мотивации, а вкладку читают manager/admin.
 _GROUP_TAB_FIELDS = ('id', 'lesson_date', 'scheduled_time', 'side', 'reason_text',
-                     'is_other', 'notified_on', 'teacher_id', 'created_at', 'created_by_id',
+                     'is_other', 'details', 'lesson_seq', 'notified_on', 'teacher_id',
+                     'created_at', 'created_by_id',
                      'teacher__name', 'created_by__full_name', 'created_by__email')
 
 

@@ -77,6 +77,26 @@ def planned_group(linked_teachers):
 
 @pytest.mark.django_db
 @override_settings(TELEGRAM_GENERAL_CHAT_ID=_GENERAL_CHAT_ID)
+def test_cancel_with_move_sends_only_moved(no_dispatch, planned_group):
+    """Отмена с переносом — одно сообщение о переносе, сообщения об отмене нет."""
+    from apps.cancellations.models import CancellationReason
+
+    setup, first = planned_group
+    reason = CancellationReason.objects.create(side='teacher', name='Тест', position=0)
+    data = {'lesson_date': first.scheduled_date, 'side': 'teacher', 'reason_id': reason.id,
+            'notified_on': None, 'new_date': '2026-06-03', 'new_time': '11:00'}
+    assert sched_services.cancel(setup['group_a'], first.id, data, None) is not None
+
+    assert not NotificationMessage.objects.filter(kind=KIND_LESSON_CANCELLED).exists()
+    rows = list(NotificationMessage.objects.filter(kind=KIND_LESSON_MOVED).order_by('channel'))
+    assert [r.channel for r in rows] == [CHANNEL_DM, CHANNEL_GROUP]
+    assert 'Было: 01.06 10:00' in rows[0].text
+    assert 'Стало: 03.06 в 11:00' in rows[0].text
+    assert 'урок №1' in rows[0].text
+
+
+@pytest.mark.django_db
+@override_settings(TELEGRAM_GENERAL_CHAT_ID=_GENERAL_CHAT_ID)
 def test_reschedule_enqueues_moved(no_dispatch, planned_group):
     """Разовый перенос → сообщение с ОБЕИМИ датами: было и стало."""
     setup, first = planned_group
@@ -96,7 +116,7 @@ def test_reschedule_enqueues_moved(no_dispatch, planned_group):
     text = rows[0].text
     assert '__sched_group_A__' in text     # группа
     assert '__sched_dir__' in text         # направление
-    assert '01.06' in text                 # было
+    assert 'Было: 01.06 10:00' in text     # было — с временем
     assert '03.06' in text and '11:00' in text  # стало
     assert 'урок №1' in text
     assert 'None' not in text
@@ -113,8 +133,11 @@ def test_cancel_enqueues_cancelled(no_dispatch, planned_group):
     setup, first = planned_group
 
     # Тело отмены с 2026-10-23 обязательно; request=None → запись без автора.
-    data = {'lesson_date': first.scheduled_date, 'side': 'teacher', 'other_text': 'тест',
-            'reason_id': None, 'notified_on': None}
+    from apps.cancellations.models import CancellationReason
+
+    reason = CancellationReason.objects.create(side='teacher', name='Тест', position=0)
+    data = {'lesson_date': first.scheduled_date, 'side': 'teacher',
+            'reason_id': reason.id, 'notified_on': None}
     plan = sched_services.cancel(setup['group_a'], first.id, data, None)
     assert plan is not None
 

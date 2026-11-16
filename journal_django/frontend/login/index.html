@@ -6,11 +6,12 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <title>Вход — Eduson Kids</title>
-  <link rel="stylesheet" href="/login/styles.css?v=2" />
+  <link rel="stylesheet" href="/login/styles.css?v=3" />
   <!-- Внешние скрипты (не inline) ради CSP script-src 'self'. Порядок важен:
-       тема применяется до отрисовки, затем — редирект уже авторизованного. -->
+       тема применяется до отрисовки, затем — редирект уже авторизованного
+       (он же прячет форму до ответа сервера, см. auth-redirect.js). -->
   <script src="/login/theme-init.js"></script>
-  <script src="/login/auth-redirect.js"></script>
+  <script src="/login/auth-redirect.js?v=2"></script>
 </head>
 <body>
   <header class="topbar">

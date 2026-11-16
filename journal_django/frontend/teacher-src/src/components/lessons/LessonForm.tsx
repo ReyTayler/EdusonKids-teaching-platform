@@ -48,9 +48,11 @@ const RECORD_URL_REQUIRED = 'Вставьте ссылку на запись у�
 const RECORD_URL_INVALID = 'Нужна ссылка на запись: адрес вида https://…';
 
 /**
- * Ссылка на запись урока — обязательна (решение владельца 27.10.2026). То же
- * правило, что на сервере (teacher_spa/serializers.py, validate_recordUrl):
- * только http(s) и домен с точкой. Сервер проверяет всё равно — это слой UX.
+ * Ссылка на запись урока: обязательность — правило школы с исключениями
+ * (groupData.recordUrlRequired), а вот формат проверяется всегда, если ссылка
+ * введена. Те же условия, что на сервере (teacher_spa/serializers.py,
+ * validate_recordUrl): только http(s) и домен с точкой. Сервер проверяет всё
+ * равно — это слой UX.
  */
 function looksLikeUrl(value: string): boolean {
   try {
@@ -176,13 +178,18 @@ export function LessonForm({
   };
   const fbComplete = !FB_ORDER.some((k) => fbMissing[k]);
   const recordTrimmed = recordUrl.trim();
+  // Нет поля (старый ответ сервера) — считаем ссылку обязательной.
+  const recordRequired = groupData.recordUrlRequired !== false;
   const recordValid = looksLikeUrl(recordTrimmed);
+  // Пустая ссылка допустима, только если правило школы её не требует;
+  // непустая кривая — ошибка всегда.
+  const recordOk = recordTrimmed === '' ? !recordRequired : recordValid;
   const recordError: string | undefined = serverRecordError
-    ?? (fbAttempted && !recordValid
+    ?? (fbAttempted && !recordOk
       ? (recordTrimmed === '' ? RECORD_URL_REQUIRED : RECORD_URL_INVALID)
       : undefined);
-  // Форма готова к сохранению: отзыв заполнен и есть ссылка на запись.
-  const formComplete = fbComplete && recordValid;
+  // Форма готова к сохранению: отзыв заполнен и со ссылкой на запись всё в порядке.
+  const formComplete = fbComplete && recordOk;
   const fbError = (k: FbField): string | undefined =>
     serverFbErrors[k] ?? (fbAttempted && fbMissing[k] ? FB_REQUIRED_MSG : undefined);
   // Сбрасываем серверную ошибку поля, как только его изменили.
@@ -300,7 +307,8 @@ export function LessonForm({
         techProblems: techProblems as boolean,
         comment: comment.trim(),
       },
-      recordUrl: recordTrimmed,
+      // Пустую строку не шлём: сервер при необязательной ссылке запишет NULL.
+      recordUrl: recordTrimmed || undefined,
       ...(plannedLessonId != null ? { plannedLessonId } : {}),
     };
 
@@ -506,7 +514,12 @@ export function LessonForm({
 
       <div className="lf-record" ref={recordRef}>
         <div className="lf-record-head">
-          <span className="t-sec-label">Ссылка на запись урока<span className="field-req"> *</span></span>
+          <span className="t-sec-label">
+            Ссылка на запись урока
+            {recordRequired
+              ? <span className="field-req"> *</span>
+              : <span className="lf-record-optional"> (необязательно)</span>}
+          </span>
         </div>
         <div className={`lf-record-box${recordError ? ' is-invalid' : recordTrimmed ? (recordValid ? ' is-valid' : ' is-suspect') : ''}`}>
           <svg className="lf-record-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -517,7 +530,7 @@ export function LessonForm({
             className="lf-record-input"
             type="url"
             inputMode="url"
-            required
+            required={recordRequired}
             aria-invalid={recordError ? true : undefined}
             aria-describedby={recordError ? recordErrorId : undefined}
             value={recordUrl}

@@ -145,6 +145,7 @@ export const CHANGELOG_OPERATION_LABELS:Record<string, string> = {
   'lesson.update':                 'Правка урока',
   'lesson.delete':                 'Удаление урока',
   'lesson.attendance_update':      'Правка посещаемости',
+  'lesson.record_url_rule':        'Правило ссылки на запись',
   'extra_lesson.create':           'Назначение доп.урока',
   'extra_lesson.cancel':           'Отмена доп.урока',
   'extra_lesson.delete':           'Удаление доп.урока',
@@ -246,6 +247,9 @@ export const CHANGELOG_ENTITY_LABELS: Record<string, string> = {
   lesson_skip:    'Неоплачиваемый пропуск',
   cancellation_reason: 'Причина отмены',
   lesson_cancellation: 'Отмена урока',
+  record_url_rule:         'Правило ссылки на запись',
+  record_url_rule_teacher: 'Исключение: преподаватель',
+  record_url_rule_group:   'Исключение: группа',
 };
 
 export const CHANGELOG_ENTITY_OPTIONS: { value: string; label: string }[] =
@@ -441,6 +445,29 @@ export const FEEDBACK_LABELS = {
 
 export const SETTINGS_TAB_LABELS = {
   motivation: 'Мотивация',
+  lessons: 'Уроки',
+} as const;
+
+// ===== Настройки → Уроки: правило ссылки на запись урока =====
+
+export const RECORD_URL_RULE_LABELS = {
+  title: 'Ссылка на запись урока',
+  lead: 'Преподаватель прикладывает ссылку на запись при проведении урока. Здесь решается, обязательна ли она.',
+  required: 'Обязательна для всех уроков',
+  requiredOn: 'Исключения — могут не прикладывать ссылку',
+  requiredOff: 'Исключения — обязаны прикладывать ссылку',
+  teachers: 'Преподаватели',
+  groups: 'Группы',
+  teachersPlaceholder: 'Выберите преподавателя…',
+  groupsPlaceholder: 'Выберите группу…',
+  empty: 'Ничего не найдено',
+  save: 'Сохранить',
+  saved: 'Сохранено',
+  saveFailed: 'Не удалось сохранить правило',
+  loadErrorTitle: 'Не удалось загрузить правило',
+  loadErrorHint: 'Попробуйте обновить страницу. Правило не изменено.',
+  retry: 'Повторить',
+  changedBy: (who: string, when: string) => `Изменил(а) ${who}, ${when}`,
 } as const;
 
 // ===== Общий свёрнутый текст (ClampText) =====

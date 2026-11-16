@@ -857,3 +857,17 @@ export interface LessonCancellationRow {
   created_at: string;
   created_by_name: string | null;
 }
+
+/** Правило «ссылка на запись урока обязательна» с исключениями (Настройки → Уроки). */
+export interface RecordUrlRule {
+  required: boolean;
+  teachers: { id: number; name: string }[];
+  groups: { id: number; name: string }[];
+  updated_at: string | null;
+  updated_by: string | null;
+}
+export interface RecordUrlRuleInput {
+  required: boolean;
+  teacher_ids: number[];
+  group_ids: number[];
+}

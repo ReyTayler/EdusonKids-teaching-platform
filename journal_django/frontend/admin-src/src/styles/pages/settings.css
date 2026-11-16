@@ -95,3 +95,11 @@
 .settings-history { width: 100%; font-size: var(--fs-xs); }
 .settings-history th { font-weight: 600; text-align: left; color: var(--text3); padding-right: var(--space-4); }
 .settings-history td { padding-right: var(--space-4); }
+
+/* Настройки → Уроки: два поля исключений рядом, на узком экране столбиком. */
+.record-url-rule__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+.record-url-rule__actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }

@@ -62,6 +62,9 @@ _TITLE_FK_FIELDS = {
     # reason_id — ссылка на справочник; в снимке записи уже есть reason_text
     # (название на момент отмены), а «причина: #4» читателю ничего не говорит.
     'lesson_cancellation': {'group_id', 'reason_id'},
+    # rule_id — всегда строка-singleton правила, читателю ничего не говорит.
+    'record_url_rule_teacher': {'teacher_id', 'rule_id'},
+    'record_url_rule_group': {'group_id', 'rule_id'},
 }
 
 
@@ -228,6 +231,12 @@ def humanize_title(ev: dict, lk: summary.Lookups) -> str:
     if entity == 'lesson_cancellation':
         when = summary._fmt_dt(data.get('lesson_date'), data.get('scheduled_time'))
         return f'Отмена урока «{lk.group(data.get("group_id"))}», {when}'
+    if entity == 'record_url_rule':
+        return 'Правило ссылки на запись урока'
+    if entity == 'record_url_rule_teacher':
+        return f'Исключение из правила ссылки: преподаватель {lk.teacher(data.get("teacher_id"))}'
+    if entity == 'record_url_rule_group':
+        return f'Исключение из правила ссылки: группа «{lk.group(data.get("group_id"))}»'
 
     return f'{summary._ENTITY_RU.get(entity, entity or "Запись")} #{obj_id}'
 

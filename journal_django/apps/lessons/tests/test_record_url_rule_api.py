@@ -145,6 +145,30 @@ def test_changelog_records_put(superadmin_client):
     assert RecordUrlRule.load().required is False
 
 
+def test_changelog_names_who_was_excepted(superadmin_client):
+    """Лента и детали называют преподавателя и группу, а не id строки-связки."""
+    ids = ensure_minimal_school()
+    _put(superadmin_client, required=False, teacher_ids=[ids['teacher_id']],
+         group_ids=[ids['group_id']])
+    _put(superadmin_client, required=False, teacher_ids=[], group_ids=[ids['group_id']])
+
+    rows = superadmin_client.get('/api/admin/changelog').json()['rows']
+    by_summary = {r['summary']: r for r in rows}
+    assert set(by_summary) == {
+        'Ссылка на запись урока: необязательна; исключения: '
+        '+ преподаватель Тест Преподаватель 1, + группа «Тест Группа 1»',
+        'Ссылка на запись урока: исключения: − преподаватель Тест Преподаватель 1',
+    }
+    removed = by_summary[
+        'Ссылка на запись урока: исключения: − преподаватель Тест Преподаватель 1']
+
+    detail = superadmin_client.get(f'/api/admin/changelog/{removed["id"]}').json()
+    link = next(e for e in detail['events'] if e['entity'] == 'record_url_rule_teacher')
+    assert link['description'] == (
+        'Исключение из правила ссылки снято: преподаватель Тест Преподаватель 1')
+    assert 'Тест Преподаватель 1' in link['human']['title']
+
+
 def test_inactive_group_exception_saved_and_returned(superadmin_client):
     """Неактивная группа в исключениях не теряется: PUT сохраняет, GET отдаёт."""
     from apps.groups.models import Group

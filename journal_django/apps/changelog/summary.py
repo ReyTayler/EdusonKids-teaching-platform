@@ -694,6 +694,14 @@ def describe_event(ev: dict, lk: Lookups) -> str:
             return f'Удалён урок {group} №{num} ({date})'
         return f'Урок {group} №{num} ({date}): {_diff_text(ev, lk)}'
 
+    # --- Исключения правила ссылки на запись: кого внесли, а не id строки-связки ---
+    if entity in ('record_url_rule_teacher', 'record_url_rule_group') and label != 'update':
+        who = (f'преподаватель {lk.teacher(data.get("teacher_id"))}'
+               if entity == 'record_url_rule_teacher'
+               else f'группа «{lk.group(data.get("group_id"))}»')
+        verb = 'добавлено' if label == 'insert' else 'снято'
+        return f'Исключение из правила ссылки {verb}: {who}'
+
     # --- Посещаемость ---
     if entity == 'attendance':
         student = lk.student(data.get('student_id'))
@@ -1335,6 +1343,37 @@ def _sum_task(op, by_entity, lk):
     return describe_event(ev, lk)
 
 
+# --- Правило ссылки на запись урока ---
+
+_RECORD_URL_RULE_LIST_LIMIT = 5
+
+
+def _sum_record_url_rule(op, by_entity, lk):
+    """«Ссылка на запись урока: необязательна; исключения: + группа «ВИ1001»,
+    − преподаватель Иванов». Без шаблона лента показывала бы «Исключение: группа
+    #74: добавлено» — id строки-связки, а не кого внесли в исключения."""
+    parts: list[str] = []
+    rule = _first(by_entity, 'record_url_rule', 'update')
+    required = ((rule or {}).get('pgh_diff') or {}).get('required')
+    if required:
+        parts.append('обязательна' if required[1] else 'необязательна')
+    changes: list[str] = []
+    for entity, noun, attr, name_of in (
+        ('record_url_rule_teacher', 'преподаватель', 'teacher_id', lk.teacher),
+        ('record_url_rule_group', 'группа', 'group_id', lambda gid: f'«{lk.group(gid)}»'),
+    ):
+        for ev in by_entity.get(entity, ()):
+            sign = {'insert': '+', 'delete': '−'}.get(ev['pgh_label'])
+            if sign:
+                changes.append(f'{sign} {noun} {name_of((ev.get("pgh_data") or {}).get(attr))}')
+    if changes:
+        shown = changes[:_RECORD_URL_RULE_LIST_LIMIT]
+        rest = len(changes) - len(shown)
+        tail = f' и ещё {_count(rest)}' if rest else ''
+        parts.append(f'исключения: {", ".join(shown)}{tail}')
+    return f'Ссылка на запись урока: {"; ".join(parts)}' if parts else None
+
+
 _BUILDERS: dict[str, Callable[[str, dict, Lookups], Optional[str]]] = {
     'group.create': _sum_group_create,
     'group.update': _sum_group_update,
@@ -1371,6 +1410,7 @@ _BUILDERS: dict[str, Callable[[str, dict, Lookups], Optional[str]]] = {
     'student.create': _sum_student,
     'student.update': _sum_student,
     'student.manager_update': _sum_student,
+    'lesson.record_url_rule': _sum_record_url_rule,
 }
 for _op in ('membership.create', 'membership.delete', 'membership.transfer',
             'membership.place', 'membership.update'):

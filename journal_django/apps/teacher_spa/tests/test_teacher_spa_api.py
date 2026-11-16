@@ -994,6 +994,9 @@ class TestSubmitLesson:
                              'tech_problems': False, 'comment': 'x'},
                 'group': '__spa_test_group__ пн 10:00',
                 'date': '2026-06-10',
+                # Сериализатор обходим: ссылку, обязательную по правилу школы,
+                # передаём сами — иначе отказ случится раньше записи payroll.
+                'recordUrl': VALID_RECORD_URL,
                 'students': [{'name': '__spa_test_student__', 'present': True}],
             })
 

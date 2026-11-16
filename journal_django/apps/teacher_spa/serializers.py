@@ -26,7 +26,6 @@ _SERVER_DERIVED_FIELDS = {
     'lessonType': 'Поле не принимается: тип урока выводится из плана занятий.',
 }
 
-RECORD_URL_REQUIRED = 'Вставьте ссылку на запись урока.'
 RECORD_URL_INVALID = 'Нужна ссылка на запись: адрес вида https://…'
 # Стандартный валидатор Django, но только веб-адреса: ftp/javascript/data и
 # прочие схемы ссылкой на видеозапись быть не могут.
@@ -52,11 +51,16 @@ class SubmitLessonSerializer(serializers.Serializer):
     """
     Порт submitLessonSchema из shared/schemas.js.
 
-    Обязательные: group, date, students, feedback, recordUrl. Необязательный:
+    Обязательные: group, date, students, feedback. Необязательные: recordUrl,
     plannedLessonId.
 
-    recordUrl — ссылка на запись урока (обязательна с 27.10.2026, решение
-    владельца): только адрес http(s) с доменом, пробелы по краям срезаются.
+    recordUrl — ссылка на запись урока: только адрес http(s) с доменом, пробелы по
+    краям срезаются; пустая строка, одни пробелы и null приводятся к None.
+    ОБЯЗАТЕЛЬНОСТЬ здесь не решается: с 16.11.2026 это правило школы с
+    исключениями по группе и записывающему преподавателю
+    (apps.lessons.record_url_rule, спека 2026-11-16-eduson-record-url-rule-design).
+    Его проверяет services.submit_lesson, когда группа и преподаватель уже известны,
+    и отдаёт ту же ошибку поля recordUrl, что и сериализатор.
 
     feedback — отзыв по уроку (этап 3 Eduson): урок без отзыва преподаватель
     сохранить не может, поэтому блок обязателен и проверяется ДО записи —
@@ -72,10 +76,10 @@ class SubmitLessonSerializer(serializers.Serializer):
     # trim_whitespace=False.
     group = serializers.CharField()
     date = DateStringField()
+    # Обязательность — правило школы (см. docstring), здесь только формат
+    # непустой ссылки. trim_whitespace (по умолчанию) превращает «   » в ''.
     recordUrl = serializers.CharField(
-        max_length=2000,
-        error_messages={'required': RECORD_URL_REQUIRED, 'blank': RECORD_URL_REQUIRED,
-                        'null': RECORD_URL_REQUIRED},
+        max_length=2000, required=False, allow_blank=True, allow_null=True,
     )
     students = StudentAttendanceSerializer(many=True)
     # Позиция курса (planned_lessons.id), по которой кликнули в календаре. НЕ
@@ -91,7 +95,11 @@ class SubmitLessonSerializer(serializers.Serializer):
                         'null': 'Заполните обратную связь по уроку.'},
     )
 
-    def validate_recordUrl(self, value: str) -> str:  # noqa: N802 — имя поля из API
+    def validate_recordUrl(self, value: str | None) -> str | None:  # noqa: N802 — поле API
+        # Пусто — «ссылки нет»: одно значение None для отсутствия ключа, null и
+        # пустой строки, чтобы сервис проверял обязательность одним условием.
+        if not value:
+            return None
         try:
             _record_url_validator(value)
         except DjangoValidationError:

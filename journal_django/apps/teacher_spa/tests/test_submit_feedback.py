@@ -159,8 +159,8 @@ def test_record_url_is_trimmed(account_fixture, group_fixture, student_fixture, 
 def test_record_url_required_and_must_be_link(
     record_url, account_fixture, group_fixture, student_fixture, cleanup,
 ):
-    """Ссылка на запись обязательна и должна быть адресом http(s): иначе 400 с
-    ошибкой по полю recordUrl, урок и отзыв не пишутся."""
+    """По правилу школы по умолчанию ссылка на запись обязательна и должна быть
+    адресом http(s): иначе 400 с ошибкой по полю recordUrl, урок и отзыв не пишутся."""
     resp = _client(account_fixture).post(URL, _payload(recordUrl=record_url), format='json')
     assert resp.status_code == 400, resp.json()
     assert 'recordUrl' in resp.json().get('details', {}), resp.json()
@@ -283,7 +283,7 @@ def test_feedback_db_failure_rolls_back_lesson(
 
     with pytest.raises(IntegrityError):
         services.submit_lesson(account_fixture, {
-            'group': GROUP, 'date': DATE,
+            'group': GROUP, 'date': DATE, 'recordUrl': VALID_RECORD_URL,
             'students': [{'name': STUDENT, 'present': True}],
             'feedback': {'understanding': 11, 'interest': 5,
                          'tech_problems': False, 'comment': 'x'},

@@ -15,8 +15,10 @@ from typing import Optional
 from apps.accounts.repository import get_by_id_with_teacher
 from apps.core.utils.dates import msk_today
 from apps.lessons.exceptions import (
-    LessonAlreadyRecorded, LessonWithoutPresentStudents, UnpaidAttendanceBlocked,
+    LessonAlreadyRecorded, LessonWithoutPresentStudents, RecordUrlRequired,
+    UnpaidAttendanceBlocked,
 )
+from apps.lessons.record_url_rule import load_rule
 from apps.lessons.services import record_lesson
 from apps.scheduling import repository as scheduling_repository
 from apps.teacher_spa import repository
@@ -160,7 +162,8 @@ def submit_lesson(account_id: int, validated: dict) -> dict:
     """
     group = validated['group']
     date = validated['date']
-    record_url = validated.get('recordUrl') or None
+    # None — ссылки нет (сериализатор сводит к нему и пустую строку, и null).
+    record_url = validated.get('recordUrl')
     students = validated['students']
     # Обязателен (SubmitLessonSerializer); пишется ядром в транзакции урока.
     feedback = validated['feedback']
@@ -220,6 +223,16 @@ def submit_lesson(account_id: int, validated: dict) -> dict:
     ):
         return {'_error': 'Занятие этой группы вам не назначено', '_status': 403}
     original_teacher_id = ids['group_owner_id'] if is_substitution else None
+
+    # Ссылка на запись: обязательна ли — правило школы с исключениями по группе и
+    # по ЗАПИСЫВАЮЩЕМУ преподавателю (заменяющему при замене; спека 2026-11-16).
+    # Здесь, а не в сериализаторе: только теперь известны группа и преподаватель.
+    # После проверки назначения — чтобы чужой преподаватель получал 403, а не 400
+    # про ссылку; до записи — урок и отзыв при отказе не пишутся.
+    if record_url is None and load_rule().is_required(
+        group_id=ids['group_id'], teacher_id=lesson_teacher_id,
+    ):
+        raise RecordUrlRequired()
 
     # Блокер порядка заполнения: пока у группы есть незакрытое занятие с плановой
     # датой РАНЬШЕ отмечаемой, писать урок нельзя. Иначе факт (дата = сегодня)

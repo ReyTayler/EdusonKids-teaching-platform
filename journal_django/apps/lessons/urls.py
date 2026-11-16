@@ -10,10 +10,12 @@ from django.urls import path
 
 from apps.lessons.views import (
     AttendanceCellView, AttendanceUnpaidSkipView, LessonDetailView, LessonListCreateView,
+    RecordUrlRuleView,
 )
 
 urlpatterns = [
     path('', LessonListCreateView.as_view(), name='lessons-list-create'),
+    path('/record-url-rule', RecordUrlRuleView.as_view(), name='lessons-record-url-rule'),
     path('/<int:pk>', LessonDetailView.as_view(), name='lessons-detail'),
     path(
         '/<int:lesson_id>/attendance/<int:student_id>',

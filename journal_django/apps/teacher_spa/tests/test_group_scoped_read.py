@@ -41,7 +41,11 @@ def _owner_id(group_id: int) -> int:
 
 
 def test_group_scoped_read_matches_own_read(group_with_student):
-    """Ветка группы совпадает с той же веткой из выборки по владельцу."""
+    """Ветка группы совпадает с той же веткой из выборки по владельцу.
+
+    Единственное законное отличие — recordUrlRequired: он считается для СМОТРЯЩЕГО
+    преподавателя, а у узкой выборки записи урока зрителя нет (обязательность
+    ссылки там проверяет сам submit_lesson)."""
     from apps.teacher_spa.repository import read_group_students, read_own_students
 
     group_id, _membership_id = group_with_student
@@ -53,7 +57,10 @@ def test_group_scoped_read_matches_own_read(group_with_student):
     owner = next(t for t, groups in full['data'].items() if name in groups)
 
     assert list(scoped['data']) == [owner], 'в узкой выборке ровно один преподаватель'
-    assert scoped['data'][owner][name] == full['data'][owner][name]
+    full_group = dict(full['data'][owner][name])
+    assert full_group.pop('recordUrlRequired') is True
+    assert 'recordUrlRequired' not in scoped['data'][owner][name]
+    assert scoped['data'][owner][name] == full_group
 
 
 def test_group_scoped_read_returns_only_that_group(group_with_student):
@@ -83,6 +90,7 @@ def test_group_scoped_read_touches_fewer_rows(group_with_student):
     """
     from django.test.utils import CaptureQueriesContext
 
+    from apps.lessons.record_url_rule import load_rule
     from apps.teacher_spa.repository import read_group_students, read_own_students
 
     group_id, _membership_id = group_with_student
@@ -93,8 +101,25 @@ def test_group_scoped_read_touches_fewer_rows(group_with_student):
         read_group_students(name)
     with CaptureQueriesContext(connection) as full_q:
         read_own_students(owner_id)
+    with CaptureQueriesContext(connection) as rule_q:
+        load_rule()
 
     scoped_sql = ' '.join(q['sql'] for q in scoped_q)
     assert 'name' in scoped_sql.lower(), 'узкая выборка обязана фильтровать по группе в SQL'
     # Число запросов при этом не растёт: оба пути делают фиксированный набор.
-    assert len(scoped_q) == len(full_q)
+    # Выдача по преподавателю сверх него читает ровно один снимок правила ссылки
+    # на запись (recordUrlRequired), запись урока — не читает его вовсе.
+    assert len(full_q) == len(scoped_q) + len(rule_q)
+    assert 'record_url_rule' not in scoped_sql
+    assert sum('record_url_rule' in q['sql'] for q in full_q) == len(rule_q)
+
+
+def test_rule_not_read_without_groups(teacher_fixture):
+    """У преподавателя без групп правило ссылки не читается: незачем."""
+    from django.test.utils import CaptureQueriesContext
+
+    from apps.teacher_spa.repository import read_own_students
+
+    with CaptureQueriesContext(connection) as ctx:
+        assert read_own_students(teacher_fixture[0]) == {'data': {}, 'index': {}}
+    assert not any('record_url_rule' in q['sql'] for q in ctx)

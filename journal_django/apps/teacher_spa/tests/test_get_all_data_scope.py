@@ -203,9 +203,16 @@ class TestGetAllDataScope:
         group_fixture, student_fixture, membership_fixture, foreign_group,
         django_assert_max_num_queries,
     ):
-        """Запросов — фиксированное число (без N+1 по группам и ученикам)."""
+        """Запросов — фиксированное число (без N+1 по группам и ученикам).
+
+        8 — выборка групп и учеников; +3 — один снимок правила ссылки на запись
+        (recordUrlRequired) на весь ответ, не на группу. Строка правила создаётся
+        заранее: без неё load_rule делает один запрос, и худший случай не мерился бы."""
+        from apps.lessons.models import RecordUrlRule
+
+        RecordUrlRule.load()
         client = _client('teacher', account_fixture)
-        with django_assert_max_num_queries(8):
+        with django_assert_max_num_queries(8 + 3):
             assert client.post('/api/getAllData', {}, format='json').status_code == 200
 
 

@@ -8,6 +8,8 @@
   PATCH  /api/admin/lessons/:id                               → 200 | 404
   DELETE /api/admin/lessons/:id                               → 204 | 404
   PATCH  /api/admin/lessons/:lessonId/attendance/:studentId   → 200 {ok:true} | 404
+  GET/PUT /api/admin/lessons/record-url-rule                  → правило ссылки на запись
+          (свои права — ReadStaffWriteSuperAdmin, см. RecordUrlRuleView)
 
 Права (ReadStaffWriteAdmin): GET — manager/admin/superadmin; POST/PATCH/DELETE
 и toggle посещаемости — только admin/superadmin (manager — read-only).
@@ -27,7 +29,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.permissions import ReadStaffWriteAdmin
+from apps.core.permissions import ReadStaffWriteAdmin, ReadStaffWriteSuperAdmin
 from apps.lessons import services
 from apps.lessons.exceptions import (
     AttendanceCompensatedElsewhere, AttendanceHasScheduledMakeup, AttendanceLockedByTransfer,
@@ -35,10 +37,12 @@ from apps.lessons.exceptions import (
     LessonAlreadyRecorded, LessonHasMakeupResolutions, LessonWithoutPresentStudents,
     SystemLessonProtected, UnpaidAttendanceBlocked,
 )
+from apps.lessons.record_url_rule import replace_rule, rule_payload
 from apps.lessons.serializers import (
     AttendanceUpdateSerializer,
     LessonCreateSerializer,
     LessonUpdateSerializer,
+    RecordUrlRuleInputSerializer,
     UnpaidSkipUpdateSerializer,
 )
 
@@ -291,3 +295,35 @@ class AttendanceUnpaidSkipView(APIView):
         if not ok:
             raise NotFound({'error': 'Not found'})
         return Response({'ok': True})
+
+
+class RecordUrlRuleView(APIView):
+    """
+    GET/PUT /api/admin/lessons/record-url-rule — правило «ссылка на запись урока
+    обязательна» и исключения из него (спека 2026-11-16).
+
+    GET → {required, teachers:[{id,name}], groups:[{id,name}], updated_at, updated_by}
+    PUT {required, teacher_ids, group_ids} → то же; наборы заменяются целиком.
+
+    Права (ReadStaffWriteSuperAdmin): читают manager/admin/superadmin, меняет только
+    superadmin — страница «Настройки» доступна только ему. Аудит — журнал изменений
+    (pghistory), не log_event: это настройка школы, а не событие безопасности.
+    """
+
+    permission_classes = [ReadStaffWriteSuperAdmin]
+
+    def get(self, request: Request) -> Response:
+        return Response(rule_payload())
+
+    def put(self, request: Request) -> Response:
+        serializer = RecordUrlRuleInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        user = request.user
+        replace_rule(
+            required=data['required'],
+            teacher_ids=data['teacher_ids'],
+            group_ids=data['group_ids'],
+            updated_by=user.full_name or user.email,
+        )
+        return Response(rule_payload())

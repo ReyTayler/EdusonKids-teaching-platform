@@ -24,6 +24,7 @@ from django.db.models import F, Min, Q
 from apps.finances.repository import balances_for_students
 from apps.groups.models import Group
 from apps.lessons.models import Lesson
+from apps.lessons.record_url_rule import load_rule
 from apps.memberships.models import GroupMembership
 from apps.scheduling.models import PlannedLesson
 from apps.teachers.models import Teacher
@@ -78,7 +79,7 @@ def read_own_students(teacher_id: int) -> dict:
     Группы, где преподаватель — владелец. Источник POST /api/getData: зовётся на
     каждый вход в кабинет, поэтому фильтр стоит в запросе, а не после чтения.
     """
-    return _build_from_rows(_membership_rows(owner_id=teacher_id))
+    return _build_from_rows(_membership_rows(owner_id=teacher_id), viewer_teacher_id=teacher_id)
 
 
 def read_teacher_students(teacher_id: int) -> dict:
@@ -87,7 +88,8 @@ def read_teacher_students(teacher_id: int) -> dict:
     не проведённое занятие (см. _membership_rows). Источник POST /api/getAllData —
     форма записи урока чужой группы ищет её здесь по имени.
     """
-    return _build_from_rows(_membership_rows(teacher_id=teacher_id))
+    return _build_from_rows(
+        _membership_rows(teacher_id=teacher_id), viewer_teacher_id=teacher_id)
 
 
 def read_group_students(group_name: str) -> dict:
@@ -171,7 +173,7 @@ def _membership_rows(
     )
 
 
-def _build_from_rows(rows: list[dict]) -> dict:
+def _build_from_rows(rows: list[dict], viewer_teacher_id: int | None = None) -> dict:
     """
     Сборка ответа из уже выбранных строк membership.
 
@@ -184,6 +186,11 @@ def _build_from_rows(rows: list[dict]) -> dict:
     НОМЕРА заполняемого урока, а его знает только форма (номер из плана занятия, по
     которому кликнули). Поэтому отсюда уходят ФАКТЫ, а не готовые флаги:
     `lockedThrough` у ученика и `skips` {номер урока: [имена]} у группы.
+
+    viewer_teacher_id — преподаватель, который СМОТРИТ (он же будет записывать
+    урок): для него в каждой группе считается `recordUrlRequired`. Узкая выборка
+    записи урока (read_group_students) его не передаёт: обязательность ссылки там
+    проверяет сам submit_lesson, и поля в её ответе нет.
     """
     balances = balances_for_students({r['student_id'] for r in rows})
     # Гард оплат (settings.PAYMENT_BALANCE_GUARD) решает, блокирует ли форма записи
@@ -192,6 +199,9 @@ def _build_from_rows(rows: list[dict]) -> dict:
     # получают именно GroupData, а сервер — источник правды (record_lesson
     # проверяет тот же флаг в assert_students_paid).
     payment_guard = bool(settings.PAYMENT_BALANCE_GUARD)
+    # Правило ссылки на запись — один снимок на весь ответ (три запроса), а не на
+    # каждую группу; без зрителя или без групп не читается вовсе.
+    record_url_rule = load_rule() if viewer_teacher_id is not None and rows else None
 
     data: dict = {}
     index: dict = {}
@@ -280,6 +290,9 @@ def _build_from_rows(rows: list[dict]) -> dict:
     for teacher_groups in data.values():
         for grp in teacher_groups.values():
             gid = grp.pop('_group_id')
+            if record_url_rule is not None:
+                grp['recordUrlRequired'] = record_url_rule.is_required(
+                    group_id=gid, teacher_id=viewer_teacher_id)
             # skips — по именам (прежний контракт формы), skipIds — те же маркеры
             # по id: у тёзок в одной группе имя не различает, кого помечать.
             names_by_id = {s['id']: s['name'] for s in grp['students']}

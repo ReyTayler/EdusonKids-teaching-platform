@@ -118,6 +118,39 @@ class UnpaidSkipUpdateSerializer(serializers.Serializer):
     value = serializers.BooleanField()
 
 
+class RecordUrlRuleInputSerializer(serializers.Serializer):
+    """PUT правила ссылки на запись: наборы исключений заменяются целиком.
+
+    Несуществующие id → 400, дубли схлопываются. Существование проверяется одним
+    запросом на набор, а не PrimaryKeyRelatedField: тот ходит в БД по каждому id.
+    Неактивные преподаватели и группы не отвергаются — иначе пересохранение правила
+    падало бы на исключении, ставшем неактивным уже после того, как его добавили."""
+
+    required = serializers.BooleanField()
+    # max_length — потолок тела: список уходит в один IN-запрос.
+    teacher_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), allow_empty=True, max_length=1000)
+    group_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), allow_empty=True, max_length=1000)
+
+    @staticmethod
+    def _existing(model, ids: list[int], label: str) -> list[int]:
+        unique = sorted(set(ids))
+        found = set(model.objects.filter(pk__in=unique).values_list('pk', flat=True))
+        missing = [i for i in unique if i not in found]
+        if missing:
+            raise serializers.ValidationError(f'{label} не найдены: {missing}')
+        return unique
+
+    def validate_teacher_ids(self, value):
+        from apps.teachers.models import Teacher
+        return self._existing(Teacher, value, 'Преподаватели')
+
+    def validate_group_ids(self, value):
+        from apps.groups.models import Group
+        return self._existing(Group, value, 'Группы')
+
+
 class LessonReadSerializer(serializers.Serializer):
     """
     Справочное представление урока (вывод getLessonFull).

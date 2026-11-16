@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -25,7 +26,9 @@ from apps.core.pagination import StandardPagination
 from apps.core.permissions import IsTeacher
 from apps.groups.course_length import effective_total_lessons_expr
 from apps.groups.models import Group
-from apps.lessons.exceptions import CoursePositionVanished, LessonAlreadyRecorded
+from apps.lessons.exceptions import (
+    CoursePositionVanished, LessonAlreadyRecorded, RecordUrlRequired,
+)
 from apps.lessons.models import Lesson, LessonAttendance
 from apps.teacher_spa import services
 from apps.teacher_spa.serializers import MyLessonSerializer, SubmitLessonSerializer
@@ -91,6 +94,10 @@ class SubmitLessonView(APIView):
             )
         except CoursePositionVanished as e:
             return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
+        except RecordUrlRequired as e:
+            # Тот же формат, что у ошибки сериализатора ({"error": "Validation
+            # failed", "details": {"recordUrl": [...]}}): форма читает details.recordUrl.
+            raise ValidationError({'recordUrl': [str(e)]})
         if '_error' in result:
             return Response(
                 {'error': result['_error']},

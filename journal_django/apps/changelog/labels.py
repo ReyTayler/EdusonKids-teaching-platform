@@ -74,6 +74,7 @@ RULES: list[tuple[str, re.Pattern, str]] = [
     ('POST', re.compile(r'^/api/admin/lessons$'), 'lesson.create'),
     ('PATCH', re.compile(r'^/api/admin/lessons/\d+$'), 'lesson.update'),
     ('DELETE', re.compile(r'^/api/admin/lessons/\d+$'), 'lesson.delete'),
+    ('PUT', re.compile(r'^/api/admin/lessons/record-url-rule$'), 'lesson.record_url_rule'),
     # extra_lessons (доп.уроки)
     ('POST', re.compile(r'^/api/admin/extra-lessons$'), 'extra_lesson.create'),
     ('POST', re.compile(r'^/api/admin/extra-lessons/manual$'), 'extra_lesson.manual_create'),

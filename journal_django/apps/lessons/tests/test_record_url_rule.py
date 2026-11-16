@@ -178,3 +178,45 @@ def test_rule_payload_names_sorted():
     assert body['groups'][0]['name']
     assert body['updated_by'] == 'Тест'
     assert body['updated_at'] is not None
+
+
+# ---------------------------------------------------------------------------
+# Каскад и неактивные группы
+# ---------------------------------------------------------------------------
+
+def test_deleting_group_or_teacher_deletes_its_exception():
+    """Свежие группа и преподаватель без связей: у minimal_school есть членства
+    с БД-каскадами, ORM-удалением их не снести."""
+    from django.utils import timezone
+
+    from apps.groups.models import Group
+    from apps.teachers.models import Teacher
+
+    ids = ensure_minimal_school()
+    from apps.directions.models import Direction
+    t = Teacher.objects.create(name='__rule_cascade_t__', created_at=timezone.now())
+    g = Group.objects.create(name='__rule_cascade_g__',
+                             direction=Direction.objects.get(pk=ids['direction_id']),
+                             teacher=t, is_individual=False, lesson_duration_minutes=60,
+                             lessons_per_week=1, created_at=timezone.now())
+    replace_rule(required=True, teacher_ids=[t.id, ids['teacher_id']],
+                 group_ids=[g.id, ids['group_id']], updated_by=None)
+
+    Group.objects.filter(id=g.id).delete()
+    assert not RecordUrlRuleGroup.objects.filter(group_id=g.id).exists()
+    assert RecordUrlRuleGroup.objects.filter(group_id=ids['group_id']).exists()
+
+    Teacher.objects.filter(id=t.id).delete()
+    assert not RecordUrlRuleTeacher.objects.filter(teacher_id=t.id).exists()
+    assert RecordUrlRuleTeacher.objects.filter(teacher_id=ids['teacher_id']).exists()
+    assert RecordUrlRule.objects.count() == 1          # само правило живо
+
+
+def test_inactive_group_exception_is_kept():
+    from apps.groups.models import Group
+
+    ids = ensure_minimal_school()
+    Group.objects.filter(id=ids['group_id']).update(active=False)
+    replace_rule(required=False, teacher_ids=[], group_ids=[ids['group_id']], updated_by=None)
+    assert load_rule().group_ids == frozenset({ids['group_id']})
+    assert RecordUrlRuleGroup.objects.filter(group_id=ids['group_id']).exists()

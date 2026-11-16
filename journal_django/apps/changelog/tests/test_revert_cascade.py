@@ -160,3 +160,51 @@ def test_revert_student_create_restricted_by_deal_human_text(superadmin_client):
     assert 'сделка продления' in error
     assert 'renewals.' not in error and 'RenewalDeal' not in error
     assert Student.objects.filter(id=st.id).exists()
+
+
+# ---------------------------------------------------------------------------
+# Исключения правила ссылки на запись (спека 2026-11-16): создание группы /
+# преподавателя, стоящих в исключениях, не откатывается — каскад стёр бы
+# неоткатываемые строки исключений. Отказ — с русской подписью сущности.
+# ---------------------------------------------------------------------------
+
+def test_revert_group_create_forbidden_when_group_is_rule_exception(dir_teacher):
+    from apps.groups.models import Group
+    from apps.lessons.models import RecordUrlRule, RecordUrlRuleGroup
+
+    direction, teacher = dir_teacher
+    with pghistory.context(url='/api/admin/groups', method='POST'):
+        g = Group.objects.create(name='__chg_rule_g__', direction=direction, teacher=teacher,
+                                 is_individual=False, lesson_duration_minutes=60,
+                                 lessons_per_week=1, created_at=timezone.now())
+    ctx = _insert_ctx('groups.Group', g.id)
+    # Исключение — в СВОЁМ контексте (иначе откат запретил бы revertable-фильтр).
+    with pghistory.context(url='/api/admin/lessons/record-url-rule', method='PUT'):
+        link = RecordUrlRuleGroup.objects.create(rule=RecordUrlRule.load(), group=g)
+
+    with pytest.raises(RevertForbidden) as exc:
+        revert.revert_context(ctx)
+    msg = str(exc.value)
+    assert 'исключения правила ссылки (группы)' in msg
+    assert 'RecordUrlRule' not in msg
+    assert Group.objects.filter(id=g.id).exists()
+    assert RecordUrlRuleGroup.objects.filter(id=link.id).exists()
+
+
+def test_revert_teacher_create_forbidden_when_teacher_is_rule_exception():
+    from apps.lessons.models import RecordUrlRule, RecordUrlRuleTeacher
+    from apps.teachers.models import Teacher
+
+    with pghistory.context(url='/api/admin/teachers', method='POST'):
+        t = Teacher.objects.create(name='__chg_rule_t__', created_at=timezone.now())
+    ctx = _insert_ctx('teachers.Teacher', t.id)
+    with pghistory.context(url='/api/admin/lessons/record-url-rule', method='PUT'):
+        link = RecordUrlRuleTeacher.objects.create(rule=RecordUrlRule.load(), teacher=t)
+
+    with pytest.raises(RevertForbidden) as exc:
+        revert.revert_context(ctx)
+    msg = str(exc.value)
+    assert 'исключения правила ссылки (преподаватели)' in msg
+    assert 'RecordUrlRule' not in msg
+    assert Teacher.objects.filter(id=t.id).exists()
+    assert RecordUrlRuleTeacher.objects.filter(id=link.id).exists()

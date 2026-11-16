@@ -143,3 +143,17 @@ def test_changelog_records_put(superadmin_client):
     detail = superadmin_client.get(f'/api/admin/changelog/{context_id}').json()
     assert detail['operation'] == 'lesson.record_url_rule'
     assert RecordUrlRule.load().required is False
+
+
+def test_inactive_group_exception_saved_and_returned(superadmin_client):
+    """Неактивная группа в исключениях не теряется: PUT сохраняет, GET отдаёт."""
+    from apps.groups.models import Group
+
+    ids = ensure_minimal_school()
+    Group.objects.filter(id=ids['group_id']).update(active=False)
+    r = _put(superadmin_client, required=False, group_ids=[ids['group_id']])
+    assert r.status_code == 200, r.content
+    assert [g['id'] for g in r.json()['groups']] == [ids['group_id']]
+    got = superadmin_client.get(URL).json()
+    assert [g['id'] for g in got['groups']] == [ids['group_id']]
+    assert load_rule().group_ids == frozenset({ids['group_id']})

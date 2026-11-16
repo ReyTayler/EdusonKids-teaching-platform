@@ -196,3 +196,87 @@ class LessonSkip(models.Model):
         indexes = [
             models.Index(fields=['group', 'lesson_number'], name='lesson_skips_group_num_idx'),
         ]
+
+
+@pghistory.track(
+    pghistory.InsertEvent(),
+    pghistory.UpdateEvent(),
+    pghistory.DeleteEvent(),
+)
+class RecordUrlRule(models.Model):
+    """
+    Правило школы: обязательна ли ссылка на запись урока. Ровно одна строка (singleton).
+
+    Исключения (преподаватели и группы) ПЕРЕВОРАЧИВАЮТ правило. Расчёт — только
+    apps.lessons.record_url_rule.RuleSnapshot.is_required. Спека
+    docs/specs/2026-11-16-eduson-record-url-rule-design.md.
+
+    Through-модели явные: автогенерируемую m2m-таблицу pghistory не трекает, а кто
+    и когда добавил исключение, в журнале изменений видно должно быть.
+    """
+
+    id = models.AutoField(primary_key=True)
+    required = models.BooleanField(default=True)
+    teachers = models.ManyToManyField(
+        'teachers.Teacher', through='RecordUrlRuleTeacher', related_name='+')
+    groups = models.ManyToManyField(
+        'groups.Group', through='RecordUrlRuleGroup', related_name='+')
+    updated_at = models.DateTimeField(auto_now=True)
+    # Подпись «кто сохранил» текстом, как у NotificationSettings: настоящий аудит —
+    # pghistory, жёсткий FK на учётку только добавил бы хрупкости.
+    updated_by = models.TextField(null=True, blank=True)
+
+    class Meta:
+        managed = True
+        db_table = 'record_url_rule'
+
+    @classmethod
+    def load(cls) -> 'RecordUrlRule':
+        """Единственная строка; создаётся при первом обращении (ссылка обязательна).
+
+        Пишет в БД — поэтому горячий путь (запись урока, выдача групп) читает
+        правило через record_url_rule.load_rule, а не через load()."""
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+@pghistory.track(
+    pghistory.InsertEvent(),
+    pghistory.UpdateEvent(),
+    pghistory.DeleteEvent(),
+)
+class RecordUrlRuleTeacher(models.Model):
+    """Преподаватель-исключение из правила ссылки на запись."""
+
+    id = models.AutoField(primary_key=True)
+    rule = models.ForeignKey(RecordUrlRule, on_delete=models.CASCADE, related_name='teacher_links')
+    # Каскада ORM достаточно: преподаватели в приложении удаляются только мягко
+    # (архитектурная сверка 2026-11-16), сырого DELETE FROM teachers нет.
+    teacher = models.ForeignKey('teachers.Teacher', on_delete=models.CASCADE, related_name='+')
+
+    class Meta:
+        managed = True
+        db_table = 'record_url_rule_teachers'
+        constraints = [
+            models.UniqueConstraint(fields=['rule', 'teacher'], name='record_url_rule_teacher_uniq'),
+        ]
+
+
+@pghistory.track(
+    pghistory.InsertEvent(),
+    pghistory.UpdateEvent(),
+    pghistory.DeleteEvent(),
+)
+class RecordUrlRuleGroup(models.Model):
+    """Группа-исключение из правила ссылки на запись."""
+
+    id = models.AutoField(primary_key=True)
+    rule = models.ForeignKey(RecordUrlRule, on_delete=models.CASCADE, related_name='group_links')
+    group = models.ForeignKey('groups.Group', on_delete=models.CASCADE, related_name='+')
+
+    class Meta:
+        managed = True
+        db_table = 'record_url_rule_groups'
+        constraints = [
+            models.UniqueConstraint(fields=['rule', 'group'], name='record_url_rule_group_uniq'),
+        ]

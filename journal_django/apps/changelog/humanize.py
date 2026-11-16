@@ -340,6 +340,9 @@ FORBIDDEN_RU = {
     'personal_rate_term': 'периоды персональных ставок',
     'cancellation_reason': 'причины отмен',
     'lesson_cancellation': 'записи об отменах уроков',
+    'record_url_rule': 'правило ссылки на запись',
+    'record_url_rule_teacher': 'исключения правила ссылки (преподаватели)',
+    'record_url_rule_group': 'исключения правила ссылки (группы)',
 }
 
 

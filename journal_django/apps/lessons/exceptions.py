@@ -193,3 +193,18 @@ class LastPresentStudentRemoval(LessonWithoutPresentStudents):
             'Нельзя снять отметку с последнего пришедшего — урок без присутствующих '
             'не существует; если урок не состоялся — удалите его и отмените занятие.'
         )
+
+
+RECORD_URL_REQUIRED_MSG = 'Вставьте ссылку на запись урока.'
+
+
+class RecordUrlRequired(Exception):
+    """
+    Ссылка на запись обязательна по правилу школы (с учётом исключений по группе
+    и записывающему преподавателю — apps.lessons.record_url_rule), а её не
+    прислали. Вьюха отдаёт 400 в формате ошибки сериализатора
+    ({"recordUrl": [...]}), чтобы форма урока разобрала её тем же кодом.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(RECORD_URL_REQUIRED_MSG)

@@ -260,6 +260,9 @@ _ENTITY_RU = {
     'telegram_recipient': 'Получатель в Telegram',
     'absence_resolution': 'Пропуск', 'lesson_skip': 'Неоплачиваемый пропуск',
     'cancellation_reason': 'Причина отмены', 'lesson_cancellation': 'Отмена урока',
+    'record_url_rule': 'Правило ссылки на запись',
+    'record_url_rule_teacher': 'Исключение: преподаватель',
+    'record_url_rule_group': 'Исключение: группа',
 }
 
 
@@ -294,6 +297,8 @@ _ENTITY_MANY_RU = {
     'personal_rate_term': 'периодов ставки', 'pay_rate_direction': 'ставок направлений',
     'absence_resolution': 'пропусков', 'lesson_skip': 'неоплачиваемых пропусков',
     'cancellation_reason': 'причин отмен', 'lesson_cancellation': 'отмен уроков',
+    'record_url_rule_teacher': 'исключений-преподавателей',
+    'record_url_rule_group': 'исключений-групп',
 }
 
 
@@ -378,6 +383,8 @@ FIELD_RU = {
     'reason_code': 'причина', 'title': 'название', 'due_date': 'срок',
     'priority': 'приоритет', 'resolution': 'итог', 'closed_at': 'закрыта',
     'label': 'название',
+    # Правило ссылки на запись урока
+    'required': 'обязательность',
 }
 
 

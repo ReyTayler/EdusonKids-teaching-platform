@@ -40,6 +40,13 @@ TRACKED: dict[str, TrackedModel] = {
     # а состояние сервиса), но кто и когда выключил — знать нужно.
     'notifications.NotificationSettings': TrackedModel('notification_settings', False, 15),
     'notifications.TelegramRecipient': TrackedModel('telegram_recipient', False, 15),
+    # Правило «ссылка на запись обязательна» и исключения из него (спека
+    # 2026-11-16): настройка, а не доменные данные — откат запрещён (правит только
+    # superadmin со страницы «Настройки»), но кто и когда менял, видно. Ссылки
+    # исключений — после групп (20) и преподавателей (10).
+    'lessons.RecordUrlRule':          TrackedModel('record_url_rule', False, 15),
+    'lessons.RecordUrlRuleTeacher':   TrackedModel('record_url_rule_teacher', False, 25),
+    'lessons.RecordUrlRuleGroup':     TrackedModel('record_url_rule_group', False, 25),
     'groups.Group':                   TrackedModel('group', True, 20),
     'groups.GroupScheduleSlot':       TrackedModel('schedule_slot', True, 30),
     'memberships.GroupMembership':    TrackedModel('membership', True, 30),

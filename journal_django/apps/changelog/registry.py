@@ -103,6 +103,10 @@ TRACKED: dict[str, TrackedModel] = {
     # отдельно пишется в TaskActivity (kind='assign').
     'taskboard.Task':         TrackedModel('task', True, 30),
     'taskboard.TaskActivity': TrackedModel('task_activity', False, 40),
+    # График работы преподавателя: шаблон и исключения перезаписываются целиком
+    # по дню — построчный откат собрал бы несогласованный день, поэтому только след.
+    'availability.AvailabilityRule':     TrackedModel('availability_rule', False, 20),
+    'availability.AvailabilityOverride': TrackedModel('availability_override', False, 20),
 }
 
 

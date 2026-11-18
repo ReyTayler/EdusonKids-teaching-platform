@@ -263,6 +263,7 @@ _ENTITY_RU = {
     'record_url_rule': 'Правило ссылки на запись',
     'record_url_rule_teacher': 'Исключение: преподаватель',
     'record_url_rule_group': 'Исключение: группа',
+    'availability_rule': 'Окно графика', 'availability_override': 'Исключение графика',
 }
 
 
@@ -299,6 +300,7 @@ _ENTITY_MANY_RU = {
     'cancellation_reason': 'причин отмен', 'lesson_cancellation': 'отмен уроков',
     'record_url_rule_teacher': 'исключений-преподавателей',
     'record_url_rule_group': 'исключений-групп',
+    'availability_rule': 'окон графика', 'availability_override': 'исключений графика',
 }
 
 

@@ -250,6 +250,8 @@ export const CHANGELOG_ENTITY_LABELS: Record<string, string> = {
   record_url_rule:         'Правило ссылки на запись',
   record_url_rule_teacher: 'Исключение: преподаватель',
   record_url_rule_group:   'Исключение: группа',
+  availability_rule:     'Окно графика',
+  availability_override: 'Исключение графика',
 };
 
 export const CHANGELOG_ENTITY_OPTIONS: { value: string; label: string }[] =

@@ -38,7 +38,7 @@ export default function CalendarPage() {
     return { from: isoDate(monday), to: isoDate(addDays(monday, 6)) };
   });
 
-  const { data, isLoading, isError, isFetching } = useCalendar(range.from, range.to);
+  const { data, isLoading, isError, isFetching, isPlaceholderData } = useCalendar(range.from, range.to);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [details, setDetails] = useState<Occurrence | null>(null);
@@ -61,6 +61,7 @@ export default function CalendarPage() {
       <CalendarView
         occurrences={data?.occurrences ?? []}
         unscheduled={data?.unscheduled ?? []}
+        availability={isPlaceholderData ? null : data?.availability ?? null}
         isLoading={isLoading}
         isError={isError}
         isFetching={isFetching}

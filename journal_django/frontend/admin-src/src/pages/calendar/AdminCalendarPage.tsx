@@ -36,7 +36,7 @@ export default function AdminCalendarPage() {
     [teachers.data],
   );
 
-  const { data, isLoading, isError, isFetching } = useAdminCalendar(teacherId, range.from, range.to);
+  const { data, isLoading, isError, isFetching, isPlaceholderData } = useAdminCalendar(teacherId, range.from, range.to);
 
   const onVisibleRangeChange = useCallback((from: string, to: string) => {
     setRange((prev) => (prev.from === from && prev.to === to ? prev : { from, to }));
@@ -69,6 +69,7 @@ export default function AdminCalendarPage() {
       <CalendarView
         occurrences={data?.occurrences ?? []}
         unscheduled={data?.unscheduled ?? []}
+        availability={isPlaceholderData ? null : data?.availability ?? null}
         isLoading={isLoading}
         isError={isError}
         isFetching={isFetching}

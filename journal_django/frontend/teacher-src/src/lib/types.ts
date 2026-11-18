@@ -1,3 +1,5 @@
+import type { AvailabilityWindows } from '@shared/shared/availability/types';
+
 /**
  * Базовая форма занятия. Осталась от /api/report (эндпоинт удалён 2026-09-30) — на ней
  * держатся статусы и определение предмета по группе (lib/subjects.ts).
@@ -252,6 +254,8 @@ export interface CalendarResponse {
   occurrences: Occurrence[];
   unscheduled: UnscheduledGroup[];
   window: { from: string; to: string };
+  /** Окна работы преподавателя по датам; null — графика нет. */
+  availability?: AvailabilityWindows;
 }
 
 /**

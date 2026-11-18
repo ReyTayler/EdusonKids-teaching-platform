@@ -1,3 +1,5 @@
+import type { AvailabilityWindows } from '../availability/types';
+
 /**
  * Occurrence — data-agnostic форма занятия, которую понимает CalendarView.
  * Копия подмножества teacher-src/src/lib/types.ts (форма GET /api/calendar,
@@ -89,4 +91,6 @@ export interface CalendarResponse {
   occurrences: Occurrence[];
   unscheduled: UnscheduledGroup[];
   window: { from: string; to: string };
+  /** Окна работы преподавателя по датам; null — графика нет / не один преподаватель. */
+  availability?: AvailabilityWindows;
 }

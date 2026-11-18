@@ -9,6 +9,7 @@ import { WeekGrid } from './WeekGrid';
 import { MonthGrid } from './MonthGrid';
 import { DayList } from './DayList';
 import { LessonPopup, type LessonActionKind } from './LessonPopup';
+import type { AvailabilityWindows } from '../availability/types';
 
 function useIsNarrow(bp = 768): boolean {
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < bp);
@@ -64,6 +65,12 @@ export interface CalendarViewProps {
   occurrences: Occurrence[];
   /** Группы без расписания/даты старта — бейдж data-quality в легенде. */
   unscheduled: UnscheduledGroup[];
+  /**
+   * График работы преподавателя на окно (дата → интервалы). Не null — недельная
+   * сетка красит закрытое время приглушённой поверхностью, рабочие окна — основной.
+   * null/не передан — графика нет (или в admin выбран режим «Все преподаватели»).
+   */
+  availability?: AvailabilityWindows;
   isLoading: boolean;
   isError: boolean;
   /** Фоновое обновление (перелистывание при уже показанных прежних данных). */
@@ -134,6 +141,7 @@ export interface CalendarViewProps {
 export function CalendarView({
   occurrences: occAll,
   unscheduled,
+  availability,
   isLoading,
   isError,
   isFetching,
@@ -394,12 +402,15 @@ export function CalendarView({
         <div className="cal-skel" />
       ) : isError ? (
         <div className="cal-error">Не удалось загрузить расписание. Попробуйте обновить страницу.</div>
-      ) : (effectiveView === 'month' ? monthLessonsByDate.size === 0 : lessons.length === 0) ? (
+      ) : (effectiveView === 'month'
+        ? monthLessonsByDate.size === 0
+        // Недельная сетка с графиком нужна и без уроков — на ней видны рабочие окна.
+        : lessons.length === 0 && !(effectiveView === 'week' && availability)) ? (
         <div className="cal-empty">{effectiveView === 'month' ? 'В этом месяце занятий нет.' : 'На этой неделе занятий нет.'}</div>
       ) : (
         <>
           {effectiveView === 'week'
-            ? <WeekGrid monday={monday} occurrences={timedLessons} today={today} onSelect={handleSelect} resolveColor={colorOf} />
+            ? <WeekGrid monday={monday} occurrences={timedLessons} today={today} onSelect={handleSelect} resolveColor={colorOf} availability={availability} />
             : effectiveView === 'month'
             ? <MonthGrid monthAnchor={monthAnchor} lessonsByDate={monthLessonsByDate} today={today} onSelect={handleSelect} resolveColor={colorOf} />
             : <DayList monday={monday} occurrences={lessons} today={today} onSelect={handleSelect} resolveColor={colorOf} />}

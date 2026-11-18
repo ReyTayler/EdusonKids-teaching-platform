@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Occurrence } from './types';
-import { addDays, dayMonth, sameDay, columnIndexOfIsoDate } from './lib';
+import { addDays, dayMonth, sameDay, columnIndexOfIsoDate, isoDate } from './lib';
+import type { AvailabilityWindows } from '../availability/types';
+import { toMinutes } from '../availability/grid';
 
 const ROW_H = 56;
 const HOUR_START = 8;
@@ -18,6 +20,11 @@ function topPx(time: string): number {
   const [h, m] = time.split(':').map(Number);
   const hh = Math.min(Math.max(h, HOUR_START), HOUR_END);
   return (hh - HOUR_START) * ROW_H + (m / 60) * ROW_H;
+}
+
+/** Граница рабочего окна в px БЕЗ зажима по HOUR_END: окно до 22:00 доходит до низа сетки. */
+function windowPx(time: string): number {
+  return ((toMinutes(time) - HOUR_START * 60) / 60) * ROW_H;
 }
 
 /** 'HH:MM' + длительность (мин) → время окончания 'HH:MM' (диапазон в блоке). */
@@ -100,12 +107,15 @@ export function WeekGrid({
   today,
   onSelect,
   resolveColor,
+  availability,
 }: {
   monday: Date;
   occurrences: Occurrence[];
   today: Date;
   onSelect: (occ: Occurrence, e: React.MouseEvent | React.KeyboardEvent) => void;
   resolveColor: (occ: Occurrence) => string;
+  /** График работы: не null — колонки «закрыты», рабочие окна подсвечены. */
+  availability?: AvailabilityWindows;
 }) {
   const cols = Array.from({ length: 7 }, (_, c) => {
     const date = addDays(monday, c);
@@ -163,12 +173,24 @@ export function WeekGrid({
           ))}
         </div>
 
-        {cols.map(({ c, isToday }) => (
+        {cols.map(({ c, date, isToday }) => (
           <div
             key={c}
-            className={`cal-col${isToday ? ' today' : ''}`}
+            className={`cal-col${isToday ? ' today' : ''}${availability ? ' has-availability' : ''}`}
             style={{ height: bodyHeight }}
           >
+            {/* Рабочие окна — до блоков уроков, чтобы уроки были поверх. */}
+            {availability && (availability[isoDate(date)] ?? []).map(([start, end], i) => {
+              const top = windowPx(start);
+              return (
+                <div
+                  key={`av-${i}`}
+                  className="cal-avail"
+                  style={{ top, height: windowPx(end) - top, ['--avail-top' as any]: `${top}px` }}
+                  aria-hidden
+                />
+              );
+            })}
             {laidByCol[c].map(({ occ, key, top, height, lane, lanes }) => (
               <div
                 key={key}

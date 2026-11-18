@@ -154,6 +154,9 @@
   --accent-hover:  #333333;
   --accent-soft:   #f4f4f4;
   --accent-soft-h: #ededed;
+  /* График работы: «окно» заметнее «закрыто» в обеих темах (в тёмной --bg2 темнее --bg3, поэтому своя пара). */
+  --avail-open:   var(--bg2);
+  --avail-closed: var(--bg3);
   --on-accent:     #ffffff;
 
   /* Статусы — тройки ink / bg / line (рецепт бейджа: заливка + рамка + тёмный
@@ -349,6 +352,8 @@
   --accent-hover:  #d4d4d4;
   --accent-soft:   #1f1f1f;
   --accent-soft-h: #292929;
+  --avail-open:   var(--bg4);
+  --avail-closed: var(--bg);
   --on-accent:     #000000;
 
   --ok:   #3dd9a0;  --ok-bg:   #0d2a21;  --ok-line:   #14553f;

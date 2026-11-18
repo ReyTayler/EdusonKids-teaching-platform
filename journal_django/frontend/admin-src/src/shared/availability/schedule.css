@@ -1,0 +1,166 @@
+/* ── РЕДАКТОР ГРАФИКА РАБОТЫ (визуальный язык Eduson) ──
+   Монохром, линии вместо теней, акцент — чёрный (в тёмной теме белый).
+   «Окно» = --avail-open, «закрыто» = --avail-closed, линии --line: как фон календаря
+   (.cal-col.has-availability / .cal-avail в calendar.css). Только токены. */
+
+/* Высота строки сетки; ScheduleGrid задаёт ту же величину инлайном (ROW_H) — держать в синхроне. */
+.sched { --sched-row-h: 24px; display: flex; flex-direction: column; gap: var(--space-4); }
+
+.sched-note {
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg3); border: 1px solid var(--line); border-radius: var(--r-sm);
+  font-size: var(--fs-sm); color: var(--text3);
+}
+.sched-state {
+  padding: var(--space-6); text-align: center;
+  font-size: var(--fs-md); color: var(--text3);
+}
+.sched-error {
+  border: 1px solid var(--bad-line); background: var(--bad-bg); color: var(--bad);
+  border-radius: var(--r-sm); padding: var(--space-2) var(--space-3); font-size: var(--fs-sm);
+}
+
+.sched-bar { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.sched-actions { display: flex; gap: var(--space-2); margin-left: auto; }
+
+/* Сегмент-переключатель — как .seg/.seg-btn календаря, но свои классы:
+   calendar.css подключается не на каждой странице, где живёт редактор. */
+.sched-seg {
+  display: inline-flex; background: var(--bg2); border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); padding: 2px; gap: 2px;
+}
+.sched-seg button {
+  height: 26px; padding: 0 var(--space-3); border: none; border-radius: var(--r-xs);
+  background: transparent; color: var(--text2); cursor: pointer;
+  font-family: inherit; font-size: var(--fs-xs); font-weight: 500;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.sched-seg button:hover:not(:disabled):not([aria-pressed='true']) { color: var(--text); }
+.sched-seg button:disabled { opacity: 0.5; cursor: not-allowed; }
+.sched-seg button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); }
+
+.sched-weeknav { display: flex; align-items: center; gap: var(--space-2); }
+.sched-weeklabel {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm); color: var(--text2); min-width: 96px; text-align: center;
+}
+
+/* Кнопки — как .cal-nav-btn/.cal-today-btn: рамка --line-2, при наведении рамка и текст темнее. */
+.sched-btn {
+  min-width: 32px; height: 32px; padding: 0 var(--space-3);
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm); border: 1px solid var(--line-2);
+  background: var(--bg2); color: var(--text2); cursor: pointer;
+  font-family: inherit; font-size: var(--fs-xs); font-weight: 500;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.sched-btn:hover:not(:disabled) { border-color: var(--text3); color: var(--text); }
+.sched-btn:active:not(:disabled) { transform: var(--press); }
+.sched-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sched-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.sched-btn--primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--on-accent); }
+
+.sched-seg button:focus-visible,
+.sched-btn:focus-visible,
+.sched-reset:focus-visible,
+.sched-x:focus-visible { outline: 2px solid var(--text3); outline-offset: 1px; }
+
+.sched-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) 260px;
+  gap: var(--space-5); align-items: start;
+}
+@media (max-width: 900px) { .sched-layout { grid-template-columns: minmax(0, 1fr); } }
+
+.sched-skeleton {
+  /* 28 строк + шапка (~56px: две строки заголовка в режиме недели) — без прыжка при появлении сетки. */
+  height: calc(var(--sched-row-h) * 28 + 56px); border-radius: var(--r);
+  background: var(--bg3); border: 1px solid var(--line);
+  animation: sched-pulse 1.4s ease-in-out infinite;
+}
+.sched-skeleton--side { height: 320px; }
+@keyframes sched-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* Сетка */
+.sched-wrap {
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--bg2); overflow: hidden;
+}
+.sched-head, .sched-body { display: grid; grid-template-columns: 56px repeat(7, 1fr); }
+.sched-head { border-bottom: 1px solid var(--line); }
+.sched-col-head {
+  padding: var(--space-2) var(--space-1); text-align: center;
+  border-left: 1px solid var(--line);
+}
+.sched-col-head.is-today { background: var(--accent-soft); }
+.sched-col-day { font-size: var(--fs-xs); font-weight: 500; color: var(--text2); }
+.sched-col-head.is-today .sched-col-day { color: var(--text); font-weight: 600; }
+.sched-col-date {
+  display: flex; align-items: center; justify-content: center; gap: var(--space-1);
+  font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text3); margin-top: 1px;
+}
+.sched-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.sched-reset {
+  border: none; background: transparent; padding: 0 var(--space-1); cursor: pointer;
+  font-size: var(--fs-sm); line-height: 1; color: var(--text3);
+}
+.sched-reset:hover:not(:disabled) { color: var(--text); }
+.sched-reset:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.sched-body { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.sched-gutter { position: relative; }
+.sched-time {
+  position: absolute; right: var(--space-2); transform: translateY(-6px);
+  font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text3);
+}
+.sched-col { position: relative; border-left: 1px solid var(--line); }
+
+/* Закрыто = --avail-closed, окно = --avail-open (как фон календаря). Полчаса — линия --line,
+   час — чуть темнее, --line-2 (в тёмной теме --line на --avail-open почти сливается). Наведение — контурная рамка, а не заливка: заливка в любой теме
+   совпала бы по тону с одним из двух состояний. */
+.sched-cell {
+  height: var(--sched-row-h); border-bottom: 1px solid var(--line);
+  cursor: pointer; background-color: var(--avail-closed);
+  transition: background-color var(--dur-1) var(--ease);
+}
+.sched-cell:nth-child(2n) { border-bottom-color: var(--line-2); }
+.sched-cell.is-open { background-color: var(--avail-open); }
+.sched-cell:not(.is-locked):hover { outline: 1px solid var(--text3); outline-offset: -1px; }
+.sched-cell.is-locked { cursor: not-allowed; }
+.sched-cell.is-locked:not(.is-open) { opacity: 0.7; }
+
+/* Уроки недели — подсказка поверх сетки, мыши не мешают. Монохром: цвет курса
+   здесь не нужен, важно лишь «время занято». */
+.sched-lesson {
+  /* 2px — оптический зазор у границ колонки, как у .lb в календаре */
+  position: absolute; left: 2px; right: 2px; pointer-events: none; overflow: hidden;
+  padding: 1px var(--space-1); border-radius: var(--r-xs);
+  border: 1px solid var(--line-3); border-left: 2px solid var(--text);
+  background: var(--accent-soft-h);
+  font-size: var(--fs-2xs); color: var(--text); line-height: 1.2;
+}
+
+/* Сводка */
+.sched-summary {
+  background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r);
+  padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2);
+  font-size: var(--fs-sm); color: var(--text2);
+}
+.sched-sum-title {
+  font-size: var(--fs-2xs); font-weight: 500; color: var(--text3);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.sched-sum-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.sched-sum-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.sched-sum-dow { font-weight: 600; color: var(--text); min-width: 28px; }
+.sched-sum-list li > span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.sched-sum-total {
+  padding-top: var(--space-2); margin-bottom: var(--space-2); border-top: 1px solid var(--line);
+  font-weight: 600; color: var(--text);
+}
+.sched-sum-empty { color: var(--text3); }
+.sched-x {
+  border: none; background: transparent; cursor: pointer; padding: 0 var(--space-1);
+  color: var(--text3); font-size: var(--fs-sm);
+}
+.sched-x:hover:not(:disabled) { color: var(--bad); }
+.sched-x:disabled { opacity: 0.5; cursor: not-allowed; }

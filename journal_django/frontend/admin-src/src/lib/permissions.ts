@@ -26,6 +26,8 @@ export const canWriteTeachers = isSuper;
 export const canWriteDirections = isSuper;
 export const canWriteSubscriptions = isSuper; // абонементы + скидки
 export const canWriteLessons = isAdminUp;     // CRUD урока + посещаемость
+// График работы преподавателя — manager/admin/superadmin (бэк: IsManagerOrAdmin).
+export const canEditTeacherSchedule = (r?: Role | null) => r === 'manager' || isAdminUp(r);
 // «Записать занятие в долг» — снять блок по отрицательному балансу ученика.
 // Только суперадмин: это обход финансового гарда, а не обычная правка. Бэк
 // зажимает то же самое (apps/lessons/views.py::_reject_debt_override → 403).

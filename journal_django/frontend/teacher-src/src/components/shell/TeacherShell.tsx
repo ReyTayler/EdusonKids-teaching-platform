@@ -8,6 +8,7 @@ import { Dialog } from '@shared/components/ui/Dialog';
 /** Разделы кабинета. Вкладки — только текстом, без иконок (язык Eduson). */
 const SECTIONS = [
   { key: 'calendar', label: 'Календарь', path: '/calendar' },
+  { key: 'schedule', label: 'График работы', path: '/schedule' },
   { key: 'groups', label: 'Мои группы', path: '/groups' },
   { key: 'lessons', label: 'Мои уроки', path: '/lessons' },
   { key: 'report', label: 'Отчёт по уроку', path: '/report' },

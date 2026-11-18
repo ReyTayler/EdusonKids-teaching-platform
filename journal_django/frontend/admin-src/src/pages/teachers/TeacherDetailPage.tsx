@@ -23,10 +23,11 @@ import TeacherMonthDetails from './TeacherMonthDetails';
 import TeacherAttentionBar from './TeacherAttentionBar';
 import TeacherGroupsBlock from './TeacherGroupsBlock';
 import { useAuth } from '../../hooks/useAuth';
-import { canSeeChangelog, canWriteTeachers, type Role } from '../../lib/permissions';
+import TeacherScheduleTab from './TeacherScheduleTab';
+import { canEditTeacherSchedule, canSeeChangelog, canWriteTeachers, type Role } from '../../lib/permissions';
 import { plural } from '../../lib/labels';
 
-const TEACHER_TABS = ['overview', 'groups', 'data', 'history'] as const;
+const TEACHER_TABS = ['overview', 'groups', 'schedule', 'data', 'history'] as const;
 type TeacherTab = (typeof TEACHER_TABS)[number];
 const DEFAULT_TAB: TeacherTab = 'overview';
 
@@ -171,6 +172,19 @@ export default function TeacherDetailPage() {
       label: 'Группы',
       content: (
         <TeacherGroupsBlock groups={groups} progress={stats?.group_progress ?? []} />
+      ),
+    },
+    {
+      value: 'schedule',
+      label: 'График работы',
+      // key: маршрут не ремоунтит страницу при смене id — без него черновик
+      // редактора перетёк бы к другому преподавателю.
+      content: (
+        <TeacherScheduleTab
+          key={teacher.id}
+          teacher={teacher}
+          canEdit={canEditTeacherSchedule(me?.role as Role)}
+        />
       ),
     },
     {

@@ -99,9 +99,10 @@
 .topnav__who-name { display: block; color: var(--text); font-weight: 500; white-space: nowrap; }
 .topnav__who-role { display: block; font-size: var(--fs-2xs); color: var(--text3); white-space: nowrap; }
 
-/* Узкий режим: вкладки прячутся, остаётся кнопка меню. */
+/* Узкий режим: вкладки прячутся, остаётся кнопка меню. Семь вкладок плюс знак и
+   правая часть занимают ~1220px, поэтому порог 1280px — с запасом на шрифт. */
 .topnav__burger { display: none; }
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
   .topnav__tabs { display: none; }
   .topnav__burger { display: inline-flex; }
 }

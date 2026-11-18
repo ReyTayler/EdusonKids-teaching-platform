@@ -15,6 +15,7 @@ import ReportPage from './pages/report/ReportPage';
 // календаре, ни в отчёте, то есть на пяти экранах из шести.
 const KnowledgeLibraryPage = lazy(() => import('./pages/knowledge/KnowledgeLibraryPage'));
 const KnowledgeDocumentPage = lazy(() => import('./pages/knowledge/KnowledgeDocumentPage'));
+const SchedulePage = lazy(() => import('./pages/schedule/SchedulePage'));
 
 // basename роутера = Vite base ('/teacher/' в финале, '/teacher-next/' в preview).
 // Маршруты/ссылки — ОТНОСИТЕЛЬНЫЕ (без префикса), чтобы один код работал под обоими
@@ -29,6 +30,7 @@ export function App() {
           <Route element={<TeacherShell />}>
             <Route path="/" element={<Navigate to="/calendar" replace />} />
             <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/schedule" element={<Lazy><SchedulePage /></Lazy>} />
             <Route path="/groups" element={<GroupsPage />} />
             <Route path="/groups/:group" element={<GroupDetailPage />} />
             <Route path="/lessons" element={<MyLessonsPage />} />

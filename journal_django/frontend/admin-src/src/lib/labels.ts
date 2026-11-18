@@ -216,6 +216,9 @@ export const CHANGELOG_OPERATION_LABELS:Record<string, string> = {
   'cancellation_reason.create':    'Новая причина отмены',
   'cancellation_reason.update':    'Изменение причины отмены',
   'cancellation_reason.delete':    'Удаление причины отмены',
+  'schedule.template':             'График работы: шаблон недели',
+  'schedule.week':                 'График работы: изменения недели',
+  'schedule.override_clear':       'График работы: сброс дня к шаблону',
   other:                           'Другое действие',
 };
 

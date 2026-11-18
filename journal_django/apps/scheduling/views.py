@@ -2,7 +2,10 @@
 Тонкая вьюха календаря плановых занятий (role=teacher).
 
 GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
-  → { occurrences, unscheduled, window }
+  → { occurrences, unscheduled, window, availability }
+
+availability — фон «график работы» ({дата: [[HH:MM, HH:MM], ...]}) или None,
+если графика нет (у admin-календаря — и когда не выбран один преподаватель).
 
 Скоуп — ТОЛЬКО группы текущего преподавателя (request.user.teacher_id): кабинет
 не показывает чужие расписания. Вся логика — в services.py.
@@ -18,6 +21,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.availability import services as availability_services
 from apps.core.permissions import IsManagerOrAdmin, IsSuperAdmin, IsTeacher
 from apps.scheduling import services
 from apps.scheduling.exceptions import PlanLessonChanged, PlanResyncBlocked
@@ -78,6 +82,9 @@ class CalendarView(APIView):
         d_from, d_to = window
 
         result = services.build_calendar(d_from, d_to, teacher_id=request.user.teacher_id)
+        # Фон «график работы» (белое/серое); None — графика нет.
+        result['availability'] = availability_services.windows_payload(
+            request.user.teacher_id, d_from, d_to)
         return Response(result)
 
 
@@ -116,6 +123,11 @@ class AdminCalendarView(APIView):
             teacher_id = int(raw_teacher_id)
 
         result = services.build_calendar(d_from, d_to, teacher_id=teacher_id)
+        # Фон графика — только для одного преподавателя: окна разных людей не накладываются.
+        result['availability'] = (
+            availability_services.windows_payload(teacher_id, d_from, d_to)
+            if teacher_id is not None else None
+        )
         return Response(result)
 
 

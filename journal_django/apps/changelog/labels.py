@@ -26,6 +26,13 @@ RULES: list[tuple[str, re.Pattern, str]] = [
     ('POST', re.compile(r'^/api/admin/groups$'), 'group.create'),
     ('PATCH', re.compile(r'^/api/admin/groups/\d+$'), 'group.update'),
     ('DELETE', re.compile(r'^/api/admin/groups/\d+$'), 'group.delete'),
+    # График работы преподавателя (admin и кабинет преподавателя)
+    ('PUT', re.compile(r'^/api/admin/teachers/\d+/work-schedule/template$'), 'schedule.template'),
+    ('PUT', re.compile(r'^/api/admin/teachers/\d+/work-schedule/week$'), 'schedule.week'),
+    ('DELETE', re.compile(r'^/api/admin/teachers/\d+/work-schedule/overrides/[^/]+$'), 'schedule.override_clear'),
+    ('PUT', re.compile(r'^/api/work-schedule/template$'), 'schedule.template'),
+    ('PUT', re.compile(r'^/api/work-schedule/week$'), 'schedule.week'),
+    ('DELETE', re.compile(r'^/api/work-schedule/overrides/[^/]+$'), 'schedule.override_clear'),
     # справочники
     ('POST', re.compile(r'^/api/admin/directions$'), 'direction.create'),
     ('PATCH', re.compile(r'^/api/admin/directions/\d+$'), 'direction.update'),

@@ -358,3 +358,74 @@ def test_missing_teacher_raises_does_not_exist(db, call):
     from apps.teachers.models import Teacher
     with pytest.raises(Teacher.DoesNotExist):
         call(2_000_000_000)
+
+
+# --- windows_payload_many: окна всех преподавателей для admin-календаря -------
+
+def _make_teachers(n: int):
+    from django.utils import timezone
+
+    from apps.teachers.models import Teacher
+    return [Teacher.objects.create(name=f'__avail_many_{i}__', active=True,
+                                   created_at=timezone.now()) for i in range(n)]
+
+
+def test_windows_payload_many_matches_single_payload(teacher, other_teacher):
+    """Тот же итог, что windows_payload по одному: исключение заменяет день,
+    «закрыт» сильнее интервалов, 1440 → "24:00"."""
+    AvailabilityRule.objects.create(teacher=teacher, day_of_week=1, start_minute=M(10), end_minute=M(14))
+    AvailabilityRule.objects.create(teacher=teacher, day_of_week=2, start_minute=M(22), end_minute=1440)
+    AvailabilityRule.objects.create(teacher=teacher, day_of_week=3, start_minute=M(9), end_minute=M(10))
+    AvailabilityOverride.objects.create(teacher=teacher, date=MON, start_minute=M(16), end_minute=M(18))
+    # Смесь «закрыт» + интервал на одну дату (сервис так не пишет, БД допускает).
+    wed = MON + dt.timedelta(days=2)
+    AvailabilityOverride.objects.create(teacher=teacher, date=wed)
+    AvailabilityOverride.objects.create(teacher=teacher, date=wed, start_minute=M(11), end_minute=M(12))
+    AvailabilityRule.objects.create(teacher=other_teacher, day_of_week=0, start_minute=M(8), end_minute=M(9))
+
+    got = services.windows_payload_many([teacher.id, other_teacher.id], MON, SUN)
+
+    assert got[teacher.id] == services.windows_payload(teacher.id, MON, SUN)
+    assert got[other_teacher.id] == services.windows_payload(other_teacher.id, MON, SUN)
+    assert got[teacher.id]['2030-01-07'] == [['16:00', '18:00']]
+    assert got[teacher.id]['2030-01-08'] == [['22:00', '24:00']]
+    assert got[teacher.id]['2030-01-09'] == []
+    assert got[other_teacher.id]['2030-01-13'] == [['08:00', '09:00']]
+
+
+def test_windows_payload_many_skips_teachers_without_schedule(teacher, other_teacher):
+    AvailabilityRule.objects.create(teacher=teacher, day_of_week=1, start_minute=M(10), end_minute=M(14))
+    got = services.windows_payload_many([teacher.id, other_teacher.id], MON, SUN)
+    assert teacher.id in got
+    assert other_teacher.id not in got
+
+
+def test_windows_payload_many_override_outside_window_counts_as_schedule(teacher, other_teacher):
+    """Как has_schedule: исключение ВНЕ окна тоже значит «график есть» — фон
+    рисуется (все дни окна пустые), а не пропадает целиком."""
+    AvailabilityOverride.objects.create(teacher=teacher, date=SUN + dt.timedelta(days=30),
+                                        start_minute=M(10), end_minute=M(11))
+    AvailabilityOverride.objects.create(teacher=teacher, date=SUN + dt.timedelta(days=31))
+    got = services.windows_payload_many([teacher.id, other_teacher.id], MON, SUN)
+    assert got[teacher.id] == services.windows_payload(teacher.id, MON, SUN)
+    assert all(ivs == [] for ivs in got[teacher.id].values())
+    assert len(got[teacher.id]) == 7
+    assert other_teacher.id not in got
+
+
+def test_windows_payload_many_empty_ids_no_queries(django_assert_num_queries):
+    with django_assert_num_queries(0):
+        assert services.windows_payload_many([], MON, SUN) == {}
+
+
+@pytest.mark.parametrize('n', [1, 5])
+def test_windows_payload_many_query_count_constant(n, django_assert_num_queries):
+    """Число запросов не зависит от числа преподавателей (без N+1)."""
+    teachers = _make_teachers(n)
+    for t in teachers:
+        AvailabilityRule.objects.create(teacher=t, day_of_week=1, start_minute=M(10), end_minute=M(14))
+        AvailabilityOverride.objects.create(teacher=t, date=MON + dt.timedelta(days=1))
+        AvailabilityOverride.objects.create(teacher=t, date=SUN + dt.timedelta(days=60))
+    with django_assert_num_queries(2):
+        got = services.windows_payload_many([t.id for t in teachers], MON, SUN)
+    assert len(got) == n

@@ -17,6 +17,7 @@ import datetime
 from collections import defaultdict
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.availability.models import (
@@ -162,6 +163,66 @@ def windows_payload(teacher_id: int, d_from: datetime.date, d_to: datetime.date)
         d.isoformat(): [[fmt(s), fmt(e)] for s, e in ivs]
         for d, ivs in get_effective_windows(teacher_id, d_from, d_to).items()
     }
+
+
+def windows_payload_many(teacher_ids, d_from: datetime.date,
+                         d_to: datetime.date) -> dict[int, dict[str, list[list[str]]]]:
+    """
+    windows_payload для многих преподавателей сразу (admin-календарь «все
+    преподаватели»). Ровно 2 запроса при любом их числе: правила всех + исключения
+    всех. Преподаватель без графика (как has_schedule: ни правила, ни исключения
+    вообще) в результат не попадает — фон для него не рисуется.
+    """
+    ids = list(teacher_ids)
+    if not ids:
+        return {}
+
+    templates: dict[int, dict[int, list[Interval]]] = defaultdict(lambda: defaultdict(list))
+    rules = (AvailabilityRule.objects.filter(teacher_id__in=ids)
+             .order_by('teacher_id', 'day_of_week', 'start_minute')
+             .values_list('teacher_id', 'day_of_week', 'start_minute', 'end_minute'))
+    for tid, dow, s, e in rules:
+        templates[tid][dow].append((s, e))
+
+    # Исключения окна + по одной строке-«маркеру» на преподавателя из любых дат:
+    # маркер нужен только чтобы узнать «график есть» у того, у кого одни исключения
+    # вне окна, — без отдельного запроса exists() на каждого (N+1) и без третьего.
+    # Отбор маркеров ниже по дате окна, так что в окна они не протекают.
+    markers = (AvailabilityOverride.objects.filter(teacher_id__in=ids)
+               .order_by('teacher_id').distinct('teacher_id').values('id'))
+    overrides = (AvailabilityOverride.objects
+                 .filter(teacher_id__in=ids)
+                 .filter(Q(date__gte=d_from, date__lte=d_to) | Q(id__in=markers))
+                 .order_by('teacher_id', 'date', 'start_minute')
+                 .values_list('teacher_id', 'date', 'start_minute', 'end_minute'))
+    with_schedule: set[int] = set(templates)
+    by_teacher: dict[int, dict[datetime.date, list[Interval]]] = defaultdict(dict)
+    closed: set[tuple[int, datetime.date]] = set()
+    for tid, d, s, e in overrides:
+        with_schedule.add(tid)
+        if not (d_from <= d <= d_to):
+            continue
+        day = by_teacher[tid].setdefault(d, [])
+        if s is None:
+            closed.add((tid, d))
+        else:
+            day.append((s, e))
+    # «Закрыт» сильнее интервалов на ту же дату — как в _overrides_by_date.
+    for tid, d in closed:
+        by_teacher[tid][d] = []
+
+    result: dict[int, dict[str, list[list[str]]]] = {}
+    for tid in with_schedule:
+        template = templates.get(tid, {})
+        overrides_t = by_teacher.get(tid, {})
+        payload: dict[str, list[list[str]]] = {}
+        d = d_from
+        while d <= d_to:
+            ivs = overrides_t[d] if d in overrides_t else template.get(js_weekday(d), [])
+            payload[d.isoformat()] = [[fmt(s), fmt(e)] for s, e in ivs]
+            d += datetime.timedelta(days=1)
+        result[tid] = payload
+    return result
 
 
 def _lock_active_teacher(teacher_id: int) -> Teacher:

@@ -65,6 +65,26 @@ def test_list_active_only_by_default(admin_client):
 
 
 @pytest.mark.django_db
+def test_list_exposes_is_service(admin_client):
+    """admin-календарь «по преподавателям» убирает служебных из основного списка
+    по is_service — поле обязано быть в выдаче и отражать флаг."""
+    from django.utils import timezone
+
+    from apps.teachers.models import Teacher
+    service = Teacher.objects.create(name='__list_service__', active=True,
+                                     is_service=True, created_at=timezone.now())
+    regular = Teacher.objects.create(name='__list_regular__', active=True,
+                                     created_at=timezone.now())
+    try:
+        rows = {r['id']: r for r in admin_client.get(BASE_URL).json()}
+        assert rows[service.id]['is_service'] is True
+        assert rows[regular.id]['is_service'] is False
+    finally:
+        _cleanup_teacher(service.id)
+        _cleanup_teacher(regular.id)
+
+
+@pytest.mark.django_db
 def test_list_include_inactive(admin_client):
     resp = admin_client.get(BASE_URL + '?include_inactive=1')
     assert resp.status_code == 200

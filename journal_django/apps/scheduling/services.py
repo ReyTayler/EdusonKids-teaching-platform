@@ -10,6 +10,7 @@ import datetime
 
 from django.db import transaction
 
+from apps.availability import services as availability_services
 from apps.core.utils.dates import MSK, msk_now
 from apps.extra_lessons import repository as extra_lessons_repository
 from apps.extra_lessons.models import MAKEUP_DONE as EXTRA_DONE
@@ -18,6 +19,7 @@ from apps.scheduling.exceptions import PlanLessonChanged
 from apps.scheduling.occurrences import (
     CANCELLED, DONE, OVERDUE, PENDING, planned_status,
 )
+from apps.teachers.models import Teacher
 
 _LABELS = {
     DONE: 'Заполнено',
@@ -69,7 +71,10 @@ def _planned_occurrence_dict(
     # Пометка «замена/подмена» — только когда реально ведёт НЕ штатный препод группы
     # (замена на того же препода группы бейдж не показывает).
     is_override = effective_id is not None and effective_id != group_teacher_id
-    teacher = tnames.get(effective_id) if effective_id else tnames.get(group_teacher_id)
+    # Тот же выбор, что и для имени teacher: id и подпись не должны расходиться
+    # (admin-календарь «по преподавателям» кладёт урок в колонку по teacherId).
+    teacher_id = effective_id or group_teacher_id
+    teacher = tnames.get(teacher_id) if teacher_id else None
     ln = r['lesson_number']
     return {
         'group': r['group_name'],
@@ -82,6 +87,7 @@ def _planned_occurrence_dict(
         'id': r['id'],
         'groupDisplay': r['group_name'],
         'teacher': teacher,
+        'teacherId': teacher_id,
         'teacherOverride': tnames.get(effective_id) if is_override else None,
         'direction': r['direction_name'],
         'color': r['direction_color'],
@@ -135,6 +141,7 @@ def _extra_lesson_occurrence_dict(r: dict, now_msk: datetime.datetime) -> dict:
         'id': None,
         'groupDisplay': label,
         'teacher': r['teacher_name'],
+        'teacherId': r['teacher_id'],
         'teacherOverride': None,
         'direction': None,
         'color': None,
@@ -201,6 +208,22 @@ def build_calendar(
         # и шумной — пропускаем, оставляя только реальные занятия.
         'unscheduled': repository.groups_without_plan(teacher_id) if teacher_id is not None else [],
         'window': {'from': window_from.isoformat(), 'to': window_to.isoformat()},
+    }
+
+
+def availability_by_teacher(
+    window_from: datetime.date, window_to: datetime.date,
+) -> dict[str, dict[str, list[list[str]]]]:
+    """
+    Окна графика всех активных (не служебных) преподавателей за окно — фон
+    admin-календаря «по преподавателям». Ключ — id строкой (как его отдаёт JSON);
+    без графика — ключа нет. Один запрос за id + два за окна, без N+1.
+    """
+    ids = Teacher.objects.filter(active=True, is_service=False).values_list('id', flat=True)
+    return {
+        str(tid): windows
+        for tid, windows in availability_services.windows_payload_many(
+            ids, window_from, window_to).items()
     }
 
 

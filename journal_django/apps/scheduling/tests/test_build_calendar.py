@@ -49,6 +49,9 @@ def test_substitute_shows_in_substitute_calendar_on_its_date(sched_setup):
     assert len(b_rows) == 1
     assert b_rows[0]['teacher'] == '__sched_B__'
     assert b_rows[0]['teacherOverride'] == '__sched_B__'
+    # teacherId — кто РЕАЛЬНО ведёт (заместитель), а не преподаватель контента:
+    # по нему admin-календарь раскладывает урок в колонку преподавателя.
+    assert b_rows[0]['teacherId'] == s['teacher_b']
 
     # Календарь преподавателя КОНТЕНТА (A) на эту дату — строки с заменой нет.
     cal_a = services.build_calendar(target_date, target_date, teacher_id=s['teacher_a'])

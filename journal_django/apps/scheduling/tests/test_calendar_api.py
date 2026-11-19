@@ -110,6 +110,7 @@ class TestCalendar:
         assert first['groupDisplay'] == '__sched_group_A__'
         assert first['teacher'] == '__sched_A__'
         assert first['teacherOverride'] is None
+        assert first['teacherId'] == planned_setup['teacher_a']
         assert first['time'] == '10:00'
         assert first['day'] == 1                 # понедельник в конвенции Вс=0
         assert first['seq'] == 1
@@ -326,6 +327,7 @@ class TestExtraLessonMerge:
             assert occ['durationMinutes'] == 30
             assert occ['isExtra'] is False
             assert occ['teacher'] == '__sched_B__'
+            assert occ['teacherId'] == teacher_b
             assert occ['students'] == [{'name': '__sched_extra_student__'}]
 
             # Не попадает в календарь ИСХОДНОГО учителя (teacher_a) — доп.урок

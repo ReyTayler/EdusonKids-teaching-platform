@@ -485,6 +485,7 @@ def assignments_in_window(teacher_id, window_from, window_to) -> list[dict]:
         qs = qs.filter(assigned_teacher_id=teacher_id)
     rows = list(
         qs.values('id', 'scheduled_date', 'scheduled_time', 'duration_minutes', 'status',
+                  teacher_id=F('assigned_teacher_id'),
                   teacher_name=F('assigned_teacher__name'),
                   missed_lesson_group_name=Coalesce(
                       F('group__name'), F('missed_lesson__group__name')),

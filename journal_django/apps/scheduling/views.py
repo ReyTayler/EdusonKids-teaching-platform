@@ -128,6 +128,14 @@ class AdminCalendarView(APIView):
             availability_services.windows_payload(teacher_id, d_from, d_to)
             if teacher_id is not None else None
         )
+        # Вид «все преподаватели» — у каждого своя колонка, поэтому окна раздельно
+        # по преподавателю. С фильтром по одному — прежнее поле availability.
+        # Только для недельного окна: фон рисует недельный вид, месяц/список его
+        # не используют, а на окне до 92 дней × N преподавателей ответ раздувается.
+        result['availabilityByTeacher'] = (
+            services.availability_by_teacher(d_from, d_to)
+            if teacher_id is None and (d_to - d_from).days <= 6 else None
+        )
         return Response(result)
 
 

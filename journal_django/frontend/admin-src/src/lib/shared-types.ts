@@ -25,6 +25,8 @@ export interface Teacher {
   /** Страница ВКонтакте; null — не указана. */
   vk_url: string | null;
   active: boolean;
+  /** Служебная запись («Архив (импорт истории)») — в рабочих списках/календаре не показывается. */
+  is_service?: boolean;
   created_at: string;
   /** null — аккаунт не привязан. */
   telegram?: TeacherTelegram | null;

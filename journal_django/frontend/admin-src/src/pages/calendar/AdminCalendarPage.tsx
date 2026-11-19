@@ -36,6 +36,19 @@ export default function AdminCalendarPage() {
     [teachers.data],
   );
 
+  // Колонки вида «по преподавателям»: активные несервисные по алфавиту, затем
+  // «дополнительные» (неактивные/служебные) — сетка покажет их, только если у них
+  // есть уроки на неделе, чтобы ничего не пропадало.
+  const gridTeachers = useMemo(() => {
+    const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ru');
+    const all = teachers.data || [];
+    const main = all.filter((t) => t.active && !t.is_service).sort(byName)
+      .map((t) => ({ id: t.id, name: t.name }));
+    const extra = all.filter((t) => !(t.active && !t.is_service)).sort(byName)
+      .map((t) => ({ id: t.id, name: t.name, extra: true, hint: t.is_service ? 'служебный' : 'не активен' }));
+    return [...main, ...extra];
+  }, [teachers.data]);
+
   const { data, isLoading, isError, isFetching, isPlaceholderData } = useAdminCalendar(teacherId, range.from, range.to);
 
   const onVisibleRangeChange = useCallback((from: string, to: string) => {
@@ -70,7 +83,15 @@ export default function AdminCalendarPage() {
         occurrences={data?.occurrences ?? []}
         unscheduled={data?.unscheduled ?? []}
         availability={isPlaceholderData ? null : data?.availability ?? null}
-        isLoading={isLoading}
+        // Вид «по преподавателям» — только в режиме «Все преподаватели»; с выбранным
+        // преподавателем остаётся недельная сетка с фоном его графика.
+        teachers={teacherId == null ? gridTeachers : undefined}
+        availabilityByTeacher={teacherId == null && !isPlaceholderData ? data?.availabilityByTeacher ?? null : null}
+        // В режиме «по преподавателям» без списка преподавателей показывать нечего: скелет,
+        // а не обычная сетка, которая тут же сменилась бы.
+        isLoading={isLoading || (teacherId == null && teachers.isPending)}
+        dataReady={!isPlaceholderData}
+        dataWindow={data?.window ?? null}
         isError={isError}
         isFetching={isFetching}
         onVisibleRangeChange={onVisibleRangeChange}

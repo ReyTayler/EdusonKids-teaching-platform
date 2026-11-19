@@ -146,7 +146,7 @@
    переменная нужна и .cal-avail, чтобы окно графика повторяло линии колонки.
    Линия часа лежит на нижнем пикселе строки (= начало следующего часа), где и
    стоит подпись. */
-.cal-grid-body {
+.cal-grid-body, .tw-day {
   min-width: min-content; /* та же ширина, что у шапки: колонки совпадают при прокрутке */
   display: grid; grid-template-columns: 56px repeat(7, 1fr); position: relative;
   --cal-lines:
@@ -376,3 +376,63 @@
   background-position: 0 calc(-1 * var(--avail-top, 0px));
 }
 .cal-col.today .cal-avail { background-color: color-mix(in oklab, var(--accent) 3%, var(--avail-open)); }
+
+/* ── Вид «по преподавателям» (TeacherWeekGrid): строки — часы по дням, колонки — преподаватели ──
+   Контейнер — тот же .cal-grid-wrap (скролл в обе стороны). Шапка и каждый день —
+   гриды с одним gridTemplateColumns (из компонента), min-width: min-content держит
+   фон залипшей шапки на всю ширину при горизонтальной прокрутке. Линии сетки и
+   фон окон графика — общие с WeekGrid (--cal-lines задаёт .tw-day выше). */
+.tw-head {
+  min-width: min-content;
+  display: grid;
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 6; background: var(--bg2);
+}
+.tw-corner { position: sticky; left: 0; z-index: 7; background: var(--bg2); }
+.tw-corner--time { left: var(--tw-day-w); }
+.tw-teacher-head {
+  padding: var(--space-2) var(--space-2); border-left: 1px solid var(--line);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  text-align: center; min-width: 0;
+}
+.tw-teacher-name { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Неактивные/служебные/«без преподавателя» — приглушены, чтобы не путать с основным составом. */
+.tw-teacher-head.muted { color: var(--text3); font-weight: 500; }
+.tw-teacher-hint { font-size: var(--fs-2xs); font-weight: 400; color: var(--text4); }
+/* Границу дня делаем плотнее линий часа (--line-3), чтобы дни читались блоками. */
+.tw-day { border-bottom: 1px solid var(--line-3); }
+.tw-day:last-child { border-bottom: none; }
+/* Колонка дня — одна ячейка на всю высоту дня, залипает слева. */
+.tw-day-cell {
+  position: sticky; left: 0; z-index: 4; background: var(--bg2);
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
+  /* Высота ячейки (отступ + подпись + круг) обязана быть ниже строки-часа (48px):
+     иначе день с одним часом растягивается и под сеткой остаётся полоса без линий. */
+  padding-top: var(--space-1); border-right: 1px solid var(--line);
+}
+.tw-day-name {
+  font-size: var(--fs-2xs); font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+/* Дата — как в шапке WeekGrid: моно-цифры; «сегодня» — круг акцента (чёрный; в тёмной теме белый). */
+.tw-day-date {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 24px; border-radius: 50%;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md); font-weight: 500; color: var(--text);
+}
+.tw-day.today .tw-day-name { color: var(--text); }
+.tw-day.today .tw-day-date { background: var(--accent); color: var(--on-accent); }
+/* Колонка времени — вторая залипающая слева; sticky даёт контекст для .cal-hour-label. */
+.tw-time-cell { position: sticky; left: var(--tw-day-w); z-index: 4; background: var(--bg2); }
+.tw-time-cell--empty { height: var(--row-h); }
+.tw-hour-label--first { transform: none; } /* top задаётся инлайном (отступ от границы дня) */
+.tw-empty-row {
+  grid-column: 3 / -1; height: var(--row-h);
+  display: flex; align-items: center; background: var(--bg3);
+}
+.tw-empty-text {
+  position: sticky; left: calc(var(--tw-day-w) + var(--tw-time-w) + var(--space-3));
+  font-size: var(--fs-xs); color: var(--text4);
+}

@@ -204,6 +204,8 @@ export interface OccStudent {
 }
 
 export interface Occurrence {
+  /** Реальный преподаватель занятия (нужен только admin-календарю «по преподавателям»). */
+  teacherId?: number | null;
   /**
    * PlannedLesson.id — позиция курса этого занятия. Ею LessonForm называет
    * серверу, КАКОЙ урок отмечается (submitLesson.plannedLessonId): сервер берёт

@@ -1,4 +1,4 @@
-import type { AvailabilityWindows } from '../availability/types';
+import type { AvailabilityWindows, Interval } from '../availability/types';
 
 /**
  * Occurrence — data-agnostic форма занятия, которую понимает CalendarView.
@@ -38,6 +38,11 @@ export interface Occurrence {
    * карточка группы, ссылка не нужна.
    */
   groupId?: number | null;
+  /**
+   * Преподаватель, который РЕАЛЬНО ведёт занятие (с учётом замены) — колонка
+   * вида «по преподавателям» в admin-календаре. Только admin /api/admin/calendar.
+   */
+  teacherId?: number | null;
   group: string;
   groupDisplay: string;
   teacher: string;
@@ -93,4 +98,9 @@ export interface CalendarResponse {
   window: { from: string; to: string };
   /** Окна работы преподавателя по датам; null — графика нет / не один преподаватель. */
   availability?: AvailabilityWindows;
+  /**
+   * Только admin без teacher_id: окна работы по преподавателям
+   * (teacherId → дата → интервалы). У кого графика нет — ключа нет; null — не тот режим.
+   */
+  availabilityByTeacher?: Record<string, Record<string, Interval[]>> | null;
 }

@@ -6,10 +6,11 @@ import {
   firstOfMonthMsk, monthOf, addMonths, mondayOfWeek, monthLabel, addDays,
 } from './lib';
 import { WeekGrid } from './WeekGrid';
+import { TeacherWeekGrid, type GridTeacher } from './TeacherWeekGrid';
 import { MonthGrid } from './MonthGrid';
 import { DayList } from './DayList';
 import { LessonPopup, type LessonActionKind } from './LessonPopup';
-import type { AvailabilityWindows } from '../availability/types';
+import type { AvailabilityWindows, Interval } from '../availability/types';
 
 function useIsNarrow(bp = 768): boolean {
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < bp);
@@ -71,6 +72,18 @@ export interface CalendarViewProps {
    * null/не передан — графика нет (или в admin выбран режим «Все преподаватели»).
    */
   availability?: AvailabilityWindows;
+  /**
+   * Режим «по преподавателям» (admin, «Все преподаватели»): если передан, недельный
+   * вид рисует TeacherWeekGrid (колонки — преподаватели) вместо WeekGrid. Месяц и
+   * список не меняются. Пустой массив — обычный WeekGrid.
+   */
+  teachers?: GridTeacher[];
+  /** Окна работы по преподавателям (teacherId → дата → интервалы); только вместе с teachers. */
+  availabilityByTeacher?: Record<string, Record<string, Interval[]>> | null;
+  /** false — показаны данные прошлого окна (placeholder): сетка «по преподавателям» не пишет «нет занятий» и не прокручивается. */
+  dataReady?: boolean;
+  /** Окно запроса, которому соответствуют данные: если оно не покрывает видимую неделю (кэш другой недели), сетка считается неготовой. */
+  dataWindow?: { from: string; to: string } | null;
   isLoading: boolean;
   isError: boolean;
   /** Фоновое обновление (перелистывание при уже показанных прежних данных). */
@@ -142,6 +155,10 @@ export function CalendarView({
   occurrences: occAll,
   unscheduled,
   availability,
+  teachers,
+  availabilityByTeacher,
+  dataReady = true,
+  dataWindow,
   isLoading,
   isError,
   isFetching,
@@ -175,6 +192,7 @@ export function CalendarView({
   }, []);
   const isCurrentWeek = sameDay(monday, currentMondayMsk());
   const effectiveView = narrow ? 'list' : view;
+  const byTeacher = !!teachers && teachers.length > 0;
   const isCurrentMonth = sameDay(monthAnchor, firstOfMonthMsk());
 
   /**
@@ -415,11 +433,13 @@ export function CalendarView({
       ) : (effectiveView === 'month'
         ? monthLessonsByDate.size === 0
         // Недельная сетка с графиком нужна и без уроков — на ней видны рабочие окна.
-        : lessons.length === 0 && !(effectiveView === 'week' && availability)) ? (
+        : lessons.length === 0 && !(effectiveView === 'week' && (availability || byTeacher))) ? (
         <div className="cal-empty">{effectiveView === 'month' ? 'В этом месяце занятий нет.' : 'На этой неделе занятий нет.'}</div>
       ) : (
         <>
-          {effectiveView === 'week'
+          {effectiveView === 'week' && byTeacher
+            ? <TeacherWeekGrid monday={monday} occurrences={timedLessons} teachers={teachers!} today={today} onSelect={handleSelect} resolveColor={colorOf} availabilityByTeacher={availabilityByTeacher} dataReady={dataReady && (!dataWindow || (dataWindow.from <= isoDate(monday) && dataWindow.to >= isoDate(addDays(monday, 6))))} />
+            : effectiveView === 'week'
             ? <WeekGrid monday={monday} occurrences={timedLessons} today={today} onSelect={handleSelect} resolveColor={colorOf} availability={availability} />
             : effectiveView === 'month'
             ? <MonthGrid monthAnchor={monthAnchor} lessonsByDate={monthLessonsByDate} today={today} onSelect={handleSelect} resolveColor={colorOf} />

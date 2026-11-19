@@ -15,9 +15,11 @@ export function useScheduleRange(basePath: string, from: string, to: string, ena
   return useQuery<ScheduleRange>({
     queryKey: [...key(basePath), 'range', from, to],
     queryFn: () => api<ScheduleRange>('GET', `${basePath}?from=${from}&to=${to}`),
-    // Пока листаем недели, прошлая неделя остаётся на экране — без мигания пустотой.
-    // Но только в рамках одного basePath: при смене преподавателя страница не
-    // ремоунтится, и окна A нельзя показывать (и сохранять) как окна B.
+    // Пока грузится новая неделя, `data` держит ответ прошлой недели (isPlaceholderData=true),
+    // чтобы запрос не уходил в «нет данных». Показывать их как окна новой недели нельзя —
+    // окна ключуются датами и выглядели бы пустыми: редактор в этот момент рисует скелет
+    // и блокирует правки. Только в рамках одного basePath: при смене преподавателя
+    // окна A нельзя показывать (и сохранять) как окна B.
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === basePath ? prev : undefined),
     staleTime: 60_000,
     enabled,

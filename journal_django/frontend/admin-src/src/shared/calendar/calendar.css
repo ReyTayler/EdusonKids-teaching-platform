@@ -109,6 +109,12 @@
   background: var(--bg2);
 }
 .cal-grid-head {
+  /* Плотные дни шире контейнера (колонка = дорожки × LANE_W): без min-width блок
+     шапки остаётся шириной видимой части, фон обрывается и уроки просвечивают сквозь
+     залипшую шапку. min-content = сумма минимумов дорожек (fr = 0): блок не уже сетки,
+     а когда места хватает, 1fr делит остаток как раньше. Не max-content — там fr
+     берёт максимум базовых размеров, и все дни раздуваются до самого плотного. */
+  min-width: min-content;
   display: grid; grid-template-columns: 56px repeat(7, 1fr);
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 6; background: var(--bg2);
@@ -141,6 +147,7 @@
    Линия часа лежит на нижнем пикселе строки (= начало следующего часа), где и
    стоит подпись. */
 .cal-grid-body {
+  min-width: min-content; /* та же ширина, что у шапки: колонки совпадают при прокрутке */
   display: grid; grid-template-columns: 56px repeat(7, 1fr); position: relative;
   --cal-lines:
     repeating-linear-gradient(

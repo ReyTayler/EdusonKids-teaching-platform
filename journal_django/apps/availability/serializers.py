@@ -1,5 +1,6 @@
 """
-Валидация входа графика работы: 'HH:MM', шаг 30 мин, 08:00–22:00, start < end.
+Валидация входа графика работы: 'HH:MM', шаг 30 мин, сутки 00:00–24:00, start < end.
+'24:00' допустим только как конец окна; в сервис уходят минуты от полуночи.
 
 Содержимое days (ключи дней/дат и интервалы) разбирается в object-level
 validate(), а не в child-поле DictField: эти ошибки уходят в non_field_errors —
@@ -20,9 +21,9 @@ import re
 
 from rest_framework import serializers
 
-from apps.availability.models import GRID_END, GRID_START
+from apps.availability.models import GRID_END_MIN
 
-_HHMM = re.compile(r'^([01]\d|2[0-3]):(00|30)$')
+_HHMM = re.compile(r'^(?:([01]\d|2[0-3]):(00|30)|24:00)$')
 _DAY_KEYS = frozenset(str(i) for i in range(7))
 _QUOTE_MAX = 20
 
@@ -34,18 +35,20 @@ def _quote(value) -> str | None:
     return value if len(value) <= _QUOTE_MAX else value[:_QUOTE_MAX] + '…'
 
 
-def _parse_hhmm(value) -> datetime.time:
+def _parse_hhmm(value) -> int:
+    """'HH:MM' → минута от полуночи; '24:00' → 1440."""
     # fullmatch, а не match: '$' в re пропускает завершающий перевод строки ('10:00\n').
     if not isinstance(value, str) or not _HHMM.fullmatch(value):
         quoted = _quote(value)
         prefix = f'Время «{quoted}»' if quoted is not None else 'Время'
-        raise serializers.ValidationError(f'{prefix} — формат HH:MM с шагом 30 минут.')
+        raise serializers.ValidationError(
+            f'{prefix} — формат HH:MM с шагом 30 минут, от 00:00 до 24:00.')
     h, m = value.split(':')
-    return datetime.time(int(h), int(m))
+    return int(h) * 60 + int(m)
 
 
-def parse_intervals(data) -> list[tuple[datetime.time, datetime.time]]:
-    """[['10:00','14:00'], …] → [(time, time), …]."""
+def parse_intervals(data) -> list[tuple[int, int]]:
+    """[['10:00','14:00'], …] → [(600, 840), …] — минуты от полуночи."""
     if not isinstance(data, list):
         raise serializers.ValidationError('Ожидается список интервалов.')
     out = []
@@ -53,8 +56,10 @@ def parse_intervals(data) -> list[tuple[datetime.time, datetime.time]]:
         if not isinstance(item, list) or len(item) != 2:
             raise serializers.ValidationError('Интервал — пара [начало, конец].')
         start, end = _parse_hhmm(item[0]), _parse_hhmm(item[1])
-        if start < GRID_START or end > GRID_END:
-            raise serializers.ValidationError('Окна — в пределах 08:00–22:00.')
+        # Регэксп пропускает '24:00' в любой позиции, но началом окна оно быть
+        # не может: окно «с конца суток» пустое.
+        if start == GRID_END_MIN:
+            raise serializers.ValidationError('«24:00» — только конец окна, не начало.')
         if start >= end:
             raise serializers.ValidationError('Начало окна должно быть раньше конца.')
         out.append((start, end))
@@ -62,7 +67,7 @@ def parse_intervals(data) -> list[tuple[datetime.time, datetime.time]]:
 
 
 class TemplateSerializer(serializers.Serializer):
-    """{'days': {'0'..'6': [[HH:MM, HH:MM], …]}} → {'days': {int: [(time, time)]}}. Вс=0."""
+    """{'days': {'0'..'6': [[HH:MM, HH:MM], …]}} → {'days': {int: [(мин, мин)]}}. Вс=0."""
 
     days = serializers.DictField()
 

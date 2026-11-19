@@ -131,6 +131,10 @@ def format_value(model_label: Optional[str], attname: str, value: Any,
         return _money(value)
     if attname == 'day_of_week':
         return _day_of_week(value)
+    # График работы хранит время минутами от полуночи (SmallIntegerField):
+    # по типу поля это неотличимо от числа, поэтому — по attname.
+    if attname in ('start_minute', 'end_minute'):
+        return summary._fmt_minute(value)
     if attname == 'status':
         return summary.STATUS_RU.get(value, str(value))
 

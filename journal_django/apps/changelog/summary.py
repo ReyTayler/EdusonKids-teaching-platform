@@ -69,6 +69,15 @@ def _fmt_time(t: Any) -> str:
     return s[:5] if len(s) >= 5 else s
 
 
+def _fmt_minute(m: Any) -> str:
+    """Минута от полуночи (график работы) → 'HH:MM'; 1440 → '24:00', не '00:00'."""
+    try:
+        h, mm = divmod(int(m), 60)
+    except (TypeError, ValueError):
+        return str(m)
+    return f'{h:02d}:{mm:02d}'
+
+
 def _fmt_num(n: Any) -> str:
     """20.0 → '20', 20.5 → '20.5'."""
     if n is None:
@@ -333,6 +342,7 @@ FIELD_RU = {
     'parent_payment_id': 'доплата к оплате', 'subscription_index': 'номер абонемента',
     'duration': 'длительность', 'lesson_duration_minutes': 'длительность',
     'day_of_week': 'день недели', 'start_time': 'время начала',
+    'start_minute': 'время начала', 'end_minute': 'время окончания',
     'effective_from': 'действует с', 'effective_to': 'действует по',
     'scheduled_date': 'плановая дата', 'scheduled_time': 'плановое время',
     'moved_from_date': 'перенесено с', 'moved_to_date': 'перенесено на',

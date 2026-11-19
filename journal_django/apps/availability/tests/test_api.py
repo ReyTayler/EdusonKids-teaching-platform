@@ -7,7 +7,13 @@ from apps.availability import services
 from apps.availability.models import AvailabilityOverride, AvailabilityRule
 
 pytestmark = pytest.mark.django_db
-T = dt.time
+
+
+def M(h: int, m: int = 0) -> int:
+    """Минута от полуночи — нагляднее литералов 600/630."""
+    return h * 60 + m
+
+
 FULL_WEEK = {str(i): [] for i in range(7)}
 
 
@@ -57,12 +63,12 @@ def test_teacher_edits_only_own_schedule(own_teacher_client, teacher, other_teac
 
 
 def test_teacher_reads_only_own_schedule(own_teacher_client, other_teacher):
-    AvailabilityRule.objects.create(teacher=other_teacher, day_of_week=1, start_time=T(10), end_time=T(14))
+    AvailabilityRule.objects.create(teacher=other_teacher, day_of_week=1, start_minute=M(10), end_minute=M(14))
     assert own_teacher_client.get('/api/work-schedule/template').json()['days']['1'] == []
 
 
 def test_template_get_shape(own_teacher_client, teacher):
-    AvailabilityRule.objects.create(teacher=teacher, day_of_week=1, start_time=T(10), end_time=T(14))
+    AvailabilityRule.objects.create(teacher=teacher, day_of_week=1, start_minute=M(10), end_minute=M(14))
     AvailabilityOverride.objects.create(teacher=teacher, date=dt.date(2030, 1, 7))
     body = own_teacher_client.get('/api/work-schedule/template').json()
     assert body['days']['1'] == [['10:00', '14:00']]
@@ -71,22 +77,75 @@ def test_template_get_shape(own_teacher_client, teacher):
     assert body['upcoming_overrides'] == [{'date': '2030-01-07', 'intervals': []}]
 
 
-def test_template_accepts_full_grid(own_teacher_client, teacher):
+def test_template_accepts_full_day(own_teacher_client, teacher):
+    """Сутки целиком: '24:00' как конец окна хранится как 1440 и отдаётся обратно '24:00'."""
     r = own_teacher_client.put('/api/work-schedule/template',
-                               {'days': {**FULL_WEEK, '0': [['08:00', '22:00']]}}, format='json')
+                               {'days': {**FULL_WEEK, '0': [['00:00', '24:00']]}}, format='json')
     assert r.status_code == 200, r.content
-    assert AvailabilityRule.objects.get(teacher=teacher).end_time == T(22)
+    rule = AvailabilityRule.objects.get(teacher=teacher)
+    assert (rule.start_minute, rule.end_minute) == (0, 1440)
+    assert r.json()['days']['0'] == [['00:00', '24:00']]
+    body = own_teacher_client.get('/api/work-schedule?from=2030-01-06&to=2030-01-06').json()
+    assert body['windows'] == {'2030-01-06': [['00:00', '24:00']]}
+
+
+@pytest.mark.parametrize('interval,minutes', [
+    (['07:30', '09:00'], (M(7, 30), M(9))),    # раньше бывшей границы 08:00
+    (['21:00', '22:30'], (M(21), M(22, 30))),  # позже бывшей границы 22:00
+    (['23:30', '24:00'], (M(23, 30), 1440)),   # последний слот суток
+])
+def test_template_accepts_former_out_of_grid(own_teacher_client, teacher, interval, minutes):
+    r = own_teacher_client.put('/api/work-schedule/template',
+                               {'days': {**FULL_WEEK, '1': [interval]}}, format='json')
+    assert r.status_code == 200, r.content
+    rule = AvailabilityRule.objects.get(teacher=teacher)
+    assert (rule.start_minute, rule.end_minute) == minutes
+    assert r.json()['days']['1'] == [interval]
 
 
 @pytest.mark.parametrize('bad', [
-    [['10:15', '11:00']], [['07:30', '09:00']], [['21:00', '22:30']], [['12:00', '11:00']],
+    [['10:15', '11:00']], [['12:00', '11:00']], [['23:00', '23:45']], [['23:00', '24:30']],
+    [['24:00', '24:00']], [['24:00', '01:00']], [['00:00', '00:00']],
     [['10:00']], [['10:00:00.5', '11:00']], 'nope', [['25:00', '26:00']], [[None, '11:00']],
-    [['10:00\n', '11:00']], [['10:00', '11:00\n']],
+    [['10:00\n', '11:00']], [['10:00', '11:00\n']], [['9:00', '10:00']], [['24:00\n', '10:00']],
 ])
 def test_template_validation(own_teacher_client, teacher, bad):
     r = own_teacher_client.put('/api/work-schedule/template', {'days': {**FULL_WEEK, '1': bad}}, format='json')
     assert r.status_code == 400
     assert not AvailabilityRule.objects.filter(teacher=teacher).exists()
+
+
+def test_24_as_start_rejected_with_reason(own_teacher_client, teacher):
+    r = own_teacher_client.put('/api/work-schedule/template',
+                               {'days': {**FULL_WEEK, '1': [['24:00', '24:00']]}}, format='json')
+    assert r.status_code == 400
+    assert r.json()['details']['non_field_errors'] == ['«24:00» — только конец окна, не начало.']
+
+
+@pytest.mark.parametrize('value', ['23:45', '24:30'])
+def test_off_grid_time_rejected_with_format_hint(own_teacher_client, value):
+    r = own_teacher_client.put('/api/work-schedule/template',
+                               {'days': {**FULL_WEEK, '1': [['23:00', value]]}}, format='json')
+    assert r.status_code == 400
+    msg = r.json()['details']['non_field_errors'][0]
+    assert f'«{value}»' in msg and '00:00 до 24:00' in msg
+
+
+def test_week_accepts_end_of_day(own_teacher_client, teacher):
+    r = own_teacher_client.put('/api/work-schedule/week', {
+        'monday': '2030-01-07', 'days': {'2030-01-07': [['22:00', '24:00']]},
+    }, format='json')
+    assert r.status_code == 200, r.content
+    ov = AvailabilityOverride.objects.get(teacher=teacher, date=dt.date(2030, 1, 7))
+    assert (ov.start_minute, ov.end_minute) == (M(22), 1440)
+
+
+def test_week_rejects_24_as_start(own_teacher_client, teacher):
+    r = own_teacher_client.put('/api/work-schedule/week', {
+        'monday': '2030-01-07', 'days': {'2030-01-07': [['24:00', '24:00']]},
+    }, format='json')
+    assert r.status_code == 400
+    assert not AvailabilityOverride.objects.filter(teacher=teacher).exists()
 
 
 @pytest.mark.parametrize('payload', [{'days': {'7': []}}, {'days': []}, {}])
@@ -128,7 +187,7 @@ def test_validation_error_non_string_not_echoed(own_teacher_client):
 
 def test_teacher_id_from_request_ignored(own_teacher_client, teacher, other_teacher):
     # Преподаватель берётся только из учётки: teacher_id в теле и в query — мусор.
-    AvailabilityRule.objects.create(teacher=other_teacher, day_of_week=1, start_time=T(10), end_time=T(14))
+    AvailabilityRule.objects.create(teacher=other_teacher, day_of_week=1, start_minute=M(10), end_minute=M(14))
     r = own_teacher_client.put(f'/api/work-schedule/template?teacher_id={other_teacher.id}',
                                {'teacher_id': other_teacher.id,
                                 'days': {**FULL_WEEK, '3': [['15:00', '20:00']]}}, format='json')
@@ -157,7 +216,7 @@ def test_teacher_account_without_teacher_403(own_teacher_client):
 
 
 def test_range_get(own_teacher_client, teacher):
-    AvailabilityRule.objects.create(teacher=teacher, day_of_week=1, start_time=T(10), end_time=T(14))
+    AvailabilityRule.objects.create(teacher=teacher, day_of_week=1, start_minute=M(10), end_minute=M(14))
     AvailabilityOverride.objects.create(teacher=teacher, date=dt.date(2030, 1, 8))
     body = own_teacher_client.get('/api/work-schedule?from=2030-01-07&to=2030-01-13').json()
     assert body['has_schedule'] is True
@@ -183,7 +242,7 @@ def test_week_put_and_override_delete(own_teacher_client, teacher):
     }, format='json')
     assert r.status_code == 200, r.content
     ov = AvailabilityOverride.objects.get(teacher=teacher, date=dt.date(2030, 1, 7))
-    assert (ov.start_time, ov.end_time) == (T(16), T(18))
+    assert (ov.start_minute, ov.end_minute) == (M(16), M(18))
     r = own_teacher_client.delete('/api/work-schedule/overrides/2030-01-07')
     assert r.status_code == 204
     assert not AvailabilityOverride.objects.filter(teacher=teacher).exists()
@@ -223,7 +282,7 @@ def test_override_delete_bad_date_400(own_teacher_client):
 
 def test_admin_week_targets_path_teacher(admin_client, teacher, other_teacher):
     # Вторник открыт по шаблону — «закрыт» на 08.01 отличается и даёт исключение.
-    AvailabilityRule.objects.create(teacher=teacher, day_of_week=2, start_time=T(10), end_time=T(14))
+    AvailabilityRule.objects.create(teacher=teacher, day_of_week=2, start_minute=M(10), end_minute=M(14))
     r = admin_client.put(_admin_base(teacher.id) + '/week',
                          {'monday': '2030-01-07', 'days': {'2030-01-08': []}}, format='json')
     assert r.status_code == 200, r.content
@@ -232,7 +291,7 @@ def test_admin_week_targets_path_teacher(admin_client, teacher, other_teacher):
 
 
 def test_admin_range_get(admin_client, teacher):
-    AvailabilityRule.objects.create(teacher=teacher, day_of_week=1, start_time=T(10), end_time=T(14))
+    AvailabilityRule.objects.create(teacher=teacher, day_of_week=1, start_minute=M(10), end_minute=M(14))
     body = admin_client.get(_admin_base(teacher.id) + '?from=2030-01-07&to=2030-01-07').json()
     assert body['windows'] == {'2030-01-07': [['10:00', '14:00']]}
 

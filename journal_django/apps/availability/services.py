@@ -19,10 +19,17 @@ from collections import defaultdict
 from django.db import transaction
 from django.utils import timezone
 
-from apps.availability.models import GRID_END, GRID_START, AvailabilityOverride, AvailabilityRule
+from apps.availability.models import (
+    GRID_END_MIN,
+    GRID_START_MIN,
+    SLOT_MIN,
+    AvailabilityOverride,
+    AvailabilityRule,
+)
 from apps.teachers.models import Teacher
 
-Interval = tuple[datetime.time, datetime.time]
+# Интервал — пара минут от полуночи [начало, конец); конец может быть 1440 (24:00).
+Interval = tuple[int, int]
 
 
 class ScheduleError(Exception):
@@ -41,7 +48,7 @@ def js_weekday(d: datetime.date) -> int:
 
 def normalize(intervals: list[Interval]) -> list[Interval]:
     """Сортировка + склейка пересекающихся и соприкасающихся интервалов."""
-    merged: list[list[datetime.time]] = []
+    merged: list[list[int]] = []
     for start, end in sorted(intervals):
         if merged and start <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], end)
@@ -50,12 +57,22 @@ def normalize(intervals: list[Interval]) -> list[Interval]:
     return [(s, e) for s, e in merged]
 
 
-def fmt(t: datetime.time) -> str:
-    return t.strftime('%H:%M')
+def fmt(minute: int) -> str:
+    """Минута от полуночи → "HH:MM"; 1440 → "24:00" (конец суток, не 00:00)."""
+    h, m = divmod(minute, 60)
+    return f'{h:02d}:{m:02d}'
 
 
-def _on_half_hour(t: datetime.time) -> bool:
-    return t.minute in (0, 30) and t.second == 0 and t.microsecond == 0
+def _is_minute(value) -> bool:
+    # bool — подкласс int: True прошёл бы как минута 1.
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _show(value) -> str:
+    """Граница для текста ошибки: "HH:MM" в пределах суток, иначе как есть (-30 → "-30")."""
+    if _is_minute(value) and GRID_START_MIN <= value <= GRID_END_MIN:
+        return fmt(value)
+    return repr(value)
 
 
 def validate_intervals(intervals: list[Interval]) -> None:
@@ -64,13 +81,16 @@ def validate_intervals(intervals: list[Interval]) -> None:
     а CHECK-и БД дали бы IntegrityError (500) вместо понятного отказа.
     """
     for start, end in intervals:
-        label = f'Окно {fmt(start)}–{fmt(end)}'
-        if not (_on_half_hour(start) and _on_half_hour(end)):
+        label = f'Окно {_show(start)}–{_show(end)}'
+        if not (_is_minute(start) and _is_minute(end)):
+            raise ScheduleError(f'{label}: границы — целое число минут от полуночи.')
+        if start < GRID_START_MIN or end > GRID_END_MIN:
+            raise ScheduleError(
+                f'{label}: выходит за пределы {fmt(GRID_START_MIN)}–{fmt(GRID_END_MIN)}.')
+        if start % SLOT_MIN or end % SLOT_MIN:
             raise ScheduleError(f'{label}: границы должны быть кратны 30 минутам.')
         if start >= end:
             raise ScheduleError(f'{label}: начало должно быть раньше конца.')
-        if start < GRID_START or end > GRID_END:
-            raise ScheduleError(f'{label}: выходит за пределы {fmt(GRID_START)}–{fmt(GRID_END)}.')
 
 
 def has_schedule(teacher_id: int) -> bool:
@@ -82,8 +102,8 @@ def get_template(teacher_id: int) -> dict[int, list[Interval]]:
     """Шаблон {day_of_week: [интервалы]}; дни без окон в словарь не попадают."""
     out: dict[int, list[Interval]] = defaultdict(list)
     rows = (AvailabilityRule.objects.filter(teacher_id=teacher_id)
-            .order_by('day_of_week', 'start_time')
-            .values_list('day_of_week', 'start_time', 'end_time'))
+            .order_by('day_of_week', 'start_minute')
+            .values_list('day_of_week', 'start_minute', 'end_minute'))
     for dow, s, e in rows:
         out[dow].append((s, e))
     return dict(out)
@@ -97,7 +117,7 @@ def _overrides_by_date(teacher_id: int, d_from: datetime.date,
         qs = qs.filter(date__lte=d_to)
     out: dict[datetime.date, list[Interval]] = {}
     closed: set[datetime.date] = set()
-    for d, s, e in qs.order_by('date', 'start_time').values_list('date', 'start_time', 'end_time'):
+    for d, s, e in qs.order_by('date', 'start_minute').values_list('date', 'start_minute', 'end_minute'):
         day = out.setdefault(d, [])
         if s is None:
             closed.add(d)
@@ -173,7 +193,7 @@ def replace_template(teacher_id: int, by_day: dict[int, list[Interval]]) -> None
             continue
         AvailabilityRule.objects.filter(teacher_id=teacher_id, day_of_week=dow).delete()
         AvailabilityRule.objects.bulk_create([
-            AvailabilityRule(teacher_id=teacher_id, day_of_week=dow, start_time=s, end_time=e)
+            AvailabilityRule(teacher_id=teacher_id, day_of_week=dow, start_minute=s, end_minute=e)
             for s, e in wanted
         ])
 
@@ -217,7 +237,7 @@ def replace_week(teacher_id: int, monday: datetime.date,
             AvailabilityOverride.objects.create(teacher_id=teacher_id, date=d)
         else:
             AvailabilityOverride.objects.bulk_create([
-                AvailabilityOverride(teacher_id=teacher_id, date=d, start_time=s, end_time=e)
+                AvailabilityOverride(teacher_id=teacher_id, date=d, start_minute=s, end_minute=e)
                 for s, e in target
             ])
 

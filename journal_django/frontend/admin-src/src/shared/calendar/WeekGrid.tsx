@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Occurrence } from './types';
-import { addDays, dayMonth, sameDay, columnIndexOfIsoDate, isoDate } from './lib';
+import { addDays, sameDay, columnIndexOfIsoDate, isoDate } from './lib';
 import type { AvailabilityWindows } from '../availability/types';
 import { toMinutes } from '../availability/grid';
 
-const ROW_H = 56;
-const HOUR_START = 8;
-const HOUR_END = 21;              // последний час-строка (включительно)
+/** Высота часа как в Google Calendar. */
+const ROW_H = 48;
+/** Сетка — полные сутки 00:00–24:00 (24 строки), листается внутри .cal-grid-wrap. */
+const HOUR_START = 0;
+const HOUR_END = 23;              // последний час-строка (включительно)
+/** Если сегодня нет в видимой неделе — открываем сетку на начале рабочего дня. */
+const DEFAULT_SCROLL_HOUR = 8;
 const N_ROWS = HOUR_END - HOUR_START + 1;
 const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 /** Минимальная высота блока — 45-минутный урок остаётся читаемым (время+название). */
@@ -54,10 +58,13 @@ interface Laid {
 function layoutColumn(occs: Occurrence[], bodyHeight: number): Laid[] {
   const items: Laid[] = occs
     .map((occ, i) => {
-      const top = topPx(occ.time!);
+      const rawTop = topPx(occ.time!);
       const minutes = occ.durationMinutes ?? 60;
       const raw = (minutes / 60) * ROW_H - 4;
-      const height = Math.max(MIN_BLOCK_H, Math.min(raw, bodyHeight - top - 4));
+      const height = Math.max(MIN_BLOCK_H, Math.min(raw, bodyHeight - rawTop - 4));
+      // Урок у полуночи (23:50 и т.п.): MIN_BLOCK_H мог бы выпихнуть блок ниже
+      // сетки — поднимаем top, чтобы top+height не выходил за низ колонки.
+      const top = Math.min(rawTop, bodyHeight - height - 2);
       return { occ, key: `${occ.group}-${occ.date}-${occ.time}-${i}`, top, height, lane: 0, lanes: 1 };
     })
     .sort((a, b) => a.top - b.top || b.height - a.height);
@@ -137,38 +144,56 @@ export function WeekGrid({
   const gridTemplate = `56px ${maxLanes.map((n) => `minmax(${n * LANE_W}px, 1fr)`).join(' ')}`;
 
   // Линия «сейчас»: тик раз в минуту; рисуется только в колонке сегодняшнего
-  // дня видимой недели и только внутри диапазона сетки 8–21.
+  // дня видимой недели. Сетка суточная, поэтому всегда попадает в диапазон.
   const [nowMin, setNowMin] = useState(() => mskNowMinutes());
   useEffect(() => {
     const t = setInterval(() => setNowMin(mskNowMinutes()), 60_000);
     return () => clearInterval(t);
   }, []);
   const nowTop = ((nowMin - HOUR_START * 60) / 60) * ROW_H;
-  const nowVisible = nowTop >= 0 && nowTop <= bodyHeight;
 
-  // Автоскролл к текущему времени при первом открытии недельной сетки.
-  const nowRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    nowRef.current?.scrollIntoView({ block: 'center' });
-  }, []);
+  // Автопрокрутка при открытии и смене недели: сегодня в неделе → «сейчас» по
+  // центру, иначе 08:00. Крутим сам контейнер через scrollTop, а не
+  // scrollIntoView — тот прокручивал бы ещё и всю страницу. Текущее время
+  // берём напрямую в эффекте, а не из state, чтобы минутный тик не дёргал
+  // прокрутку пользователя (эффект зависит только от недели).
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const headRef = useRef<HTMLDivElement | null>(null);
+  const hasToday = cols.some((col) => col.isToday);
+  const weekKey = monday.getTime();
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const headH = headRef.current?.offsetHeight ?? 0;
+    if (hasToday) {
+      const y = ((mskNowMinutes() - HOUR_START * 60) / 60) * ROW_H;
+      // Шапка залипает сверху и закрывает headH пикселей вьюпорта, поэтому
+      // центр видимой области тела сетки смещён на headH/2.
+      wrap.scrollTop = y + headH / 2 - wrap.clientHeight / 2;
+    } else {
+      wrap.scrollTop = (DEFAULT_SCROLL_HOUR - HOUR_START) * ROW_H;
+    }
+  }, [weekKey, hasToday]);
 
   return (
-    <div className="cal-grid-wrap">
-      <div className="cal-grid-head" style={{ gridTemplateColumns: gridTemplate }}>
+    <div className="cal-grid-wrap" ref={wrapRef}>
+      <div className="cal-grid-head" ref={headRef} style={{ gridTemplateColumns: gridTemplate }}>
         <div className="cal-col-head cal-corner" />
         {cols.map(({ c, date, isToday }) => (
           <div key={c} className={`cal-col-head${isToday ? ' today' : ''}`}>
             <div className="cal-col-day">{DAY_SHORT[c]}</div>
-            <div className="cal-col-date">{dayMonth(date)}</div>
+            {/* Даты недели строятся в UTC (см. lib.addDays) — берём UTC-число. */}
+            <div className="cal-col-date">{date.getUTCDate()}</div>
           </div>
         ))}
       </div>
 
       <div className="cal-grid-body" style={{ ['--row-h' as any]: `${ROW_H}px`, gridTemplateColumns: gridTemplate }}>
         <div className="cal-gutter" style={{ height: bodyHeight }}>
-          {Array.from({ length: N_ROWS }, (_, i) => (
-            <div key={i} className="cal-hour-label" style={{ top: i * ROW_H }}>
-              {String(HOUR_START + i).padStart(2, '0')}
+          {/* Подпись стоит на линии начала часа; у 00:00 линии нет — подпись скрыта. */}
+          {Array.from({ length: N_ROWS - 1 }, (_, i) => (
+            <div key={i} className="cal-hour-label" style={{ top: (i + 1) * ROW_H }}>
+              {String(HOUR_START + i + 1).padStart(2, '0')}:00
             </div>
           ))}
         </div>
@@ -224,8 +249,8 @@ export function WeekGrid({
               </div>
             ))}
 
-            {isToday && nowVisible && (
-              <div ref={nowRef} className="cal-now-line" style={{ top: nowTop }} aria-hidden>
+            {isToday && (
+              <div className="cal-now-line" style={{ top: nowTop }} aria-hidden>
                 <span className="cal-now-dot" />
               </div>
             )}

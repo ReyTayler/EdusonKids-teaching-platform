@@ -118,27 +118,51 @@
 /* Угол (пересечение липкой шапки и липкой колонки времени) — поверх всего. */
 .cal-corner { position: sticky; left: 0; z-index: 7; background: var(--bg2); }
 .cal-col-head {
-  padding: var(--space-2) var(--space-1);
-  text-align: center; border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: var(--space-2) var(--space-1); border-left: 1px solid var(--line);
 }
-.cal-col-head.today { background: color-mix(in oklab, var(--accent) 3%, transparent); }
-.cal-col-day { font-size: var(--fs-xs); font-weight: 600; color: var(--text2); }
+/* Шапка дня как в Google Calendar: мелкий капс-день + крупная дата; «сегодня» —
+   дата в круге --accent (чёрный; в тёмной теме белый), без цветной заливки колонки. */
+.cal-col-day {
+  font-size: var(--fs-2xs); font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cal-col-date {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; height: 32px; border-radius: 50%;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xl); font-weight: 500; color: var(--text);
+}
 .cal-col-head.today .cal-col-day { color: var(--text); }
-.cal-col-date { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text3); margin-top: 1px; }
+.cal-col-head.today .cal-col-date { background: var(--accent); color: var(--on-accent); }
 
-.cal-grid-body { display: grid; grid-template-columns: 56px repeat(7, 1fr); position: relative; }
+/* Линии сетки: час — сплошная (--line-3), полчаса — светлее (--line-2: в тёмной теме --line на --avail-open почти сливается). Общая
+   переменная нужна и .cal-avail, чтобы окно графика повторяло линии колонки.
+   Линия часа лежит на нижнем пикселе строки (= начало следующего часа), где и
+   стоит подпись. */
+.cal-grid-body {
+  display: grid; grid-template-columns: 56px repeat(7, 1fr); position: relative;
+  --cal-lines:
+    repeating-linear-gradient(
+      to bottom, transparent 0, transparent calc(var(--row-h) - 1px),
+      var(--line-3) calc(var(--row-h) - 1px), var(--line-3) var(--row-h)
+    ),
+    repeating-linear-gradient(
+      to bottom, transparent 0, transparent calc(var(--row-h) / 2 - 1px),
+      var(--line-2) calc(var(--row-h) / 2 - 1px), var(--line-2) calc(var(--row-h) / 2),
+      transparent calc(var(--row-h) / 2), transparent var(--row-h)
+    );
+}
 /* .cal-gutter позиционируется как sticky выше (левый залипающий столбец времени);
    sticky даёт контекст для абсолютных .cal-hour-label — отдельный position не нужен. */
 .cal-hour-label {
-  position: absolute; right: 6px; transform: translateY(-6px);
+  position: absolute; right: 6px; transform: translateY(-50%);
   font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text3);
+  line-height: 1; background: var(--bg2); padding: 1px 0 1px 2px;
 }
 .cal-col {
   position: relative; border-left: 1px solid var(--line);
-  background-image: repeating-linear-gradient(
-    to bottom, transparent 0, transparent calc(var(--row-h) - 1px),
-    var(--line) calc(var(--row-h) - 1px), var(--line) var(--row-h)
-  );
+  background-image: var(--cal-lines);
 }
 /* Сегодня — едва заметный фон. */
 .cal-col.today { background-color: color-mix(in oklab, var(--accent) 3%, transparent); }
@@ -279,16 +303,17 @@
   opacity: .6;
 }
 
-/* Линия текущего времени — чёрная 2px с пульсом точки; только в колонке
-   сегодняшнего дня недельной сетки. */
+/* Линия текущего времени — акцент (чёрный; в тёмной теме белый), 2px, с пульсом точки; только в
+   колонке сегодняшнего дня недельной сетки. */
 .cal-now-line {
   position: absolute; left: 0; right: 0; height: 0;
   border-top: 2px solid var(--accent);
   z-index: 3; pointer-events: none;
 }
 .cal-now-dot {
-  position: absolute; left: -4px; top: -5px;
-  width: 8px; height: 8px; border-radius: 50%;
+  /* Центр точки — на оси линии (линия 2px → центр y=1). */
+  position: absolute; left: -1px; top: -4px;
+  width: 10px; height: 10px; border-radius: 50%;
   background: var(--accent);
   animation: cal-now-pulse var(--dur-pulse) ease-out infinite;
 }
@@ -337,10 +362,10 @@
 .cal-avail {
   position: absolute; left: 0; right: 0; pointer-events: none;
   background-color: var(--avail-open);
-  background-image: repeating-linear-gradient(
-    to bottom, transparent 0, transparent calc(var(--row-h) - 1px),
-    var(--line) calc(var(--row-h) - 1px), var(--line) var(--row-h)
-  );
+  background-image: var(--cal-lines);
+  /* Явный размер плитки: без него градиенты растягиваются на высоту окна и
+     линии расходятся с колонкой при окнах нечётной длины в получасах. */
+  background-size: 100% var(--row-h);
   background-position: 0 calc(-1 * var(--avail-top, 0px));
 }
 .cal-col.today .cal-avail { background-color: color-mix(in oklab, var(--accent) 3%, var(--avail-open)); }

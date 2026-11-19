@@ -37,7 +37,15 @@ export function ScheduleEditor({ basePath, calendarUrl, readOnly = false }: Sche
   // Отложенный переход, ждущий ответа в окне «Сбросить изменения?».
   const [pendingNav, setPendingNav] = useState<(() => void) | null>(null);
 
-  const todayIso = isoDate(todayMsk());
+  // «Сегодня» пересчитываем раз в минуту: после полуночи прошлый день должен закрыться, а линия «сейчас» переехать.
+  const [todayIso, setTodayIso] = useState(() => isoDate(todayMsk()));
+  useEffect(() => {
+    const t = setInterval(() => {
+      const next = isoDate(todayMsk());
+      setTodayIso((prev) => (prev === next ? prev : next));
+    }, 60_000);
+    return () => clearInterval(t);
+  }, []);
   const dates = useMemo(() => WEEK_DOW.map((_, c) => addDays(monday, c)), [monday]);
   const isoDates = useMemo(() => dates.map(isoDate), [dates]);
   const from = isoDates[0];

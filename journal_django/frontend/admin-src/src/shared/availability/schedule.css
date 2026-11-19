@@ -4,7 +4,15 @@
    (.cal-col.has-availability / .cal-avail в calendar.css). Только токены. */
 
 /* Высота строки сетки; ScheduleGrid задаёт ту же величину инлайном (ROW_H) — держать в синхроне. */
-.sched { --sched-row-h: 24px; display: flex; flex-direction: column; gap: var(--space-4); }
+.sched {
+  --sched-row-h: 24px;
+  /* Отступ под сеткой (верхняя панель вычитается отдельно, --topbar-h): заголовок
+     страницы и панель режима над сеткой (~200px, как у .cal-grid-wrap в календаре)
+     + нижний воздух страницы. */
+  --sched-chrome: 232px;
+  --sched-h: max(360px, calc(100dvh - var(--topbar-h, 0px) - var(--sched-chrome)));
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
 
 .sched-note {
   padding: var(--space-2) var(--space-3);
@@ -72,32 +80,48 @@
 @media (max-width: 900px) { .sched-layout { grid-template-columns: minmax(0, 1fr); } }
 
 .sched-skeleton {
-  /* 28 строк + шапка (~56px: две строки заголовка в режиме недели) — без прыжка при появлении сетки. */
-  height: calc(var(--sched-row-h) * 28 + 56px); border-radius: var(--r);
+  /* Та же высота, что у прокручиваемой сетки, — без прыжка при её появлении. */
+  height: var(--sched-h); border-radius: var(--r);
   background: var(--bg3); border: 1px solid var(--line);
   animation: sched-pulse 1.4s ease-in-out infinite;
 }
 .sched-skeleton--side { height: 320px; }
 @keyframes sched-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
 
-/* Сетка */
+/* Сетка: окно фиксированной высоты, внутри — сутки 00:00–24:00 с вертикальной
+   прокруткой. Шапка дней и гаттер времени «прилипают», как в Google Calendar. */
 .sched-wrap {
+  position: relative; height: var(--sched-h); overflow-y: auto; overflow-x: hidden;
   border: 1px solid var(--line); border-radius: var(--r);
-  background: var(--bg2); overflow: hidden;
+  background: var(--bg2);
 }
 .sched-head, .sched-body { display: grid; grid-template-columns: 56px repeat(7, 1fr); }
-.sched-head { border-bottom: 1px solid var(--line); }
+.sched-head {
+  position: sticky; top: 0; z-index: 4;
+  background: var(--bg2); border-bottom: 1px solid var(--line);
+}
+.sched-corner { background: var(--bg2); }
 .sched-col-head {
-  padding: var(--space-2) var(--space-1); text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: var(--space-2) var(--space-1);
   border-left: 1px solid var(--line);
 }
-.sched-col-head.is-today { background: var(--accent-soft); }
-.sched-col-day { font-size: var(--fs-xs); font-weight: 500; color: var(--text2); }
-.sched-col-head.is-today .sched-col-day { color: var(--text); font-weight: 600; }
-.sched-col-date {
-  display: flex; align-items: center; justify-content: center; gap: var(--space-1);
-  font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text3); margin-top: 1px;
+.sched-col-day {
+  font-size: var(--fs-2xs); font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.04em;
 }
+/* Шаблон недели: даты нет, день — единственный заголовок, поэтому крупнее. */
+.sched-col-day--solo { font-size: var(--fs-md); padding: var(--space-2) 0; }
+.sched-col-head.is-today .sched-col-day { color: var(--text); }
+/* «Сегодня» — дата в круге --accent (чёрный; в тёмной теме белый). */
+.sched-col-date {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xl); font-weight: 500; color: var(--text);
+}
+.sched-col-head.is-today .sched-col-date { background: var(--accent); color: var(--on-accent); }
+.sched-col-tools { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 14px; }
 .sched-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .sched-reset {
   border: none; background: transparent; padding: 0 var(--space-1); cursor: pointer;
@@ -107,26 +131,49 @@
 .sched-reset:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .sched-body { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-.sched-gutter { position: relative; }
+.sched-gutter { position: relative; z-index: 2; background: var(--bg2); }
+/* Подпись стоит на линии начала часа и перекрывает её; 00:00 не рисуется. */
 .sched-time {
-  position: absolute; right: var(--space-2); transform: translateY(-6px);
-  font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--text3);
+  position: absolute; right: 6px; transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: var(--fs-2xs); line-height: 1; color: var(--text3);
+  background: var(--bg2);
 }
 .sched-col { position: relative; border-left: 1px solid var(--line); }
 
-/* Закрыто = --avail-closed, окно = --avail-open (как фон календаря). Полчаса — линия --line,
-   час — чуть темнее, --line-2 (в тёмной теме --line на --avail-open почти сливается). Наведение — контурная рамка, а не заливка: заливка в любой теме
+/* Закрыто = --avail-closed, окно = --avail-open (как фон календаря). Полчаса — линия --line-2,
+   час — темнее, --line-3 (полчаса — --line-2: в тёмной теме --line на --avail-open почти сливается). Наведение — контурная рамка, а не заливка: заливка в любой теме
    совпала бы по тону с одним из двух состояний. */
 .sched-cell {
-  height: var(--sched-row-h); border-bottom: 1px solid var(--line);
+  height: var(--sched-row-h); border-bottom: 1px solid var(--line-2);
   cursor: pointer; background-color: var(--avail-closed);
   transition: background-color var(--dur-1) var(--ease);
 }
-.sched-cell:nth-child(2n) { border-bottom-color: var(--line-2); }
+.sched-cell:nth-child(2n) { border-bottom-color: var(--line-3); }
 .sched-cell.is-open { background-color: var(--avail-open); }
 .sched-cell:not(.is-locked):hover { outline: 1px solid var(--text3); outline-offset: -1px; }
 .sched-cell.is-locked { cursor: not-allowed; }
 .sched-cell.is-locked:not(.is-open) { opacity: 0.7; }
+
+/* Линия текущего времени (как .cal-now-line в календаре уроков): акцент
+   (чёрный; в тёмной теме белый), 2px, точка с пульсом. Keyframes свои:
+   calendar.css подключён не на каждой странице с редактором. */
+.sched-now {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 2px solid var(--accent);
+  z-index: 3; pointer-events: none;
+}
+.sched-now-dot {
+  position: absolute; left: -1px; top: -4px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+  animation: sched-now-pulse var(--dur-pulse) ease-out infinite;
+}
+@keyframes sched-now-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 40%, transparent); }
+  70%  { box-shadow: 0 0 0 7px color-mix(in oklab, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .sched-now-dot { animation: none; } }
 
 /* Уроки недели — подсказка поверх сетки, мыши не мешают. Монохром: цвет курса
    здесь не нужен, важно лишь «время занято». */

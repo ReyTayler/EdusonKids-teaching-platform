@@ -1,24 +1,26 @@
 import type { Interval } from './types';
 
-export const GRID_START_MIN = 8 * 60;
+/** Сетка — полные сутки: график может начинаться и заканчиваться в любое время (до 24:00). */
+export const GRID_START_MIN = 0;
 export const SLOT_MIN = 30;
-export const SLOT_COUNT = 28;                    // 08:00–22:00
+export const SLOT_COUNT = 48;                    // 00:00–24:00
 /** Порядок колонок сетки Пн…Вс → day_of_week (Вс=0). */
 export const WEEK_DOW = [1, 2, 3, 4, 5, 6, 0] as const;
 export const DOW_SHORT: Record<number, string> = { 0: 'Вс', 1: 'Пн', 2: 'Вт', 3: 'Ср', 4: 'Чт', 5: 'Пт', 6: 'Сб' };
 
 export function slotLabel(i: number): string {
   const m = GRID_START_MIN + i * SLOT_MIN;
+  // Конец последнего слота — 24:00 (сутки закрываются, а не переходят в 00:00 следующего дня).
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-/** 'HH:MM' → минуты от полуночи. */
+/** 'HH:MM' → минуты от полуночи ('24:00' → 1440). */
 export function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
 }
 
-/** Интервалы → маска 28 слотов. */
+/** Интервалы → маска 48 слотов. */
 export function intervalsToSlots(ivs: Interval[]): boolean[] {
   const slots = Array<boolean>(SLOT_COUNT).fill(false);
   for (const [s, e] of ivs) {

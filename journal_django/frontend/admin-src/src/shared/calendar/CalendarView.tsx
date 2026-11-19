@@ -162,7 +162,17 @@ export function CalendarView({
   const [selected, setSelected] = useState<Occurrence | null>(null);
 
   const narrow = useIsNarrow();
-  const today = useMemo(() => todayMsk(), []);
+  // «Сегодня» пересчитываем раз в минуту: у вкладки, открытой через полночь,
+  // подсветка дня и линия «сейчас» должны переехать в новый день. State
+  // меняем только при смене даты — иначе лишние перерисовки каждую минуту.
+  const [today, setToday] = useState(() => todayMsk());
+  useEffect(() => {
+    const t = setInterval(() => {
+      const next = todayMsk();
+      setToday((prev) => (isoDate(prev) === isoDate(next) ? prev : next));
+    }, 60_000);
+    return () => clearInterval(t);
+  }, []);
   const isCurrentWeek = sameDay(monday, currentMondayMsk());
   const effectiveView = narrow ? 'list' : view;
   const isCurrentMonth = sameDay(monthAnchor, firstOfMonthMsk());

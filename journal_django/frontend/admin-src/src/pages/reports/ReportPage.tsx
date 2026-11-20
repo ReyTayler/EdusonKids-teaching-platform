@@ -49,7 +49,6 @@ function ReportForm({ def }: { def: ReportTypeDef }) {
       <PageHeader
         crumbs={[{ label: 'Отчёты', to: '/admin/reports' }, { label: def.title }]}
         title={def.title}
-        sub={def.desc}
       />
       <section className="report-page">
         <form

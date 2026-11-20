@@ -207,7 +207,6 @@ export default function ExtraLessonsListPage() {
     <PageHeader
       title="Доп.уроки"
       count={isLoading ? undefined : total}
-      sub="Незакрытые пропуски: назначить отработку или сжечь урок."
       actions={
         <button type="button" className="btn-add" onClick={() => setManualOpen(true)}>
           + Назначить вручную

@@ -130,7 +130,6 @@ export default function ChangelogListPage() {
       <PageHeader
         title="Журнал изменений"
         count={isLoading ? undefined : total}
-        sub="Все правки сохраняются, любую операцию можно откатить."
       />
       <FilterToolbar>
         <TableFilterPanel

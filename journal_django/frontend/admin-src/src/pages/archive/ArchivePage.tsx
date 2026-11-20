@@ -17,7 +17,6 @@ export default function ArchivePage() {
   const header = (
     <PageHeader
       title="Архив"
-      sub="Архивные сущности сохраняют историю и не участвуют в подборах."
       actions={
         <button
           type="button"

@@ -170,9 +170,6 @@ export default function KnowledgeListPage() {
     <div className="page">
       <PageHeader
         title={title}
-        sub={scope === 'all' && !openSection
-          ? 'Регламенты, методика и инструкции школы — в одном месте.'
-          : undefined}
         crumbs={
           openSection && scope === 'all'
             ? [{ label: 'Wiki', to: '/admin/knowledge' }, { label: openSection.title }]

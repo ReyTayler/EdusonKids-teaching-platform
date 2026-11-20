@@ -14,21 +14,17 @@ interface Props {
   crumbs?: Crumb[];
   /** Кнопки справа. Основное действие — первым. */
   actions?: ReactNode;
-  /** Пояснение или мета: по паттерну Eduson стоит справа от заголовка, серым. */
-  sub?: ReactNode;
   /**
    * Плотный режим: заголовок на ступень меньше и сжатый нижний отступ.
    * Для рабочих экранов, где на счету каждая строка данных, — канбан продлений.
    * Обычные разделы (списки, карточки сущностей) остаются на общем ритме.
    */
   dense?: boolean;
-  /** Плоская шапка без отрицательного подтяга к следующему блоку: за ней идёт панель с лупой. */
-  flat?: boolean;
 }
 
 /**
  * Шапка страницы — одна на весь раздел (паттерн Eduson: заголовок слева,
- * пояснение и действия справа).
+ * действия справа; лупа поиска списка стоит в actions слева от «+ Новый»).
  *
  * Заголовок принадлежит странице, а не таблице: две таблицы на странице не
  * дают два заголовка уровня страницы, а страница без таблицы не остаётся без
@@ -38,9 +34,9 @@ interface Props {
  * Липкие элементы страниц (панель редактора, колонка статьи) отсчитывают верх
  * от --header-h: на десктопе он 0, на узком экране — высота TopBar.
  */
-export function PageHeader({ title, count, crumbs, actions, sub, dense, flat }: Props) {
+export function PageHeader({ title, count, crumbs, actions, dense }: Props) {
   return (
-    <header className={`page-header${dense ? ' page-header--dense' : ''}${flat ? ' page-header--flat' : ''}`}>
+    <header className={`page-header${dense ? ' page-header--dense' : ''}`}>
       <div className="page-header__inner">
         <div className="page-header__main">
           {!!crumbs?.length && (
@@ -63,7 +59,6 @@ export function PageHeader({ title, count, crumbs, actions, sub, dense, flat }: 
             {count != null && <span className="page-header__count">{count}</span>}
           </div>
         </div>
-        {sub && <div className="page-header__sub">{sub}</div>}
         {actions && <div className="page-header__actions">{actions}</div>}
       </div>
     </header>

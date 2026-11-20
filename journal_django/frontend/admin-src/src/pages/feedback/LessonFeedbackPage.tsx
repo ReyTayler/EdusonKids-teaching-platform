@@ -5,7 +5,7 @@ import { FEEDBACK_LABELS } from '../../lib/labels';
 export default function LessonFeedbackPage() {
   return (
     <>
-      <PageHeader title={FEEDBACK_LABELS.title} sub={FEEDBACK_LABELS.subtitle} />
+      <PageHeader title={FEEDBACK_LABELS.title} />
       <LessonFeedbackTable />
     </>
   );

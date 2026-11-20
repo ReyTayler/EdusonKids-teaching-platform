@@ -1,6 +1,6 @@
 import { useState, useMemo, type ReactNode } from 'react';
 import { Paginator } from './Paginator';
-import { FilterToolbar, TableFilterPanel, type FilterField } from '../filters';
+import { FilterToolbar, TableFilterPanel, columnFilterFields, type FilterField } from '../filters';
 
 export interface Column<T> {
   key: string;
@@ -52,6 +52,14 @@ interface Props<T> {
   extraFields?: FilterField[];
   /** Действия в тулбаре фильтров. Основные действия страницы — в PageHeader. */
   headerActions?: ReactNode;
+  /** Лупа вынесена страницей в PageHeader (через columnFilterFields +
+   *  TableFilterPanel): встроенная панель не рисуется, строка остаётся только
+   *  если есть headerActions. */
+  searchOutside?: boolean;
+  /** Клиентский режим: фильтры принадлежат странице (нужны ей для вынесенной
+   *  лупы). Без пары filters/onFiltersChange таблица хранит их сама. */
+  filters?: Record<string, string>;
+  onFiltersChange?: (next: Record<string, string>) => void;
   /** Содержимое липкой колонки действий у правого края строки (кнопка
    *  «Открыть» в списках сущностей). Колонка не участвует в настройках
    *  видимости колонок: скрыть единственный способ открыть карточку нельзя. */
@@ -75,7 +83,7 @@ interface Props<T> {
  * Фильтры живут в панели под лупой над таблицей (TableToolbar): поля выводятся
  * из `searchable`/`searchOptions` колонок.
  */
-export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, rowKey, headerActions, extraFields, rowAction, roomy, serverPagination, isLoading }: Props<T>) {
+export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, rowKey, headerActions, searchOutside, filters: controlledFilters, onFiltersChange, extraFields, rowAction, roomy, serverPagination, isLoading }: Props<T>) {
   // Колонка действий не входит в `columns`, но занимает ячейку в каждой строке —
   // пустое состояние обязано растянуться и на неё, иначе «Ничего не найдено»
   // окажется прижатым влево, а справа повиснет пустая липкая ячейка.
@@ -85,7 +93,9 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
   // правило `tbody tr { cursor: pointer }` в table.css иначе обещало бы клик
   // там, где строка ничего не делает.
   const rowStyle = { cursor: onRowClick ? 'pointer' : 'default' } as const;
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [ownFilters, setOwnFilters] = useState<Record<string, string>>({});
+  const filters = controlledFilters ?? ownFilters;
+  const setFilters = onFiltersChange ?? setOwnFilters;
   const hasFilters = Object.values(filters).some((v) => v && v.trim() !== '');
 
   const filtered = useMemo(() => {
@@ -126,6 +136,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
           filters={sp.filters}
           onApply={sp.onFiltersChange}
           actions={headerActions}
+          searchOutside={searchOutside}
           extraFields={extraFields}
           title={title}
         />
@@ -202,6 +213,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
         filters={filters}
         onApply={setFilters}
         actions={headerActions}
+        searchOutside={searchOutside}
         extraFields={extraFields}
         title={title}
       />
@@ -256,22 +268,16 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
  * серверная таблица перезапрашивалась на каждую букву; теперь фильтры применяются
  * по «Искать» (общий модуль components/filters). Без полей и действий не рисуется.
  */
-function TableToolbar<T>({ columns, filters, onApply, actions, extraFields, title }: {
+function TableToolbar<T>({ columns, filters, onApply, actions, searchOutside, extraFields, title }: {
   columns: Column<T>[];
   filters: Record<string, string>;
   onApply: (next: Record<string, string>) => void;
   actions?: ReactNode;
+  searchOutside?: boolean;
   extraFields?: FilterField[];
   title?: string;
 }) {
-  const fields: FilterField[] = [
-    ...columns
-      .filter((c) => c.searchable)
-      .map((c): FilterField => c.searchOptions
-        ? { kind: 'select', key: c.key, label: c.label, options: c.searchOptions }
-        : { kind: 'text', key: c.key, label: c.label }),
-    ...(extraFields ?? []),
-  ];
+  const fields = searchOutside ? [] : columnFilterFields(columns, extraFields);
   if (fields.length === 0 && !actions) return null;
 
   return (

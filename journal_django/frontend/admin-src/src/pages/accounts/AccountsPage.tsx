@@ -536,7 +536,6 @@ export default function AccountsPage() {
     <PageHeader
       title="Учётные записи"
       count={isLoading ? undefined : total}
-      sub="Доступ в систему: роли, приглашения и отключение учёток."
       actions={
         <button type="button" className="btn-add" onClick={() => setCreateOpen(true)}>
           + Новая учётка

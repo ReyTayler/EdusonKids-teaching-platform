@@ -10,12 +10,15 @@ import type { Teacher } from '../../lib/types';
 import TeacherFormModal from './TeacherFormModal';
 import { useAuth } from '../../hooks/useAuth';
 import { canWriteTeachers, type Role } from '../../lib/permissions';
+import { TableFilterPanel, columnFilterFields } from '../../components/filters';
 import { PageHeader } from '../../components/shell/PageHeader';
 
 export default function TeachersListPage() {
   const { data, isLoading } = useTeachers();
   const { data: groups = [] } = useGroupsAll(true);
   const [modalOpen, setModalOpen] = useState(false);
+  // Фильтры держит страница: лупа стоит в шапке, а фильтрует таблица.
+  const [filters, setFilters] = useState<Record<string, string>>({});
   const { me } = useAuth();
   const canWrite = canWriteTeachers(me?.role as Role);
 
@@ -48,7 +51,12 @@ export default function TeachersListPage() {
   const header = (
     <PageHeader
       title="Преподаватели"
-      actions={canWrite ? <button className="btn-add" onClick={() => setModalOpen(true)}>+ Новый</button> : undefined}
+      actions={(
+        <>
+          <TableFilterPanel fields={columnFilterFields(columns)} filters={filters} onApply={setFilters} label="Поиск: Преподаватели" />
+          {canWrite && <button className="btn-add" onClick={() => setModalOpen(true)}>+ Новый</button>}
+        </>
+      )}
     />
   );
 
@@ -62,6 +70,9 @@ export default function TeachersListPage() {
         columns={columns}
         title="Преподаватели"
         roomy
+        searchOutside
+        filters={filters}
+        onFiltersChange={setFilters}
         rowAction={(row) => <RowOpenButton to={`/admin/teachers/${row.id}`} />}
       />
       {modalOpen && (

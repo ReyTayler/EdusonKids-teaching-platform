@@ -430,7 +430,7 @@
 
 /* ============================================================
  *  ШАПКА СТРАНИЦЫ (PageHeader) — паттерн Eduson: заголовок 18px/600
- *  слева, справа пояснение и/или действия. Не липкая: липкая полоса
+ *  слева, справа действия. Не липкая: липкая полоса
  *  съедала бы высоту экрана у рабочих таблиц.
  * ============================================================ */
 .page-header {
@@ -463,30 +463,13 @@
   font-weight: 500;
   color: var(--text3);
 }
-/* Пояснение прижато вправо; действия идут следом. */
-.page-header__sub {
-  margin-left: auto;
-  min-width: 0;
-  font-size: var(--fs-xs);
-  color: var(--text3);
-  text-align: right;
-}
 .page-header__actions {
   display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
   margin-left: auto;
 }
-.page-header__sub + .page-header__actions { margin-left: 0; }
 .page-header__actions .btn-save { margin-left: 0; }
 .page-header--dense { margin-bottom: calc(-1 * var(--space-3)); }
 .page-header--dense .page-header__title { font-size: var(--fs-xl); }
-/* Плоский вариант (список учеников): шапка Eduson и так не липкая и без линии,
-   поэтому отличие одно — нет подтяга вверх, зазор до панели фильтров общий. */
-.page-header--flat { margin-bottom: 0; }
-
-@media (max-width: 900px) {
-  .page-header__sub { margin-left: 0; text-align: left; flex-basis: 100%; }
-  .page-header__sub + .page-header__actions { margin-left: auto; }
-}
 
 /* ── ХЛЕБНЫЕ КРОШКИ ── */
 .crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: var(--fs-xs); color: var(--text3); }

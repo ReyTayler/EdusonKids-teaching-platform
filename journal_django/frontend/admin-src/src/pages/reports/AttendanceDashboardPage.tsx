@@ -73,7 +73,6 @@ export default function AttendanceDashboardPage() {
     <>
       <PageHeader
         title="Посещения учеников"
-        sub="Отработанные уроки с учётом половинных занятий: 45 минут считаются за 0,5 урока."
       />
 
       <div className="page-toolbar">

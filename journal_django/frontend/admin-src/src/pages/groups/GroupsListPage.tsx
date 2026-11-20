@@ -13,6 +13,7 @@ import { fmtDate, fmtLessons } from '../../lib/format';
 import { formatSlot } from '../../lib/slots';
 import type { Group } from '../../lib/types';
 import GroupFormModal from './GroupFormModal';
+import { TableFilterPanel, columnFilterFields } from '../../components/filters';
 import { PageHeader } from '../../components/shell/PageHeader';
 
 export default function GroupsListPage() {
@@ -184,7 +185,12 @@ export default function GroupsListPage() {
     <PageHeader
       title="Группы"
       count={isLoading ? undefined : total}
-      actions={<button className="btn-add" onClick={() => setModalOpen(true)}>+ Новая</button>}
+      actions={(
+        <>
+          <TableFilterPanel fields={columnFilterFields(columns)} filters={filters} onApply={setFilters} label="Поиск: Группы" />
+          <button className="btn-add" onClick={() => setModalOpen(true)}>+ Новая</button>
+        </>
+      )}
     />
   );
 
@@ -198,6 +204,7 @@ export default function GroupsListPage() {
         columns={columns}
         title="Группы"
         roomy
+        searchOutside
         rowAction={(row) => <RowOpenButton to={`/admin/groups/${row.id}`} />}
         isLoading={isFetching}
         serverPagination={{

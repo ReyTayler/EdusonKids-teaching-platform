@@ -72,7 +72,6 @@ export default function RenewalStagesSettings() {
       <PageHeader
         title="Стадии воронки продлений"
         crumbs={[{ label: 'Продления', to: '/admin/renewals' }, { label: 'Стадии' }]}
-        sub="Порядок стадий определяет движение сделки по воронке."
       />
 
       {isLoading || !stages ? (

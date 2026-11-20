@@ -169,7 +169,6 @@ export default function NotificationsPage() {
     <>
       <PageHeader
         title="Уведомления и напоминания"
-        sub="Что система отправила преподавателям и родителям и когда в последний раз отрабатывали регулярные задачи."
       />
       <NotificationToggleBar />
       <Tabs

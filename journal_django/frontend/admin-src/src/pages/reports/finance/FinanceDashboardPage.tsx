@@ -63,7 +63,6 @@ export default function FinanceDashboardPage() {
     <div className="finance-dashboard">
       <PageHeader
         title="Финансы"
-        sub="Поступления и отработанное по FIFO. По умолчанию — последние 3 месяца."
       />
 
       <div className="payroll-range">

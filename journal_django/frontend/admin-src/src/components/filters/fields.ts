@@ -60,3 +60,31 @@ export type FilterField =
 export function fieldKeys(f: FilterField): string[] {
   return [f.key];
 }
+
+/** Минимум от колонки таблицы, нужный для поля панели (структурно совпадает с Column из DataTable). */
+interface FilterableColumn {
+  key: string;
+  label: string;
+  searchable?: unknown;
+  searchOptions?: Array<{ value: string; label: string }>;
+}
+
+/**
+ * Поля панели поиска из колонок таблицы: `searchable` — текстовое поле,
+ * `searchOptions` — выбор из списка. Единый источник и для встроенной строки
+ * DataTable, и для страниц, которые выносят лупу в шапку (PageHeader actions):
+ * набор полей в обоих местах не может разойтись.
+ */
+export function columnFilterFields(
+  columns: FilterableColumn[],
+  extraFields: FilterField[] = [],
+): FilterField[] {
+  return [
+    ...columns
+      .filter((c) => c.searchable)
+      .map((c): FilterField => c.searchOptions
+        ? { kind: 'select', key: c.key, label: c.label, options: c.searchOptions }
+        : { kind: 'text', key: c.key, label: c.label }),
+    ...extraFields,
+  ];
+}

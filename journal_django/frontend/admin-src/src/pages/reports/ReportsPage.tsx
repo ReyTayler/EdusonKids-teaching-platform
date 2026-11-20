@@ -101,7 +101,6 @@ export default function ReportsPage() {
     <>
       <PageHeader
         title="Отчёты"
-        sub="Выгрузки формируются в фоне и на платформе не хранятся; дашборды считаются на лету при открытии."
       />
       <Tabs items={tabs} value={activeTab} onChange={setActiveTab} />
     </>

@@ -422,7 +422,6 @@ export const TASK_CONFLICT_LABELS: Record<string, string> = {
 
 export const FEEDBACK_LABELS = {
   title: 'Отзывы',
-  subtitle: 'Обратная связь преподавателей после каждого занятия',
   tab: 'Отзывы',
   colDate: 'Дата урока',
   colGroup: 'Группа',

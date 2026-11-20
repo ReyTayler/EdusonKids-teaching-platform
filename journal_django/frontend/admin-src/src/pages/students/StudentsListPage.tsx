@@ -14,7 +14,6 @@ import type { Student } from '../../lib/types';
 import { PageHeader } from '../../components/shell/PageHeader';
 import StudentFormModal from './StudentFormModal';
 import { StudentsFilter } from './StudentsFilter';
-import { FilterToolbar } from '../../components/filters';
 
 export default function StudentsListPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -132,25 +131,24 @@ export default function StudentsListPage() {
 
   // Шапка рисуется и во время загрузки: раньше страница возвращала скелетон
   // ДО неё, и при каждом переходе между разделами заголовок пропадал и
-  // появлялся заново — экран «моргал» названием. Полоса с лупой — туда же,
-  // иначе после загрузки она сдвигала бы таблицу вниз.
+  // появлялся заново — экран «моргал» названием. Лупа поиска стоит в самой
+  // шапке, рядом с «+ Новый».
   const header = (
-    <>
-      <PageHeader
-        title="Ученики"
-        flat
-        count={isLoading ? undefined : total}
-        actions={<button type="button" className="btn-add" onClick={() => setModalOpen(true)}>+ Новый</button>}
-      />
-      <FilterToolbar>
-        <StudentsFilter
-          filters={filters}
-          managerOptions={(assignees || []).map((a) => ({ value: String(a.id), label: a.full_name }))}
-          stageOptions={(stages || []).map((s) => ({ value: String(s.id), label: s.label }))}
-          onApply={setFilters}
-        />
-      </FilterToolbar>
-    </>
+    <PageHeader
+      title="Ученики"
+      count={isLoading ? undefined : total}
+      actions={(
+        <>
+          <StudentsFilter
+            filters={filters}
+            managerOptions={(assignees || []).map((a) => ({ value: String(a.id), label: a.full_name }))}
+            stageOptions={(stages || []).map((s) => ({ value: String(s.id), label: s.label }))}
+            onApply={setFilters}
+          />
+          <button type="button" className="btn-add" onClick={() => setModalOpen(true)}>+ Новый</button>
+        </>
+      )}
+    />
   );
 
   if (isLoading) return <>{header}<TableSkeleton rows={6} cols={10} roomy /></>;

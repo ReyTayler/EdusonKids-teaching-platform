@@ -18,6 +18,8 @@ urlpatterns = [
     # Phase 2 — simple reference sections
     # График работы преподавателя (admin, manager/admin/superadmin) — до общего teachers-include
     path('api/admin/teachers/<int:teacher_id>/work-schedule', include('apps.availability.admin_urls')),
+    # Свободные окна всех преподавателей — «Сводка» admin-календаря (manager/admin/superadmin)
+    path('api/admin/work-schedule', include('apps.availability.school_urls')),
     path('api/admin/teachers', include('apps.teachers.urls')),
     path('api/admin/directions', include('apps.directions.urls')),
     path('api/admin/discounts', include('apps.discounts.urls')),

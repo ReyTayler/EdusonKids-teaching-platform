@@ -51,3 +51,39 @@
 @media (max-width: 600px) {
   .cal-search__fields { grid-template-columns: 1fr; }
 }
+
+/* ── Вкладка «Сводка»: свободные окна преподавателей ── */
+.free-windows { display: flex; flex-direction: column; gap: var(--space-4); }
+.free-windows__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.free-windows__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); /* на телефоне — одна колонка */
+  gap: var(--space-4);
+}
+/* Eduson: линии вместо теней — карточка держится только на рамке. */
+.free-windows__card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.free-windows__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.free-windows__name {
+  font-size: var(--fs-lg); font-weight: 600; color: var(--text);
+  text-decoration: none; min-width: 0; overflow-wrap: anywhere;
+}
+.free-windows__name:hover { text-decoration: underline; }
+.free-windows__head .ui-btn { flex-shrink: 0; }
+/* pre-line: строки сводки разделены переводом строки; текст выделяется мышью целиком. */
+.free-windows__text {
+  white-space: pre-line;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--text2);
+  user-select: text;
+}
+.free-windows__text--empty { color: var(--text3); }

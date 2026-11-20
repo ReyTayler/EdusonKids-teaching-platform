@@ -27,6 +27,7 @@ from apps.availability.models import (
     AvailabilityOverride,
     AvailabilityRule,
 )
+from apps.groups.models import GroupScheduleSlot
 from apps.teachers.models import Teacher
 
 # Интервал — пара минут от полуночи [начало, конец); конец может быть 1440 (24:00).
@@ -222,6 +223,83 @@ def windows_payload_many(teacher_ids, d_from: datetime.date,
             payload[d.isoformat()] = [[fmt(s), fmt(e)] for s, e in ivs]
             d += datetime.timedelta(days=1)
         result[tid] = payload
+    return result
+
+
+# Кусок свободного времени короче получаса урок не вместит — в сводке он шум.
+MIN_FREE_MIN = 30
+
+
+def subtract(windows: list[Interval], busy: list[Interval],
+             min_len: int = MIN_FREE_MIN) -> list[Interval]:
+    """Окна минус занятые интервалы (точно по минутам); куски короче min_len отбрасываются."""
+    busy = normalize(busy)
+    out: list[Interval] = []
+    for w_start, w_end in normalize(windows):
+        cursor = w_start
+        for b_start, b_end in busy:
+            if b_end <= cursor or b_start >= w_end:
+                continue
+            if b_start - cursor >= min_len:
+                out.append((cursor, b_start))
+            cursor = max(cursor, b_end)
+            if cursor >= w_end:
+                break
+        if w_end - cursor >= min_len:
+            out.append((cursor, w_end))
+    return out
+
+
+def free_windows_summary() -> list[dict]:
+    """
+    Свободные окна всех активных (не служебных) преподавателей — вкладка
+    «Сводка» admin-календаря (спека 2026-11-20-admin-calendar-free-windows-summary).
+
+    Окна = недельный шаблон МИНУС постоянные уроки: слоты расписания активных
+    групп, действующие сегодня. Исключения на даты не учитываются намеренно —
+    сводка о типовой неделе, а не о конкретной; по той же причине не учитываются
+    разовые доп.уроки, переносы и замены. Преподаватель урока — group.teacher_id.
+
+    Не больше 3 запросов при любом числе преподавателей и групп: преподаватели,
+    правила, слоты (с JOIN на группу; без шаблонов запрос слотов не нужен).
+    """
+    teachers = list(Teacher.objects.filter(active=True, is_service=False)
+                    .order_by('name', 'id').values_list('id', 'name'))
+    if not teachers:
+        return []
+    ids = [tid for tid, _ in teachers]
+
+    templates: dict[int, dict[int, list[Interval]]] = defaultdict(lambda: defaultdict(list))
+    for tid, dow, s, e in (AvailabilityRule.objects.filter(teacher_id__in=ids)
+                           .values_list('teacher_id', 'day_of_week', 'start_minute', 'end_minute')):
+        templates[tid][dow].append((s, e))
+
+    today = _today()
+    busy: dict[int, dict[int, list[Interval]]] = defaultdict(lambda: defaultdict(list))
+    slots = (GroupScheduleSlot.objects
+             # Слоты нужны только тем, у кого есть шаблон: вычитать больше не из чего.
+             .filter(group__active=True, group__teacher_id__in=list(templates),
+                     effective_from__lte=today)
+             .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+             .values_list('group__teacher_id', 'day_of_week', 'start_time',
+                          'group__lesson_duration_minutes'))
+    for tid, dow, start_time, duration in slots:
+        start = start_time.hour * 60 + start_time.minute
+        # Урок, уходящий за полночь, обрезаем концом суток: хвост на следующий
+        # день — редкость, а сетка графика всё равно кончается в 24:00.
+        busy[tid][dow].append((start, min(start + duration, GRID_END_MIN)))
+
+    result: list[dict] = []
+    for tid, name in teachers:
+        template = templates.get(tid)
+        days = None
+        if template:
+            days = {
+                str(dow): [[fmt(s), fmt(e)]
+                           for s, e in subtract(template.get(dow, []), busy[tid][dow])]
+                for dow in range(7)
+            }
+        result.append({'id': tid, 'name': name, 'has_schedule': days is not None, 'days': days})
     return result
 
 

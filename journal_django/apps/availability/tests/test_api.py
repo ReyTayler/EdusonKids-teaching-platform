@@ -355,7 +355,7 @@ def test_every_view_declares_permissions():
     from apps.availability import views
     found = [obj for obj in vars(views).values()
              if isinstance(obj, type) and issubclass(obj, APIView) and obj is not APIView]
-    assert len(found) == 8
+    assert len(found) == 9
     for cls in found:
         assert 'permission_classes' in vars(cls), cls.__name__
         assert cls.permission_classes and AllowAny not in cls.permission_classes, cls.__name__

@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Tabs } from '../../components/ui/Tabs';
+import FreeWindowsSummary from './FreeWindowsSummary';
 import { useTeachers } from '../../hooks/useTeachers';
 import { useAdminCalendar } from '../../hooks/useAdminCalendar';
 import { useDirections } from '../../hooks/useDirections';
@@ -21,6 +23,16 @@ const WEEK_ONLY: CalendarViewMode[] = ['week'];
  */
 export default function AdminCalendarPage() {
   const navigate = useNavigate();
+  // Вкладка — в ?tab=; «Календарь» — значение по умолчанию, в адресе не хранится.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'summary' ? 'summary' : 'calendar';
+  const setTab = (next: string) => {
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (next === 'calendar') p.delete('tab'); else p.set('tab', next);
+      return p;
+    }, { replace: true });
+  };
   const teachers = useTeachers(true); // включая архивных — можно посмотреть их прошлое расписание
   const directions = useDirections(true); // включая архивные — в их прошлых уроках направление ещё встречается
   const [teacherId, setTeacherId] = useState<number | null>(null);
@@ -80,12 +92,7 @@ export default function AdminCalendarPage() {
     if (occ.groupId != null) navigate(`/admin/groups/${occ.groupId}`);
   }, [navigate]);
 
-  return (
-    <div className="admin-calendar-page">
-      {/* Только заголовок: без липкой шапки, линии и подзаголовка. Фильтры живут в окне
-          поиска рядом с навигацией недели (headExtra). */}
-      <h1 className="page-header__title">Календарь</h1>
-
+  const calendar = (
       <CalendarView
         occurrences={data?.occurrences ?? []}
         unscheduled={data?.unscheduled ?? []}
@@ -118,6 +125,22 @@ export default function AdminCalendarPage() {
           />
         }
         onOpenGroup={onOpenGroup}
+      />
+  );
+
+  return (
+    <div className="admin-calendar-page">
+      {/* Только заголовок: без липкой шапки, линии и подзаголовка. Фильтры живут в окне
+          поиска рядом с навигацией недели (headExtra). */}
+      <h1 className="page-header__title">Календарь</h1>
+
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        items={[
+          { value: 'calendar', label: 'Календарь', content: calendar },
+          { value: 'summary', label: 'Сводка', content: <FreeWindowsSummary /> },
+        ]}
       />
     </div>
   );

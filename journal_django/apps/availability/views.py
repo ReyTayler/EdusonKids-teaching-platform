@@ -195,3 +195,15 @@ class AdminWeekView(_AdminScope, _WeekMixin, APIView):
 class AdminOverrideView(_AdminScope, _OverrideMixin, APIView):
     """DELETE /api/admin/teachers/<id>/work-schedule/overrides/<date>."""
     permission_classes = [IsManagerOrAdmin]
+
+
+class AdminFreeWindowsView(APIView):
+    """
+    GET /api/admin/work-schedule/free-windows — свободные окна всех преподавателей
+    (шаблон графика минус постоянные уроки): вкладка «Сводка» admin-календаря.
+    Права — как у самого календаря (/api/admin/calendar).
+    """
+    permission_classes = [IsManagerOrAdmin]
+
+    def get(self, request: Request) -> Response:
+        return Response({'teachers': services.free_windows_summary()})

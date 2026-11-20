@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Dialog } from '../../components/ui/Dialog';
+import { useState, type FormEvent } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { Button } from '../../components/ui/Button';
 import { Combobox, type Option } from '../../components/form/Combobox';
 import { Field } from '../../components/form/Field';
@@ -25,86 +25,100 @@ function SearchIcon() {
   );
 }
 
-const labelOf = (opts: Option[], value: string) => opts.find((o) => o.value === value)?.label ?? value;
-
 /**
- * Поиск по календарю: одна кнопка-лупа, по клику — окно с фильтрами «Преподаватель» и
- * «Направление». Правки в окне — черновик: на календарь они попадают только по «Поиск»,
- * иначе неделя перерисовывалась бы на каждый выбор в списке. Активные фильтры видны
- * вне окна — точкой на лупе и чипами с крестиком.
+ * Поиск по календарю: слитная группа [лупа | ×] и выпадающая панель с фильтрами
+ * «Преподаватель» и «Направление». Правки в панели — черновик: на календарь они
+ * попадают только по «Искать», иначе неделя перерисовывалась бы на каждый выбор.
+ * Активные фильтры видны вне панели по заливке лупы и по кнопке «×».
  */
 export function CalendarSearch({ filters, teacherOptions, directionOptions, onApply }: Props) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<CalendarFilters>(filters);
 
-  // Черновик начинается с применённых значений при каждом открытии (в т.ч. после
-  // снятия чипа снаружи). Снимок — в обработчике, а не в эффекте: эффект
-  // срабатывает после отрисовки, и окно на кадр показало бы старый черновик.
-  const openSearch = () => { setDraft(filters); setOpen(true); };
-
   const active = filters.teacherId != null || filters.direction != null;
-  const apply = () => { onApply(draft); setOpen(false); };
-  // «Сбросить» сразу снимает оба фильтра и закрывает окно — отдельный шаг «сбросил, потом ищи» не нужен.
+
+  // Черновик снимается при открытии, в обработчике: эффект сработал бы после
+  // отрисовки, и панель на кадр показала бы устаревшие значения.
+  const onOpenChange = (next: boolean) => {
+    if (next) setDraft(filters);
+    setOpen(next);
+  };
+  const submit = (e: FormEvent) => {
+    e.preventDefault(); // Enter в поле не должен перезагружать страницу
+    onApply(draft);
+    setOpen(false);
+  };
   const reset = () => { onApply({ teacherId: null, direction: null }); setOpen(false); };
 
   return (
-    <>
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
       <div className="cal-search">
-        <button
-          type="button"
-          className="cal-nav-btn cal-search__btn"
-          aria-label="Поиск"
-          title="Поиск"
-          aria-haspopup="dialog"
-          onClick={openSearch}
-        >
-          <SearchIcon />
-          {active && <span className="cal-search__dot" aria-hidden="true" />}
-        </button>
-        {filters.teacherId != null && (
-          <span className="cal-chip">
-            <span className="cal-chip__label">{labelOf(teacherOptions, String(filters.teacherId))}</span>
-            <button type="button" className="cal-chip__x" aria-label="Убрать фильтр по преподавателю" onClick={() => onApply({ ...filters, teacherId: null })}>×</button>
-          </span>
-        )}
-        {filters.direction != null && (
-          <span className="cal-chip">
-            <span className="cal-chip__label">{labelOf(directionOptions, filters.direction)}</span>
-            <button type="button" className="cal-chip__x" aria-label="Убрать фильтр по направлению" onClick={() => onApply({ ...filters, direction: null })}>×</button>
-          </span>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={`cal-search__btn${open || active ? ' is-active' : ''}`}
+            aria-label="Поиск"
+            title="Поиск"
+          >
+            <SearchIcon />
+          </button>
+        </Popover.Trigger>
+        {active && (
+          <button type="button" className="cal-search__btn cal-search__reset" aria-label="Сбросить" title="Сбросить" onClick={reset}>
+            <span aria-hidden="true">×</span>
+          </button>
         )}
       </div>
-
-      <Dialog
-        open={open}
-        onOpenChange={setOpen}
-        title="Поиск по календарю"
-        footer={
-          <>
-            <Button variant="ghost" onClick={reset}>Сбросить</Button>
-            <Button variant="primary" onClick={apply}>Поиск</Button>
-          </>
-        }
-      >
-        <div className="cal-search__form">
-          <Field label="Преподаватель">
-            <Combobox
-              value={draft.teacherId != null ? String(draft.teacherId) : ''}
-              onChange={(v) => setDraft((d) => ({ ...d, teacherId: v ? Number(v) : null }))}
-              options={teacherOptions}
-              placeholder="Все преподаватели"
-            />
-          </Field>
-          <Field label="Направление">
-            <Combobox
-              value={draft.direction ?? ''}
-              onChange={(v) => setDraft((d) => ({ ...d, direction: v || null }))}
-              options={directionOptions}
-              placeholder="Все направления"
-            />
-          </Field>
-        </div>
-      </Dialog>
-    </>
+      <Popover.Portal>
+        <Popover.Content
+          className="cal-search__panel"
+          data-floating-popover
+          align="end"
+          sideOffset={10}
+          collisionPadding={16}
+          aria-label="Поиск по календарю"
+          onOpenAutoFocus={(e) => {
+            // Radix по умолчанию фокусирует первое поле, а Combobox на фокусе
+            // раскрывает список с подсветкой «Все преподаватели» — первый же Enter
+            // молча сбросил бы фильтр вместо поиска. Фокус — на саму панель.
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).focus();
+          }}
+          onInteractOutside={(e) => {
+            // Список Combobox рендерится порталом в body — формально «снаружи»
+            // поповера; без этой проверки клик по варианту закрывал бы панель.
+            const t = e.target as HTMLElement | null;
+            if (t?.closest('[data-floating-popover]')) e.preventDefault();
+          }}
+        >
+          <form className="cal-search__form" onSubmit={submit}>
+            <div className="cal-search__fields">
+              <Field label="Преподаватель">
+                <Combobox
+                  value={draft.teacherId != null ? String(draft.teacherId) : ''}
+                  onChange={(v) => setDraft((d) => ({ ...d, teacherId: v ? Number(v) : null }))}
+                  options={teacherOptions}
+                  placeholder="Все преподаватели"
+                  aria-label="Преподаватель"
+                />
+              </Field>
+              <Field label="Направление">
+                <Combobox
+                  value={draft.direction ?? ''}
+                  onChange={(v) => setDraft((d) => ({ ...d, direction: v || null }))}
+                  options={directionOptions}
+                  placeholder="Все направления"
+                  aria-label="Направление"
+                />
+              </Field>
+            </div>
+            <div className="cal-search__actions">
+              <Button type="submit" variant="primary" iconLeft={<SearchIcon />}>Искать</Button>
+            </div>
+          </form>
+          <Popover.Arrow className="cal-search__arrow" width={16} height={8} />
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

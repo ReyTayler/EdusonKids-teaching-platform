@@ -145,7 +145,19 @@ export default function TasksPage() {
     <div className="tasks-page">
       {/* Отдельной страницы настроек у раздела больше нет: воронки правятся в
           полосе слева (меню «…» на карточке), стадии — прямо на доске. */}
-      <PageHeader title="Задачи" dense />
+      <PageHeader
+        title="Задачи"
+        dense
+        // Лупа — в шапке; переключатель вида и быстрые срезы остаются рядом с доской.
+        actions={!isLoading && selectedBoardId != null ? (
+          <TaskSearchPanel
+            boardId={selectedBoardId}
+            values={filterValues}
+            onApply={applyFilters}
+            showStage={view === 'week'}
+          />
+        ) : undefined}
+      />
 
       {isLoading ? (
         <div className="tasks-page__loading">Загрузка воронок…</div>
@@ -168,20 +180,12 @@ export default function TasksPage() {
       ) : (
         <>
           {/* Один ряд управления на оба вида: слева — чем показываем и что
-              показываем, дальше фильтры. Ряд стоит НАД полосой воронок и во всю
+              показываем, дальше быстрые срезы (лупа — в шапке). Ряд стоит НАД полосой воронок и во всю
               ширину: фильтры действуют на текущий вид целиком, а полоса — это
               навигация по воронкам, ей место вплотную к самой доске. */}
           <div className="tasks-filterbar">
             <TaskViewSwitcher value={view} onChange={setView} />
             <TaskSegments values={filterValues} onApply={applyFilters} />
-            {selectedBoardId != null && (
-              <TaskSearchPanel
-                boardId={selectedBoardId}
-                values={filterValues}
-                onApply={applyFilters}
-                showStage={view === 'week'}
-              />
-            )}
           </div>
 
           <div className="tasks-page__work">

@@ -728,6 +728,8 @@ button.kb-tree__twist:hover { color: var(--text2); }
 }
 
 .kb-drive__bar-right {
+  /* Лупа ушла в шапку: переключатель вида один в строке и держится справа. */
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);

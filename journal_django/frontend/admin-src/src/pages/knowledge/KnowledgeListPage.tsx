@@ -175,11 +175,20 @@ export default function KnowledgeListPage() {
             ? [{ label: 'Wiki', to: '/admin/knowledge' }, { label: openSection.title }]
             : undefined
         }
-        actions={
-          canWrite ? (
-            <CreateMenu onSection={askCreateSection} onDocument={askCreateDocument} />
-          ) : null
-        }
+        actions={(
+          <>
+            {/* Лупа в шапке; без разделов искать негде. */}
+            {sectionList.length > 0 && (
+              <TableFilterPanel
+                fields={SEARCH_FIELDS}
+                filters={{ ...(query ? { q: query } : {}), ...(statusFilter ? { status: statusFilter } : {}) }}
+                onApply={(next) => patchParams({ q: next.q ?? null, status: next.status ?? null, page: null })}
+                label="Поиск по Wiki"
+              />
+            )}
+            {canWrite && <CreateMenu onSection={askCreateSection} onDocument={askCreateDocument} />}
+          </>
+        )}
       />
 
       {sectionList.length === 0 ? (
@@ -208,12 +217,6 @@ export default function KnowledgeListPage() {
 
           <section className="kb-drive__main">
             <div className="kb-drive__bar">
-              <TableFilterPanel
-                fields={SEARCH_FIELDS}
-                filters={{ ...(query ? { q: query } : {}), ...(statusFilter ? { status: statusFilter } : {}) }}
-                onApply={(next) => patchParams({ q: next.q ?? null, status: next.status ?? null, page: null })}
-                label="Поиск по Wiki"
-              />
               <div className="kb-drive__bar-right">
                 <ViewToggle view={view} onChange={setView} />
               </div>

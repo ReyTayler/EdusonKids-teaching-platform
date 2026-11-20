@@ -5,6 +5,7 @@ import { TableSkeleton } from '../../components/ui/Skeleton';
 import { fmtDateTime } from '../../lib/format';
 import type { AuditEntry } from '../../lib/types';
 import { PageHeader } from '../../components/shell/PageHeader';
+import { TableFilterPanel, columnFilterFields } from '../../components/filters';
 
 // ─── Подписи событий ──────────────────────────────────────────────────────────
 
@@ -140,7 +141,11 @@ export default function AuditPage() {
   // Шапка рисуется и во время загрузки — иначе заголовок пропадает
   // при каждом переходе в раздел.
   const header = (
-    <PageHeader title="Журнал событий" count={isLoading ? undefined : total} />
+    <PageHeader
+      title="Журнал событий"
+      count={isLoading ? undefined : total}
+      actions={<TableFilterPanel fields={columnFilterFields(columns)} filters={filters} onApply={setFilters} label="Поиск: Журнал событий" />}
+    />
   );
 
   if (isLoading) return <>{header}<TableSkeleton rows={12} cols={4} /></>;
@@ -152,6 +157,7 @@ export default function AuditPage() {
       data={rows}
       columns={columns}
       title="Журнал событий"
+      searchOutside
       isLoading={isFetching}
       serverPagination={{
         page,

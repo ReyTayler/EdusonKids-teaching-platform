@@ -6,6 +6,7 @@ import { TableSkeleton } from '../../components/ui/Skeleton';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Tabs, type TabItem } from '../../components/ui/Tabs';
 import { PageHeader } from '../../components/shell/PageHeader';
+import { TableFilterPanel, columnFilterFields } from '../../components/filters';
 import { fmtDateTime } from '../../lib/format';
 import {
   NOTIFICATION_CHANNEL_LABELS,
@@ -35,6 +36,67 @@ function firstLine(text: string): string {
   return line || '—';
 }
 
+/** Вне компонента: лупа стоит в шапке страницы, а таблица — во вкладке; обоим нужен
+ * один список полей. */
+const LOG_COLUMNS: Column<NotificationRow>[] = [
+  {
+    key: 'kind',
+    label: 'Тип',
+    width: '13rem',
+    sortable: false,
+    searchable: true,
+    searchOptions: NOTIFICATION_KIND_OPTIONS,
+    cell: (r) => NOTIFICATION_KIND_LABELS[r.kind] ?? r.kind,
+  },
+  {
+    key: 'channel',
+    label: 'Канал',
+    width: '8rem',
+    sortable: false,
+    searchable: true,
+    searchOptions: NOTIFICATION_CHANNEL_OPTIONS,
+    cell: (r) => NOTIFICATION_CHANNEL_LABELS[r.channel] ?? r.channel,
+  },
+  {
+    key: 'teacher_name',
+    label: 'Получатель',
+    width: '13rem',
+    sortable: false,
+    // Сообщение в общий чат персонального адресата не имеет — показываем chat_id.
+    // У письма адресат — почта и тема (родители не имеют teacher_name).
+    cell: (r) => r.channel === 'email'
+      ? (
+        <span className="notifications-recipient">
+          <span className="mono">{r.recipient_email ?? '—'}</span>
+          {r.subject && <span className="notifications-recipient__sub">{r.subject}</span>}
+        </span>
+      )
+      : (r.teacher_name ?? <span className="mono">{r.chat_id}</span>),
+  },
+  {
+    key: 'text',
+    label: 'Текст',
+    sortable: false,
+    cell: (r) => <span className="notifications-text">{firstLine(r.text)}</span>,
+  },
+  {
+    key: 'status',
+    label: 'Статус',
+    width: '9rem',
+    sortable: false,
+    searchable: true,
+    searchOptions: NOTIFICATION_STATUS_OPTIONS,
+    cell: (r) => <NotificationStatusBadge status={r.status} />,
+  },
+  {
+    key: 'created_at',
+    label: 'Время',
+    width: '10rem',
+    sortable: false,
+    cell: (r) => fmtDateTime(r.created_at),
+  },
+];
+
 /** Лента доставки: фильтры, серверная пагинация, модалка полного текста. */
 function NotificationsLog() {
   const {
@@ -56,65 +118,6 @@ function NotificationsLog() {
   const total = data?.total ?? 0;
   const hasFilters = Object.values(filters).some((v) => v);
 
-  const columns: Column<NotificationRow>[] = [
-    {
-      key: 'kind',
-      label: 'Тип',
-      width: '13rem',
-      sortable: false,
-      searchable: true,
-      searchOptions: NOTIFICATION_KIND_OPTIONS,
-      cell: (r) => NOTIFICATION_KIND_LABELS[r.kind] ?? r.kind,
-    },
-    {
-      key: 'channel',
-      label: 'Канал',
-      width: '8rem',
-      sortable: false,
-      searchable: true,
-      searchOptions: NOTIFICATION_CHANNEL_OPTIONS,
-      cell: (r) => NOTIFICATION_CHANNEL_LABELS[r.channel] ?? r.channel,
-    },
-    {
-      key: 'teacher_name',
-      label: 'Получатель',
-      width: '13rem',
-      sortable: false,
-      // Сообщение в общий чат персонального адресата не имеет — показываем chat_id.
-      // У письма адресат — почта и тема (родители не имеют teacher_name).
-      cell: (r) => r.channel === 'email'
-        ? (
-          <span className="notifications-recipient">
-            <span className="mono">{r.recipient_email ?? '—'}</span>
-            {r.subject && <span className="notifications-recipient__sub">{r.subject}</span>}
-          </span>
-        )
-        : (r.teacher_name ?? <span className="mono">{r.chat_id}</span>),
-    },
-    {
-      key: 'text',
-      label: 'Текст',
-      sortable: false,
-      cell: (r) => <span className="notifications-text">{firstLine(r.text)}</span>,
-    },
-    {
-      key: 'status',
-      label: 'Статус',
-      width: '9rem',
-      sortable: false,
-      searchable: true,
-      searchOptions: NOTIFICATION_STATUS_OPTIONS,
-      cell: (r) => <NotificationStatusBadge status={r.status} />,
-    },
-    {
-      key: 'created_at',
-      label: 'Время',
-      width: '10rem',
-      sortable: false,
-      cell: (r) => fmtDateTime(r.created_at),
-    },
-  ];
-
   if (isLoading) return <TableSkeleton rows={12} cols={6} />;
 
   // Пустая таблица без объяснений — тупик: разводим «ещё ничего не слали» и
@@ -131,8 +134,9 @@ function NotificationsLog() {
     <>
       <DataTable<NotificationRow>
         data={rows}
-        columns={columns}
+        columns={LOG_COLUMNS}
         title="Журнал уведомлений"
+        searchOutside
         isLoading={isFetching}
         onRowClick={(r) => setOpened(r)}
         serverPagination={{
@@ -156,7 +160,7 @@ function NotificationsLog() {
 }
 
 export default function NotificationsPage() {
-  const { getExtra, setExtra } = useListSearchParams({ sortBy: 'created_at', sortDir: 'desc' });
+  const { getExtra, setExtra, filters, setFilters } = useListSearchParams({ sortBy: 'created_at', sortDir: 'desc' });
   const raw = getExtra('tab');
   const activeTab: NotificationsTab = isTab(raw) ? raw : DEFAULT_TAB;
 
@@ -169,6 +173,10 @@ export default function NotificationsPage() {
     <>
       <PageHeader
         title="Уведомления и напоминания"
+        // Лупа только у журнала: у вкладки «Расписание» фильтров нет.
+        actions={activeTab === 'log' ? (
+          <TableFilterPanel fields={columnFilterFields(LOG_COLUMNS)} filters={filters} onApply={setFilters} label="Поиск: Журнал уведомлений" />
+        ) : undefined}
       />
       <NotificationToggleBar />
       <Tabs

@@ -19,6 +19,51 @@ import { fmtDate, fmtRub } from '../../lib/format';
 import { PAYROLL_KIND_LABELS, PAYROLL_KIND_FILTER_OPTIONS } from '../../lib/labels';
 import type { PayrollEntry, PayrollSummaryRow } from '../../lib/types';
 import { PageHeader } from '../../components/shell/PageHeader';
+import { TableFilterPanel, columnFilterFields } from '../../components/filters';
+
+/** Колонки вынесены из вида: лупа стоит в шапке страницы, а фильтрует вид —
+ * и шапке, и таблице нужен один и тот же список полей. */
+const PAYROLL_COLUMNS: Column<PayrollEntry>[] = [
+  { key: 'kind', label: 'Вид', sortable: true, searchable: true,
+    searchOptions: PAYROLL_KIND_FILTER_OPTIONS,
+    cell: (r) => r.kind === 'cancellation'
+      ? <StatusBadge tone="info">{PAYROLL_KIND_LABELS.cancellation}</StatusBadge>
+      : PAYROLL_KIND_LABELS.lesson },
+  { key: 'lesson_date', label: 'Дата', sortable: true, searchable: false,
+    cell: (r) => {
+      const date = fmtDate(r.lesson_date);
+      // У отмены урока нет — ссылаться некуда, показываем дату и время отмены.
+      if (r.kind === 'cancellation') {
+        return r.scheduled_time ? `${date} · ${r.scheduled_time.slice(0, 5)}` : date;
+      }
+      return <EntityLink section="lessons" id={r.lesson_id} text={date} />;
+    } },
+  { key: 'teacher_name', label: 'Преподаватель', sortable: true, searchable: true,
+    cell: (r) => <EntityLink section="teachers" id={r.teacher_id} text={r.teacher_name} /> },
+  { key: 'group_name', label: 'Группа', sortable: true, searchable: true,
+    cell: (r) => <EntityLink section="groups" id={r.group_id} text={r.group_name} /> },
+  { key: 'lesson_number', label: 'Урок #', sortable: true,
+    cell: (r) => r.lesson_number ?? '—' },
+  { key: 'present_count', label: 'Было/Всего', sortable: false,
+    cell: (r) => (r.kind === 'cancellation' || r.present_count == null)
+      ? '—' : `${r.present_count}/${r.total_students}` },
+  { key: 'payment', label: 'Оплата', sortable: true,
+    cell: (r) => (
+      <div className="payroll-amount">
+        <span>{fmtRub(r.payment)}</span>
+        {r.is_manual && (
+          <>
+            <StatusBadge tone="muted">вручную</StatusBadge>
+            <span className="payroll-amount__calc">расчёт {fmtRub(r.calc_payment)}</span>
+          </>
+        )}
+      </div>
+    ) },
+  { key: 'penalty', label: 'Штраф', sortable: true,
+    cell: (r) => r.kind === 'cancellation' ? '—' : fmtRub(r.penalty) },
+  { key: 'rule_note', label: 'Как посчитано', sortable: false,
+    cell: (r) => <span className="payroll-note" title={r.rule_note}>{r.rule_note || '—'}</span> },
+];
 
 export default function PayrollPage() {
   const search = useListSearchParams({ sortBy: 'lesson_date', sortDir: 'desc' });
@@ -31,7 +76,12 @@ export default function PayrollPage() {
           представления — поэтому заголовок не пропадает при переключении вида. */}
       <PageHeader
         title="Зарплата"
-        actions={
+        actions={(
+          <>
+          {/* Лупа только у списка: в сводке фильтровать по колонкам нечего. */}
+          {mode === 'list' && (
+            <TableFilterPanel fields={columnFilterFields(PAYROLL_COLUMNS)} filters={search.filters} onApply={search.setFilters} label="Поиск: Зарплата" />
+          )}
           <div className="segmented" role="group" aria-label="Режим отображения">
             <button
               type="button"
@@ -46,7 +96,8 @@ export default function PayrollPage() {
               onClick={() => setMode('summary')}
             >Сводка</button>
           </div>
-        }
+          </>
+        )}
       />
 
       {mode === 'list' ? (
@@ -102,48 +153,6 @@ function PayrollListView({ search }: { search: SearchProps }) {
     } catch (err) { showError(err); }
   };
 
-  const columns: Column<PayrollEntry>[] = [
-    { key: 'kind', label: 'Вид', sortable: true, searchable: true,
-      searchOptions: PAYROLL_KIND_FILTER_OPTIONS,
-      cell: (r) => r.kind === 'cancellation'
-        ? <StatusBadge tone="info">{PAYROLL_KIND_LABELS.cancellation}</StatusBadge>
-        : PAYROLL_KIND_LABELS.lesson },
-    { key: 'lesson_date', label: 'Дата', sortable: true, searchable: false,
-      cell: (r) => {
-        const date = fmtDate(r.lesson_date);
-        // У отмены урока нет — ссылаться некуда, показываем дату и время отмены.
-        if (r.kind === 'cancellation') {
-          return r.scheduled_time ? `${date} · ${r.scheduled_time.slice(0, 5)}` : date;
-        }
-        return <EntityLink section="lessons" id={r.lesson_id} text={date} />;
-      } },
-    { key: 'teacher_name', label: 'Преподаватель', sortable: true, searchable: true,
-      cell: (r) => <EntityLink section="teachers" id={r.teacher_id} text={r.teacher_name} /> },
-    { key: 'group_name', label: 'Группа', sortable: true, searchable: true,
-      cell: (r) => <EntityLink section="groups" id={r.group_id} text={r.group_name} /> },
-    { key: 'lesson_number', label: 'Урок #', sortable: true,
-      cell: (r) => r.lesson_number ?? '—' },
-    { key: 'present_count', label: 'Было/Всего', sortable: false,
-      cell: (r) => (r.kind === 'cancellation' || r.present_count == null)
-        ? '—' : `${r.present_count}/${r.total_students}` },
-    { key: 'payment', label: 'Оплата', sortable: true,
-      cell: (r) => (
-        <div className="payroll-amount">
-          <span>{fmtRub(r.payment)}</span>
-          {r.is_manual && (
-            <>
-              <StatusBadge tone="muted">вручную</StatusBadge>
-              <span className="payroll-amount__calc">расчёт {fmtRub(r.calc_payment)}</span>
-            </>
-          )}
-        </div>
-      ) },
-    { key: 'penalty', label: 'Штраф', sortable: true,
-      cell: (r) => r.kind === 'cancellation' ? '—' : fmtRub(r.penalty) },
-    { key: 'rule_note', label: 'Как посчитано', sortable: false,
-      cell: (r) => <span className="payroll-note" title={r.rule_note}>{r.rule_note || '—'}</span> },
-  ];
-
   const rowAction = (r: PayrollEntry) => {
     const items: ActionMenuItem[] = [
       { label: 'Изменить сумму', onSelect: () => setEditing(r) },
@@ -180,8 +189,9 @@ function PayrollListView({ search }: { search: SearchProps }) {
       ) : (
         <DataTable<PayrollEntry>
           data={rows}
-          columns={columns}
+          columns={PAYROLL_COLUMNS}
           title="Список выплат"
+          searchOutside
           rowKey={(r) => `${r.kind}-${r.id}`}
           rowAction={rowAction}
           isLoading={isLoading || isFetching}

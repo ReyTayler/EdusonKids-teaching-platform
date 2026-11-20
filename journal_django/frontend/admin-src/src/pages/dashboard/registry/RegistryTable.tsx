@@ -40,92 +40,94 @@ function RemainingCell({ value }: { value: number | null }) {
   );
 }
 
+/** Вне компонента: лупа стоит в шапке страницы «Дашборд», а таблица — во вкладке;
+ * обоим нужен один список полей. */
+export const REGISTRY_COLUMNS: Column<RegistryStudent>[] = [
+  {
+    key: 'status',
+    label: 'Статус',
+    sortable: true,
+    sortKey: 'urgency',
+    cell: (r) => <RegistryStatusBadge status={r.status} />,
+  },
+  {
+    key: 'codes',
+    label: 'Код',
+    sortable: false,
+    cell: (r) => <span className="reg-cell-code">{firstPlus(r.codes)}</span>,
+  },
+  {
+    key: 'student_name',
+    label: 'Ученик',
+    sortable: true,
+    sortKey: 'name',
+    searchable: true,
+    cell: (r) => <span className="reg-cell-name">{r.student_name}</span>,
+  },
+  {
+    key: 'teacher_names',
+    label: 'Препод.',
+    sortable: false,
+    cell: (r) => firstPlus(r.teacher_names),
+  },
+  {
+    key: 'progress',
+    label: 'Прогресс',
+    sortable: true,
+    sortKey: 'progress',
+    cell: (r) => (
+      <div className="reg-progress">
+        <span className="reg-progress__num">{r.attended}/{r.planned}</span>
+        {r.progress_pct !== null && (
+          <span className="reg-progress__bar">
+            <span
+              className="reg-progress__fill"
+              style={{ width: `${Math.min(100, r.progress_pct)}%` }}
+            />
+          </span>
+        )}
+      </div>
+    ),
+  },
+  {
+    key: 'balance',
+    label: 'Осталось уроков',
+    sortable: true,
+    sortKey: 'balance',
+    cell: (r) => <RemainingCell value={r.balance} />,
+  },
+  {
+    key: 'cancellations',
+    label: 'Отмены',
+    sortable: false,
+    // Показываем только если есть: колонка из нулей — шум.
+    cell: (r) =>
+      r.cancellations > 0 ? (
+        <span
+          className="reg-badge reg-badge--cancel"
+          title="Отмены занятий в этом месяце в группах ученика"
+        >
+          {r.cancellations}
+        </span>
+      ) : null,
+  },
+  {
+    key: 'last_lesson_date',
+    label: 'Последний',
+    sortable: true,
+    sortKey: 'last_lesson',
+    cell: (r) => fmtDate(r.last_lesson_date),
+  },
+  {
+    key: 'next_lesson_date',
+    label: 'Ближайший',
+    sortable: false,
+    cell: (r) => fmtDate(r.next_lesson_date),
+  },
+];
+
 export function RegistryTable({ rows, serverPagination, isLoading, isError = false, title = 'Ученики' }: Props) {
   const navigate = useNavigate();
-
-  const columns: Column<RegistryStudent>[] = [
-    {
-      key: 'status',
-      label: 'Статус',
-      sortable: true,
-      sortKey: 'urgency',
-      cell: (r) => <RegistryStatusBadge status={r.status} />,
-    },
-    {
-      key: 'codes',
-      label: 'Код',
-      sortable: false,
-      cell: (r) => <span className="reg-cell-code">{firstPlus(r.codes)}</span>,
-    },
-    {
-      key: 'student_name',
-      label: 'Ученик',
-      sortable: true,
-      sortKey: 'name',
-      searchable: true,
-      cell: (r) => <span className="reg-cell-name">{r.student_name}</span>,
-    },
-    {
-      key: 'teacher_names',
-      label: 'Препод.',
-      sortable: false,
-      cell: (r) => firstPlus(r.teacher_names),
-    },
-    {
-      key: 'progress',
-      label: 'Прогресс',
-      sortable: true,
-      sortKey: 'progress',
-      cell: (r) => (
-        <div className="reg-progress">
-          <span className="reg-progress__num">{r.attended}/{r.planned}</span>
-          {r.progress_pct !== null && (
-            <span className="reg-progress__bar">
-              <span
-                className="reg-progress__fill"
-                style={{ width: `${Math.min(100, r.progress_pct)}%` }}
-              />
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'balance',
-      label: 'Осталось уроков',
-      sortable: true,
-      sortKey: 'balance',
-      cell: (r) => <RemainingCell value={r.balance} />,
-    },
-    {
-      key: 'cancellations',
-      label: 'Отмены',
-      sortable: false,
-      // Показываем только если есть: колонка из нулей — шум.
-      cell: (r) =>
-        r.cancellations > 0 ? (
-          <span
-            className="reg-badge reg-badge--cancel"
-            title="Отмены занятий в этом месяце в группах ученика"
-          >
-            {r.cancellations}
-          </span>
-        ) : null,
-    },
-    {
-      key: 'last_lesson_date',
-      label: 'Последний',
-      sortable: true,
-      sortKey: 'last_lesson',
-      cell: (r) => fmtDate(r.last_lesson_date),
-    },
-    {
-      key: 'next_lesson_date',
-      label: 'Ближайший',
-      sortable: false,
-      cell: (r) => fmtDate(r.next_lesson_date),
-    },
-  ];
 
   if (isError) {
     return (
@@ -138,8 +140,9 @@ export function RegistryTable({ rows, serverPagination, isLoading, isError = fal
   return (
     <DataTable<RegistryStudent>
       data={rows}
-      columns={columns}
+      columns={REGISTRY_COLUMNS}
       title={title}
+      searchOutside
       onRowClick={(r) => navigate(`/admin/students/${r.student_id}`)}
       isLoading={isLoading}
       serverPagination={serverPagination}

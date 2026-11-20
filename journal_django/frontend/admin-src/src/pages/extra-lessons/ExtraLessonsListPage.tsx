@@ -12,6 +12,7 @@ import { ManualExtraLessonModal } from '../../components/lessons/ManualExtraLess
 import { fmtDate } from '../../lib/format';
 import type { AbsenceResolution } from '../../lib/types';
 import { PageHeader } from '../../components/shell/PageHeader';
+import { TableFilterPanel, columnFilterFields } from '../../components/filters';
 import { useAuth } from '../../hooks/useAuth';
 import { canDeleteExtraLessonRequest, canRollbackExtraLesson, type Role } from '../../lib/permissions';
 
@@ -207,11 +208,14 @@ export default function ExtraLessonsListPage() {
     <PageHeader
       title="Доп.уроки"
       count={isLoading ? undefined : total}
-      actions={
-        <button type="button" className="btn-add" onClick={() => setManualOpen(true)}>
-          + Назначить вручную
-        </button>
-      }
+      actions={(
+        <>
+          <TableFilterPanel fields={columnFilterFields(columns)} filters={filters} onApply={setFilters} label="Поиск: Доп.уроки" />
+          <button type="button" className="btn-add" onClick={() => setManualOpen(true)}>
+            + Назначить вручную
+          </button>
+        </>
+      )}
     />
   );
 
@@ -224,6 +228,7 @@ export default function ExtraLessonsListPage() {
         data={rows}
         columns={columns}
         title="Доп.уроки"
+        searchOutside
         isLoading={isFetching}
         // Нерешённые пропуски — красным на всю строку: это очередь на разбор,
         // и её видно до того, как глаз дошёл до колонки «Статус».

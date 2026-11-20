@@ -15,6 +15,7 @@ import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { TableSkeleton } from '../../components/ui/Skeleton';
 import type { Account, AccountStatus, Role } from '../../lib/types';
 import { PageHeader } from '../../components/shell/PageHeader';
+import { TableFilterPanel, columnFilterFields } from '../../components/filters';
 
 // ─── Подписи ролей ────────────────────────────────────────────────────────────
 
@@ -536,11 +537,14 @@ export default function AccountsPage() {
     <PageHeader
       title="Учётные записи"
       count={isLoading ? undefined : total}
-      actions={
-        <button type="button" className="btn-add" onClick={() => setCreateOpen(true)}>
-          + Новая учётка
-        </button>
-      }
+      actions={(
+        <>
+          <TableFilterPanel fields={columnFilterFields(columns)} filters={filters} onApply={setFilters} label="Поиск: Учётные записи" />
+          <button type="button" className="btn-add" onClick={() => setCreateOpen(true)}>
+            + Новая учётка
+          </button>
+        </>
+      )}
     />
   );
 
@@ -553,6 +557,7 @@ export default function AccountsPage() {
         data={rows}
         columns={columns}
         title="Учётные записи"
+        searchOutside
         isLoading={isFetching}
         serverPagination={{
           page,

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PageHeader } from '../../components/shell/PageHeader';
 import { StatTiles } from '../../components/detail/StatTiles';
 import { DataTable, type Column } from '../../components/table/DataTable';
+import { TableFilterPanel, columnFilterFields } from '../../components/filters';
 import { RowOpenButton } from '../../components/table/RowOpenButton';
 import { Dialog } from '../../components/ui/Dialog';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -31,6 +32,16 @@ const lessons = (v: string | undefined) => fmtLessons(Number(v || 0));
  *  как достоверный факт «отработано ноль», а не как «ещё не загрузилось». */
 const tile = (v: string | undefined) => (v == null ? '—' : lessons(v));
 
+/** Вне компонента: лупа стоит в шапке, а фильтрует таблица ниже — полям и колонкам нужен один список. */
+const COLUMNS: Column<AttendanceDashboardRow>[] = [
+  { key: 'full_name', label: 'Ученик', searchable: true },
+  { key: 'regular', label: 'Обычные', sortable: false, cell: (r) => lessons(r.regular) },
+  { key: 'extra', label: 'Доп.уроки', sortable: false, cell: (r) => lessons(r.extra) },
+  { key: 'burned', label: 'Сгоревшие', sortable: false, cell: (r) => lessons(r.burned) },
+  { key: 'free', label: 'Бесплатные', sortable: false, cell: (r) => lessons(r.free) },
+  { key: 'billed', label: 'Итого списано', cell: (r) => lessons(r.billed) },
+];
+
 /**
  * Дашборд «Посещения учеников»: сколько уроков отработано всего и за период,
  * и как это раскладывается по ученикам. Клик по строке открывает детализацию
@@ -58,21 +69,20 @@ export default function AttendanceDashboardPage() {
     dateFrom, dateTo, page, pageSize, sortBy, sortDir, nameQuery,
   });
 
-  const columns: Column<AttendanceDashboardRow>[] = [
-    { key: 'full_name', label: 'Ученик', searchable: true },
-    { key: 'regular', label: 'Обычные', sortable: false, cell: (r) => lessons(r.regular) },
-    { key: 'extra', label: 'Доп.уроки', sortable: false, cell: (r) => lessons(r.extra) },
-    { key: 'burned', label: 'Сгоревшие', sortable: false, cell: (r) => lessons(r.burned) },
-    { key: 'free', label: 'Бесплатные', sortable: false, cell: (r) => lessons(r.free) },
-    { key: 'billed', label: 'Итого списано', cell: (r) => lessons(r.billed) },
-  ];
-
   const periodLabel = `${fmtDate(dateFrom)} — ${fmtDate(dateTo)}`;
 
   return (
     <>
       <PageHeader
         title="Посещения учеников"
+        actions={(
+          <TableFilterPanel
+            fields={columnFilterFields(COLUMNS)}
+            filters={nameQuery ? { full_name: nameQuery } : {}}
+            onApply={(next) => { setNameQuery(next.full_name || ''); setPage(1); }}
+            label="Поиск: Посещения учеников"
+          />
+        )}
       />
 
       <div className="page-toolbar">
@@ -108,7 +118,8 @@ export default function AttendanceDashboardPage() {
       ) : (
         <DataTable<AttendanceDashboardRow>
           data={students.data?.rows || []}
-          columns={columns}
+          columns={COLUMNS}
+          searchOutside
           title="Ученики за период"
           isLoading={students.isFetching}
           onRowClick={(row) => setOpenStudent(row)}

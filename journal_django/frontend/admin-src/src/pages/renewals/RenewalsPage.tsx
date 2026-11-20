@@ -132,6 +132,14 @@ export default function RenewalsPage() {
         title="Продления"
         actions={
           <>
+            {/* Поиск — часть панели фильтрации, а не отдельный контрол внутри
+                каждой колонки: искать ученика приходится, НЕ зная его стадии. */}
+            <TableFilterPanel
+              fields={searchFields}
+              filters={panelValues}
+              onApply={applyPanel}
+              label="Поиск по продлениям"
+            />
             <div className="segmented" role="group" aria-label="Вид раздела">
               <button
                 type="button"
@@ -170,19 +178,10 @@ export default function RenewalsPage() {
         }
       />
 
-      <div className="rnl-toolbar">
-        <div className="rnl-toolbar__row">
-          {/* Поиск — часть панели фильтрации, а не отдельный контрол внутри
-              каждой колонки: искать ученика приходится, НЕ зная его стадии. */}
-          <TableFilterPanel
-            fields={searchFields}
-            filters={panelValues}
-            onApply={applyPanel}
-            label="Поиск по продлениям"
-          />
-        </div>
-
-        {chips.length > 0 && (
+      {/* Чипы активных фильтров остаются строкой под шапкой: в шапке и так
+          вид, «Без сделок», «Аналитика» и шестерёнка — чипы её перегрузили бы. */}
+      {chips.length > 0 && (
+        <div className="rnl-toolbar">
           <div className="rnl-chips">
             {chips.map((c) => (
               <button
@@ -201,8 +200,8 @@ export default function RenewalsPage() {
               Сбросить
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {view === 'board'
         ? <RenewalBoard filters={filters} onOpen={setSelectedId} />

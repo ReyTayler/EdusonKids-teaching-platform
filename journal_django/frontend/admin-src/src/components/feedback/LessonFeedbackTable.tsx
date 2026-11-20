@@ -8,7 +8,8 @@ import { TableSkeleton } from '../ui/Skeleton';
 import { EmptyState } from '../ui/EmptyState';
 import { ClampText } from '../ui/ClampText';
 import { EntityLink } from '../EntityLink';
-import type { FilterField } from '../filters';
+import { TableFilterPanel, columnFilterFields, type FilterField } from '../filters';
+import { PageHeader } from '../shell/PageHeader';
 import { fmtDate, fmtDateTime } from '../../lib/format';
 import { FEEDBACK_LABELS } from '../../lib/labels';
 import type { LessonFeedbackRow } from '../../lib/types';
@@ -23,8 +24,12 @@ function ScoreCell({ value }: { value: number | null }) {
  * Лента отзывов преподавателей об уроках. Один компонент на страницу «Отзывы» и на
  * вкладку карточки группы: при заданном groupId лента сужена до группы, а фильтр и
  * колонка «Группа» не нужны.
+ *
+ * `pageTitle` — режим страницы: компонент сам рисует PageHeader с лупой в actions
+ * (фильтры, колонки и предупреждение о периоде живут здесь, поднимать их в страницу
+ * значило бы дублировать). Без него — вкладка группы: лупа остаётся над таблицей.
  */
-export function LessonFeedbackTable({ groupId }: { groupId?: number }) {
+export function LessonFeedbackTable({ groupId, pageTitle }: { groupId?: number; pageTitle?: string }) {
   const search = useListSearchParams({ sortBy: 'lesson_date', sortDir: 'desc' });
   const { page, pageSize, filters, setPage, setPageSize, setFilters } = search;
   const debouncedFilters = useDeferredValue(filters);
@@ -107,19 +112,6 @@ export function LessonFeedbackTable({ groupId }: { groupId?: number }) {
     },
   ];
 
-  if (isError && !data) {
-    // Упавший запрос не должен выглядеть как «отзывов нет».
-    return (
-      <EmptyState
-        hint={FEEDBACK_LABELS.errorHint}
-        action={<button type="button" className="btn-cancel" onClick={() => { void refetch(); }}>{FEEDBACK_LABELS.retry}</button>}
-      >
-        {FEEDBACK_LABELS.errorTitle}
-      </EmptyState>
-    );
-  }
-  if (isLoading) return <TableSkeleton rows={8} cols={columns.length} />;
-
   // Даты живут в тех же f.*-фильтрах, что и селекты, и лежат в той же панели поиска:
   // «×» сбрасывает всё разом.
   const dateFields: FilterField[] = [
@@ -127,14 +119,51 @@ export function LessonFeedbackTable({ groupId }: { groupId?: number }) {
     { kind: 'date', key: 'date_to', label: FEEDBACK_LABELS.dateTo },
   ];
 
+  // Шапка рисуется и при загрузке и при ошибке — заголовок не должен пропадать.
+  const header = pageTitle ? (
+    <PageHeader
+      title={pageTitle}
+      actions={(
+        <>
+          {rangeInverted && <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div>}
+          <TableFilterPanel
+            fields={columnFilterFields(columns, dateFields)}
+            filters={filters}
+            onApply={setFilters}
+            label={`Поиск: ${pageTitle}`}
+          />
+        </>
+      )}
+    />
+  ) : null;
+
+  if (isError && !data) {
+    // Упавший запрос не должен выглядеть как «отзывов нет».
+    return (
+      <>
+        {header}
+        <EmptyState
+          hint={FEEDBACK_LABELS.errorHint}
+          action={<button type="button" className="btn-cancel" onClick={() => { void refetch(); }}>{FEEDBACK_LABELS.retry}</button>}
+        >
+          {FEEDBACK_LABELS.errorTitle}
+        </EmptyState>
+      </>
+    );
+  }
+  if (isLoading) return <>{header}<TableSkeleton rows={8} cols={columns.length} /></>;
+
   return (
+    <>
+    {header}
     <DataTable<LessonFeedbackRow>
       data={rows}
       columns={columns}
       title={FEEDBACK_LABELS.title}
       isLoading={isFetching}
       extraFields={dateFields}
-      headerActions={rangeInverted ? <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div> : undefined}
+      searchOutside={!!pageTitle}
+      headerActions={!pageTitle && rangeInverted ? <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div> : undefined}
       serverPagination={{
         page, pageSize, total,
         sortBy: 'lesson_date', sortDir: 'desc', filters,
@@ -144,5 +173,6 @@ export function LessonFeedbackTable({ groupId }: { groupId?: number }) {
         onFiltersChange: setFilters,
       }}
     />
+    </>
   );
 }

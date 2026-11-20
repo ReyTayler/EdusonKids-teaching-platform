@@ -144,6 +144,43 @@ def _lessons_done_subquery():
     )
 
 
+def finished_course_group_ids(group_ids) -> set[int]:
+    """Какие из групп ПРОШЛИ курс — будущих курсовых занятий у них больше нет.
+
+    Правило то же, что у планировщика (apps.scheduling.planner.generate):
+    хвост плана = длина курса − офсет продолжения − пройдено; `remaining <= 0`
+    → занятий нет. Длина — `effective_total_lessons_expr` (ручная
+    `lessons_total` группы, иначе курс направления), пройдено — колонка
+    «Пройдено» (`_lessons_done_subquery`: курсовые типы regular/substitution/
+    reschedule, half-lesson 0.5; доп.урок и сгорание пропуска позицию плана не
+    занимают; отмена урока факта не создаёт), офсет — `lesson_number_offset`
+    группы-продолжения (импорт Eduson, перевод: план начинается с offset+шаг,
+    generate(start_number=offset)).
+
+    Без длины курса (NULL или 0 у направления — «длины нет», см.
+    apps.teachers.stats.group_progress) группа пройденной не считается:
+    без конца курса нельзя утверждать, что он кончился.
+
+    Один запрос на любой набор групп (коррелированный подзапрос по индексу
+    lessons_group_date_idx) — для сводок по многим группам без N+1.
+    """
+    ids = list(group_ids)
+    if not ids:
+        return set()
+    return set(
+        Group.objects
+        .filter(id__in=ids)
+        .annotate(
+            course_total=effective_total_lessons_expr(),
+            course_done=Coalesce(_lessons_done_subquery(), Value(Decimal('0')),
+                                 output_field=_PROGRESS_FIELD),
+        )
+        .filter(course_total__gt=0,
+                course_done__gte=F('course_total') - F('lesson_number_offset'))
+        .values_list('id', flat=True)
+    )
+
+
 def _apply_filters(qs, filters: dict[str, Any], include_inactive: bool = False):
     """
     Применяет фильтры (мимикрирует F.*-билдеры services/pagination.js):

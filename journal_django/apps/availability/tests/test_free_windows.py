@@ -12,6 +12,7 @@ from apps.availability import services
 from apps.availability.models import AvailabilityOverride, AvailabilityRule
 from apps.directions.models import Direction
 from apps.groups.models import Group, GroupScheduleSlot
+from apps.lessons.models import Lesson
 from apps.teachers.models import Teacher
 
 pytestmark = pytest.mark.django_db
@@ -34,11 +35,24 @@ def direction(db):
 _seq = iter(range(10 ** 6))
 
 
-def _group(teacher, direction, *, duration=90, active=True):
+def _group(teacher, direction, *, duration=90, active=True, lessons_total=None, offset=0):
     return Group.objects.create(
         name=f'__fw_g_{next(_seq)}__', direction=direction, teacher=teacher,
         is_individual=False, lesson_duration_minutes=duration, active=active,
+        lessons_total=lessons_total, lesson_number_offset=offset,
         created_at=timezone.now())
+
+
+def _lessons(group, n, *, lesson_type='regular'):
+    """n проведённых занятий группы (длительность — как у группы)."""
+    start = Lesson.objects.filter(group=group).count()
+    for i in range(start, start + n):
+        Lesson.objects.create(
+            group=group, teacher=group.teacher,
+            lesson_date=dt.date(2029, 1, 1) + dt.timedelta(days=i),
+            lesson_number=i + 1, lesson_duration_minutes=group.lesson_duration_minutes,
+            lesson_type=lesson_type, submitted_at=timezone.now(),
+            submitted_by_token='__fw__')
 
 
 def _slot(group, dow, hhmm, *, eff_from=dt.date(2020, 1, 1), eff_to=None):
@@ -173,6 +187,103 @@ def test_overrides_ignored(admin_client, teacher):
     assert days['2'] == []
 
 
+# ── Пройденный курс (решение владельца, вариант Б) ─────────────────────────
+# Группа с пройденным курсом ещё active=True, но будущих занятий у неё нет —
+# её слот уже свободен. «Пройден» = проведено уроков курса (в единицах курса,
+# с учётом офсета продолжения) не меньше длины курса — тем же правилом
+# планировщик решает, что хвоста плана нет (remaining <= 0).
+
+def test_group_with_finished_course_not_subtracted(admin_client, teacher, direction):
+    _rule(teacher, MON, '10:00', '12:00')
+    g = _group(teacher, direction)          # курс направления — 8 уроков
+    _slot(g, MON, '10:00')
+    _lessons(g, 8)
+    assert _days(admin_client, teacher)[str(MON)] == [['10:00', '12:00']]
+
+
+def test_group_with_remaining_lessons_subtracted(admin_client, teacher, direction):
+    _rule(teacher, MON, '10:00', '12:00')
+    g = _group(teacher, direction)
+    _slot(g, MON, '10:00')
+    _lessons(g, 7)                          # остался один урок
+    assert _days(admin_client, teacher)[str(MON)] == [['11:30', '12:00']]
+
+
+def test_manual_lessons_total_overrides_direction(admin_client, teacher, direction):
+    _rule(teacher, MON, '10:00', '18:00')
+    short = _group(teacher, direction, lessons_total=3)   # группа-остаток: 3 урока
+    _slot(short, MON, '10:00')
+    _lessons(short, 3)
+    long_ = _group(teacher, direction, lessons_total=12)  # длиннее направления
+    _slot(long_, MON, '15:00')
+    _lessons(long_, 8)                                     # по направлению была бы пройдена
+    assert _days(admin_client, teacher)[str(MON)] == [['10:00', '15:00'], ['16:30', '18:00']]
+
+
+def test_group_without_course_length_subtracted(admin_client, teacher):
+    _rule(teacher, MON, '10:00', '12:00')
+    no_len = Direction.objects.create(name='__fw_dir_nolen__', total_lessons=None)
+    g = _group(teacher, no_len)
+    _slot(g, MON, '10:00')
+    _lessons(g, 20)
+    assert _days(admin_client, teacher)[str(MON)] == [['11:30', '12:00']]
+
+
+def test_zero_course_length_subtracted(admin_client, teacher):
+    # directions.total_lessons = 0 — «длины нет» (CHECK допускает >= 0), а не «пройден».
+    _rule(teacher, MON, '10:00', '12:00')
+    zero = Direction.objects.create(name='__fw_dir_zero__', total_lessons=0)
+    g = _group(teacher, zero)
+    _slot(g, MON, '10:00')
+    _lessons(g, 1)
+    assert _days(admin_client, teacher)[str(MON)] == [['11:30', '12:00']]
+
+
+def test_half_lesson_weight_counts_toward_course(admin_client, teacher, direction):
+    _rule(teacher, MON, '10:00', '12:00')
+    g = _group(teacher, direction, duration=45)
+    _slot(g, MON, '10:00')
+    _lessons(g, 15)                         # 15 × 0.5 = 7.5 урока < 8 — идёт
+    assert _days(admin_client, teacher)[str(MON)] == [['10:45', '12:00']]
+    _lessons(g, 1)                          # 16 × 0.5 = 8 — пройден
+    assert _days(admin_client, teacher)[str(MON)] == [['10:00', '12:00']]
+
+
+def test_system_lessons_do_not_finish_course(admin_client, teacher, direction):
+    # Доп.урок (отработка) и сгорание пропуска идут сверх сетки курса и позицию
+    # плана не занимают (SYSTEM_LESSON_TYPES).
+    _rule(teacher, MON, '10:00', '12:00')
+    g = _group(teacher, direction)
+    _slot(g, MON, '10:00')
+    _lessons(g, 7)
+    _lessons(g, 2, lesson_type='extra')
+    _lessons(g, 2, lesson_type='burned')
+    assert _days(admin_client, teacher)[str(MON)] == [['11:30', '12:00']]
+
+
+def test_substitution_and_reschedule_count_toward_course(admin_client, teacher, direction):
+    # Замена и перенос — курсовые занятия (COURSE_LESSON_TYPES), как в «Пройдено».
+    _rule(teacher, MON, '10:00', '12:00')
+    g = _group(teacher, direction)
+    _slot(g, MON, '10:00')
+    _lessons(g, 6)
+    _lessons(g, 1, lesson_type='substitution')
+    _lessons(g, 1, lesson_type='reschedule')
+    assert _days(admin_client, teacher)[str(MON)] == [['10:00', '12:00']]
+
+
+def test_continuation_offset_counts_toward_course(admin_client, teacher, direction):
+    # Группа-продолжение (импорт Eduson, перевод) начинает курс с offset+шаг:
+    # её план — total − offset уроков (planner.generate, start_number=offset).
+    _rule(teacher, MON, '10:00', '12:00')
+    g = _group(teacher, direction, offset=6)
+    _slot(g, MON, '10:00')
+    _lessons(g, 1)
+    assert _days(admin_client, teacher)[str(MON)] == [['11:30', '12:00']]
+    _lessons(g, 1)
+    assert _days(admin_client, teacher)[str(MON)] == [['10:00', '12:00']]
+
+
 # ── Состав и форма ответа ───────────────────────────────────────────────────
 
 def test_all_seven_days_present(admin_client, teacher):
@@ -236,13 +347,19 @@ def test_anonymous_rejected(client):
 # ── Производительность ──────────────────────────────────────────────────────
 
 def test_fixed_number_of_queries(django_assert_num_queries, teacher, other_teacher, direction):
-    """Преподаватели + правила + слоты — три запроса при любом числе преподавателей/групп."""
+    """Преподаватели + правила + слоты + пройденные курсы — четыре запроса при
+    любом числе преподавателей/групп (в т.ч. с проведёнными уроками)."""
     for t in (teacher, other_teacher):
         _rule(t, MON, '10:00', '18:00')
         _rule(t, 2, '10:00', '18:00')
         for dow in (MON, 2):
-            _slot(_group(t, direction), dow, '12:00')
-    with django_assert_num_queries(3):
+            g = _group(t, direction)
+            _slot(g, dow, '12:00')
+            _lessons(g, 2)
+        finished = _group(t, direction)
+        _slot(finished, MON, '15:00')
+        _lessons(finished, 8)
+    with django_assert_num_queries(4):
         result = services.free_windows_summary()
     by_id = {r['id']: r for r in result}
     assert by_id[teacher.id]['days'][str(MON)] == [['10:00', '12:00'], ['13:30', '18:00']]

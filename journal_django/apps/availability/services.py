@@ -28,6 +28,7 @@ from apps.availability.models import (
     AvailabilityRule,
 )
 from apps.groups.models import GroupScheduleSlot
+from apps.groups.repository import finished_course_group_ids
 from apps.teachers.models import Teacher
 
 # Интервал — пара минут от полуночи [начало, конец); конец может быть 1440 (24:00).
@@ -260,8 +261,14 @@ def free_windows_summary() -> list[dict]:
     сводка о типовой неделе, а не о конкретной; по той же причине не учитываются
     разовые доп.уроки, переносы и замены. Преподаватель урока — group.teacher_id.
 
-    Не больше 3 запросов при любом числе преподавателей и групп: преподаватели,
-    правила, слоты (с JOIN на группу; без шаблонов запрос слотов не нужен).
+    Группа с ПРОЙДЕННЫМ курсом (ещё active=True, но будущих занятий нет) не
+    вычитается — решение владельца, вариант Б. Правило «пройден» общее с
+    планировщиком: apps.groups.repository.finished_course_group_ids. Группа без
+    длины курса считается идущей и вычитается.
+
+    Не больше 4 запросов при любом числе преподавателей и групп: преподаватели,
+    правила, слоты (с JOIN на группу; без шаблонов запрос слотов не нужен),
+    пройденные курсы групп этих слотов (без слотов запрос не нужен).
     """
     teachers = list(Teacher.objects.filter(active=True, is_service=False)
                     .order_by('name', 'id').values_list('id', 'name'))
@@ -276,14 +283,19 @@ def free_windows_summary() -> list[dict]:
 
     today = _today()
     busy: dict[int, dict[int, list[Interval]]] = defaultdict(lambda: defaultdict(list))
-    slots = (GroupScheduleSlot.objects
-             # Слоты нужны только тем, у кого есть шаблон: вычитать больше не из чего.
-             .filter(group__active=True, group__teacher_id__in=list(templates),
-                     effective_from__lte=today)
-             .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
-             .values_list('group__teacher_id', 'day_of_week', 'start_time',
-                          'group__lesson_duration_minutes'))
-    for tid, dow, start_time, duration in slots:
+    slots = list(GroupScheduleSlot.objects
+                 # Слоты нужны только тем, у кого есть шаблон: вычитать больше не из чего.
+                 .filter(group__active=True, group__teacher_id__in=list(templates),
+                         effective_from__lte=today)
+                 .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+                 .values_list('group_id', 'group__teacher_id', 'day_of_week', 'start_time',
+                              'group__lesson_duration_minutes'))
+    # Решение владельца (вариант Б): группа с пройденным курсом, ещё не
+    # переведённая в архив, занятий больше не проведёт — её время свободно.
+    finished = finished_course_group_ids({row[0] for row in slots})
+    for gid, tid, dow, start_time, duration in slots:
+        if gid in finished:
+            continue
         start = start_time.hour * 60 + start_time.minute
         # Урок, уходящий за полночь, обрезаем концом суток: хвост на следующий
         # день — редкость, а сетка графика всё равно кончается в 24:00.

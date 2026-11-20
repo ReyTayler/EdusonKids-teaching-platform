@@ -149,8 +149,8 @@ export interface CalendarViewProps {
    * NO_DIRECTION_KEY.
    */
   directionFilter?: string | null;
-  /** false — легенда только цветовая подсказка, клик по ней ничего не фильтрует. По умолчанию true. */
-  legendInteractive?: boolean;
+  /** false — не рисовать блок легенды над календарём целиком (admin). По умолчанию true. */
+  showLegend?: boolean;
   /**
    * Как показать имя преподавателя, у которого известен id: admin подставляет
    * ссылку на карточку. Передаётся функцией, а не зашито Link'ом: shared-код
@@ -189,7 +189,7 @@ export function CalendarView({
   views = ALL_VIEWS,
   showTitle = true,
   directionFilter: directionFilterProp,
-  legendInteractive = true,
+  showLegend = true,
   renderTeacher,
   headExtra,
 }: CalendarViewProps) {
@@ -421,35 +421,35 @@ export function CalendarView({
       )}
 
       {/* Легенда направлений (динамическая; клик = фильтр) + data-quality бейдж unscheduled */}
-      <div className="legend">
-        {legendItems.map((item) => (
-          <span
-            key={item.key}
-            className={`legend-item${directionFilter && directionFilter !== item.key ? ' muted' : ''}${legendInteractive ? '' : ' legend-item--static'}`}
-            {...(legendInteractive ? {
-              onClick: () => setDirectionFilter((cur) => (cur === item.key ? null : item.key)),
-              role: 'button',
-              tabIndex: 0,
-              onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') setDirectionFilter((cur) => (cur === item.key ? null : item.key)); },
-            } : {})}
-          >
-            <span className="legend-dot" style={{ background: item.color }} />
-            {item.label}
-          </span>
-        ))}
-        {unscheduled.length > 0 && (
-          <span
-            className="cal-unscheduled"
-            title={unscheduled
-              .map((u) => `${u.group} — ${UNSCHEDULED_REASON_LABEL[u.reason] ?? 'нет расписания'}`)
-              .join('\n')}
-          >
-            <span className="cal-unscheduled-dot" />
-            {unscheduled.length} {pluralizeGroups(unscheduled.length)} без расписания
-          </span>
-        )}
-        {isFetching && <span style={{ fontSize: 12, color: 'var(--text4)', fontFamily: 'var(--font-mono)' }}>обновление…</span>}
-      </div>
+      {showLegend && (
+        <div className="legend">
+          {legendItems.map((item) => (
+            <span
+              key={item.key}
+              className={`legend-item${directionFilter && directionFilter !== item.key ? ' muted' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDirectionFilter((cur) => (cur === item.key ? null : item.key))}
+              onKeyDown={(e) => { if (e.key === 'Enter') setDirectionFilter((cur) => (cur === item.key ? null : item.key)); }}
+            >
+              <span className="legend-dot" style={{ background: item.color }} />
+              {item.label}
+            </span>
+          ))}
+          {unscheduled.length > 0 && (
+            <span
+              className="cal-unscheduled"
+              title={unscheduled
+                .map((u) => `${u.group} — ${UNSCHEDULED_REASON_LABEL[u.reason] ?? 'нет расписания'}`)
+                .join('\n')}
+            >
+              <span className="cal-unscheduled-dot" />
+              {unscheduled.length} {pluralizeGroups(unscheduled.length)} без расписания
+            </span>
+          )}
+          {isFetching && <span style={{ fontSize: 12, color: 'var(--text4)', fontFamily: 'var(--font-mono)' }}>обновление…</span>}
+        </div>
+      )}
 
       {/* Тело */}
       {isLoading ? (

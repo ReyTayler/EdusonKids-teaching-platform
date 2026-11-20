@@ -97,8 +97,6 @@
 /* Квадратик 10×10 r3 (цвет направления — из данных, инлайном). */
 .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 .legend-item.muted { opacity: 0.4; }
-/* Легенда без фильтра (admin): просто цветовая подсказка, не кнопка. */
-.legend-item--static { cursor: default; }
 
 /* ── Недельная time-grid ── */
 .cal-grid-wrap {

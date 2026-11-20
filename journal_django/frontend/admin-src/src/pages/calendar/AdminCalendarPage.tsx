@@ -107,7 +107,7 @@ export default function AdminCalendarPage() {
         // Админу нужна только неделя; на узком экране CalendarView сам включает список.
         views={WEEK_ONLY}
         directionFilter={direction}
-        legendInteractive={false}
+        showLegend={false}
         renderTeacher={renderTeacher}
         headExtra={
           <CalendarSearch

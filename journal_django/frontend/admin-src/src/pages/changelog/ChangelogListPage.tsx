@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { canOpenChangelogDetail, canRevertChangelog, type Role } from '../../lib/permissions';
 import { DataTable, type Column } from '../../components/table/DataTable';
 import { TableSkeleton } from '../../components/ui/Skeleton';
-import { SelectInput } from '../../components/form/SelectInput';
+import { FilterToolbar, TableFilterPanel, type FilterField } from '../../components/filters';
 import { ChangelogDetailModal } from './ChangelogDetailModal';
 import { RevertConfirmDialog } from './RevertConfirmDialog';
 import { ACTION_ICONS, TimeCell, ActorCell, OperationCell } from '../../components/changelog/columnRenderers';
@@ -30,6 +30,10 @@ function buildQuery(page: number, pageSize: number, filters: Record<string, stri
 }
 
 // ─── Главный компонент ────────────────────────────────────────────────────────
+
+const OPERATION_FIELDS: FilterField[] = [
+  { kind: 'select', key: 'op', label: 'Действие', allLabel: 'Все действия', options: CHANGELOG_OPERATION_OPTIONS },
+];
 
 export default function ChangelogListPage() {
   const { me } = useAuth();
@@ -122,33 +126,32 @@ export default function ChangelogListPage() {
   // Пояснение «все правки сохраняются…» переехало из ряда действий в подзаголовок:
   // это описание раздела, а не элемент управления.
   const header = (
-    <PageHeader
-      title="Журнал изменений"
-      count={isLoading ? undefined : total}
-      sub="Все правки сохраняются, любую операцию можно откатить."
-      actions={
-        <>
-          <div className="changelog-op-filter">
-            <SelectInput
-              options={[{ value: '', label: 'Все действия' }, ...CHANGELOG_OPERATION_OPTIONS]}
-              value={operation}
-              onChange={(e) => setExtras({ op: e.target.value || null })}
-            />
-          </div>
-          {entityFilterLabel && (
-            <span className="filter-chip">
-              {entityFilterLabel}
-              <button
-                type="button"
-                className="filter-chip__clear"
-                aria-label="Сбросить фильтр записи"
-                onClick={() => setExtras({ entity: null, entity_id: null })}
-              >×</button>
-            </span>
-          )}
-        </>
-      }
-    />
+    <>
+      <PageHeader
+        title="Журнал изменений"
+        count={isLoading ? undefined : total}
+        sub="Все правки сохраняются, любую операцию можно откатить."
+      />
+      <FilterToolbar>
+        <TableFilterPanel
+          fields={OPERATION_FIELDS}
+          filters={operation ? { op: operation } : {}}
+          onApply={(next) => setExtras({ op: next.op || null })}
+          label="Поиск по журналу изменений"
+        />
+        {entityFilterLabel && (
+          <span className="filter-chip">
+            {entityFilterLabel}
+            <button
+              type="button"
+              className="filter-chip__clear"
+              aria-label="Сбросить фильтр записи"
+              onClick={() => setExtras({ entity: null, entity_id: null })}
+            >×</button>
+          </span>
+        )}
+      </FilterToolbar>
+    </>
   );
 
   if (isLoading) return <>{header}<TableSkeleton rows={12} cols={6} /></>;

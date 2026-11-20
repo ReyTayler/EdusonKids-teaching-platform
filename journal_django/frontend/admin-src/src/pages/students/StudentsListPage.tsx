@@ -14,6 +14,7 @@ import type { Student } from '../../lib/types';
 import { PageHeader } from '../../components/shell/PageHeader';
 import StudentFormModal from './StudentFormModal';
 import { StudentsFilter } from './StudentsFilter';
+import { FilterToolbar } from '../../components/filters';
 
 export default function StudentsListPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -141,14 +142,14 @@ export default function StudentsListPage() {
         count={isLoading ? undefined : total}
         actions={<button type="button" className="btn-add" onClick={() => setModalOpen(true)}>+ Новый</button>}
       />
-      <div className="filter-toolbar">
+      <FilterToolbar>
         <StudentsFilter
           filters={filters}
           managerOptions={(assignees || []).map((a) => ({ value: String(a.id), label: a.full_name }))}
           stageOptions={(stages || []).map((s) => ({ value: String(s.id), label: s.label }))}
           onApply={setFilters}
         />
-      </div>
+      </FilterToolbar>
     </>
   );
 

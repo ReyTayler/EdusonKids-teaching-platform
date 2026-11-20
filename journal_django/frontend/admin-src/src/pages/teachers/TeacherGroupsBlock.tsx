@@ -1,7 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { TextInput } from '../../components/form/TextInput';
+import { TableFilterPanel, type FilterField } from '../../components/filters';
 import { directionColor } from '../../lib/direction-color';
 import { plural } from '../../lib/labels';
 import { formatSlot } from '../../lib/slots';
@@ -94,6 +94,10 @@ function GroupRow({ row }: { row: Row }) {
   );
 }
 
+const SEARCH_FIELDS: FilterField[] = [
+  { kind: 'text', key: 'q', label: 'Группа или направление' },
+];
+
 /**
  * Группы преподавателя: активные отдельно, архив отдельно и свёрнут.
  *
@@ -133,15 +137,11 @@ export default function TeacherGroupsBlock({ groups, progress }: Props) {
           Активные <span className="count-badge">{active.length}</span>
         </h3>
         <div className="tgroups__search">
-          {/* className обязателен: TextInput — голый <input>, а токены приходят
-              из .field input (только внутри <Field>) либо из .search-input.
-              Без класса поле рендерится нативным и в тёмной теме белеет. */}
-          <TextInput
-            className="search-input"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Группа или направление"
-            aria-label="Поиск по группам преподавателя"
+          <TableFilterPanel
+            fields={SEARCH_FIELDS}
+            filters={query ? { q: query } : {}}
+            onApply={(next) => setQuery(next.q ?? '')}
+            label="Поиск по группам преподавателя"
           />
         </div>
       </div>

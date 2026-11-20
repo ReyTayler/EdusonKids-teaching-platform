@@ -4,11 +4,10 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { PageHeader } from '../../components/shell/PageHeader';
 import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/IconButton';
-import { SearchInput } from '../../components/ui/SearchInput';
+import { TableFilterPanel, type FilterField } from '../../components/filters';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { PageLoading } from '../../components/ui/Skeleton';
 import { Paginator } from '../../components/table/Paginator';
-import { SelectInput } from '../../components/form/SelectInput';
 import { LibraryNav, type LibrarySelection } from '../../components/knowledge/LibraryNav';
 import { DocumentCards, DocumentTable } from '../../components/knowledge/DocumentList';
 import {
@@ -46,10 +45,16 @@ const SCOPE_TITLES: Record<LibraryScope, string> = {
   archive: 'Архив',
 };
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'Все статусы' },
-  { value: 'published', label: 'Опубликованные' },
-  { value: 'draft', label: 'Черновики' },
+/** Поля панели поиска: пункт «все» добавляет сама панель. */
+const SEARCH_FIELDS: FilterField[] = [
+  { kind: 'text', key: 'q', label: 'Название или текст', placeholder: 'Поиск по Wiki' },
+  {
+    kind: 'select', key: 'status', label: 'Статус', allLabel: 'Все статусы',
+    options: [
+      { value: 'published', label: 'Опубликованные' },
+      { value: 'draft', label: 'Черновики' },
+    ],
+  },
 ];
 
 /**
@@ -206,18 +211,13 @@ export default function KnowledgeListPage() {
 
           <section className="kb-drive__main">
             <div className="kb-drive__bar">
-              <SearchInput
-                value={query}
-                onChange={(next) => patchParams({ q: next })}
-                placeholder="Поиск по Wiki"
+              <TableFilterPanel
+                fields={SEARCH_FIELDS}
+                filters={{ ...(query ? { q: query } : {}), ...(statusFilter ? { status: statusFilter } : {}) }}
+                onApply={(next) => patchParams({ q: next.q ?? null, status: next.status ?? null, page: null })}
+                label="Поиск по Wiki"
               />
               <div className="kb-drive__bar-right">
-                <SelectInput
-                  value={statusFilter}
-                  onChange={(e) => patchParams({ status: e.target.value })}
-                  options={STATUS_OPTIONS}
-                  aria-label="Фильтр по статусу"
-                />
                 <ViewToggle view={view} onChange={setView} />
               </div>
             </div>

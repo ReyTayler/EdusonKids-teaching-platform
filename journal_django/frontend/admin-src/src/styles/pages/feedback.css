@@ -1,7 +1,4 @@
 /* Страница «Отзывы» и вкладка отзывов в карточке группы. Только токены. */
-.fb-dates { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-/* Как период на странице «Зарплата»: поля по содержимому, а не на всю ширину. */
-.fb-dates .date-input { width: auto; }
-.fb-dates .date-input__trigger { min-width: 140px; }
+
 .fb-of { color: var(--text3); font-size: var(--fs-2xs); }
 .fb-deleted { color: var(--text3); font-size: var(--fs-2xs); }

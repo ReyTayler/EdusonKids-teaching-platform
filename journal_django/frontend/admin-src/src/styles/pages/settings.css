@@ -56,12 +56,6 @@
 .settings-inline .field label:empty { display: none; }
 .settings-table .field input { min-width: 140px; }
 
-.settings-filters__field { width: 220px; max-width: 100%; }
-
-@media (max-width: 640px) {
-  .settings-filters__field { width: 100%; }
-}
-
 /* Выключенная ставка: строка приглушена, но переключатель остаётся читаемым. */
 .settings-table tr.is-inactive > td:not(.settings-toggle-cell) { color: var(--text3); }
 .settings-table tr.is-inactive .dir-tag { opacity: 0.6; }

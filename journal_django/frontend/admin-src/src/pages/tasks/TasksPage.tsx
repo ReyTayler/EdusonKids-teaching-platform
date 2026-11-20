@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTaskBoards } from '../../hooks/useTaskStructure';
 import { useAuth } from '../../hooks/useAuth';
-import { SelectInput } from '../../components/form/SelectInput';
-import { SearchInput } from '../../components/ui/SearchInput';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/shell/PageHeader';
@@ -13,8 +11,7 @@ import { TaskDrawer } from './TaskDrawer';
 import { TaskBoardRail, BoardCreateModal } from './TaskBoardRail';
 import { TaskSegments } from './TaskSegments';
 import { TaskViewSwitcher, type TaskViewMode } from './TaskViewSwitcher';
-import { TaskFiltersPopover } from './TaskFiltersPopover';
-import { TASK_PRIORITY_LABELS } from '../../lib/labels';
+import { TaskSearchPanel } from './TaskSearchPanel';
 import { canWriteTaskStages, type Role } from '../../lib/permissions';
 import type { TaskFilters, TaskPriority } from '../../lib/tasks';
 
@@ -104,12 +101,6 @@ export default function TasksPage() {
     setSp(next, { replace: true });
   };
 
-  const setFilter = (key: string, value: string) => {
-    const next = new URLSearchParams(sp);
-    if (value) next.set(key, value); else next.delete(key);
-    setSp(next, { replace: true });
-  };
-
   // Ключ памоизации — сериализация sp, а не сам объект: useSearchParams
   // отдаёт новый URLSearchParams на каждый рендер даже без смены строки.
   const spKey = sp.toString();
@@ -127,10 +118,6 @@ export default function TasksPage() {
       if (value) next.set(key, value); else next.delete(key);
     }
     setSp(next, { replace: true });
-  };
-
-  const resetAdvancedFilters = () => {
-    applyFilters({ stage_id: '', due: '', priority: '', only_open: '', assignee_id: '' });
   };
 
   // board_id ОБЯЗАН входить в filters — бэкенд применяет его и к недельному
@@ -153,11 +140,6 @@ export default function TasksPage() {
     stage_id: view === 'week' && sp.get('stage_id') ? Number(sp.get('stage_id')) : undefined,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [spKey, selectedBoardId, view]);
-
-  const priorityOptions = useMemo(() => [
-    { value: '', label: 'Любой приоритет' },
-    ...Object.entries(TASK_PRIORITY_LABELS).map(([value, label]) => ({ value, label })),
-  ], []);
 
   return (
     <div className="tasks-page">
@@ -192,27 +174,14 @@ export default function TasksPage() {
           <div className="tasks-filterbar">
             <TaskViewSwitcher value={view} onChange={setView} />
             <TaskSegments values={filterValues} onApply={applyFilters} />
-            <SelectInput
-              className="tasks-filterbar__select"
-              value={sp.get('priority') ?? ''}
-              onChange={(e) => setFilter('priority', e.target.value)}
-              options={priorityOptions}
-            />
             {selectedBoardId != null && (
-              <TaskFiltersPopover
+              <TaskSearchPanel
                 boardId={selectedBoardId}
                 values={filterValues}
-                onSet={setFilter}
-                onReset={resetAdvancedFilters}
+                onApply={applyFilters}
                 showStage={view === 'week'}
               />
             )}
-            <SearchInput
-              value={sp.get('q') ?? ''}
-              onChange={(v) => setFilter('q', v)}
-              placeholder="Поиск задач: название, #124, ученик…"
-              width={280}
-            />
           </div>
 
           <div className="tasks-page__work">

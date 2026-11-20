@@ -3,8 +3,7 @@ import { useListSearchParams } from '../../../hooks/useListSearchParams';
 import { useTeachers } from '../../../hooks/useTeachers';
 import { useUnfilledLessons } from '../../../hooks/useUnfilledLessons';
 import { FillTable } from './FillTable';
-import { Field } from '../../../components/form/Field';
-import { Combobox } from '../../../components/form/Combobox';
+import { FilterToolbar, TableFilterPanel, type FilterField } from '../../../components/filters';
 
 /**
  * Раздел «Заполнить» дашборда — школьный список просроченных незаполненных
@@ -28,21 +27,23 @@ export default function FillTab() {
     [teachers.data],
   );
 
+  const searchFields: FilterField[] = [
+    { kind: 'combobox', key: 'teacher', label: 'Преподаватель', options: teacherOptions, allLabel: 'Все преподаватели' },
+  ];
+
   const q = useUnfilledLessons({ page, page_size: pageSize, teacher_id: teacherId, sort_dir: sortDir });
   const total = q.data?.total ?? 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-      <div style={{ maxWidth: 320 }}>
-        <Field label="Преподаватель">
-          <Combobox
-            value={teacherId != null ? String(teacherId) : ''}
-            onChange={(v) => setExtra('teacher', v || null)}
-            options={teacherOptions}
-            placeholder="Все преподаватели"
-          />
-        </Field>
-      </div>
+      <FilterToolbar>
+        <TableFilterPanel
+          fields={searchFields}
+          filters={teacherId != null ? { teacher: String(teacherId) } : {}}
+          onApply={(next) => setExtra('teacher', next.teacher || null)}
+          label="Поиск просроченных уроков"
+        />
+      </FilterToolbar>
 
       {total === 0 && !q.isFetching ? (
         <div className="cal-empty">Все уроки заполнены 🎉</div>

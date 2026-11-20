@@ -5,10 +5,7 @@ import { useDirections } from '../../hooks/useDirections';
 import { useRenewalAssignees, useRenewalUnassignedCount } from '../../hooks/useRenewals';
 import { useRenewalStages } from '../../hooks/useRenewalStages';
 import { RenewalUnassignedDialog } from './RenewalUnassignedDialog';
-import { SelectInput } from '../../components/form/SelectInput';
-import { TextInput } from '../../components/form/TextInput';
-import { Checkbox } from '../../components/form/Checkbox';
-import { SearchInput } from '../../components/ui/SearchInput';
+import { TableFilterPanel, type FilterField } from '../../components/filters';
 import { canWriteRenewalStages, type Role } from '../../lib/permissions';
 import { RenewalBoard } from './RenewalBoard';
 import { RenewalList } from './RenewalList';
@@ -80,6 +77,42 @@ export default function RenewalsPage() {
   const directionName = (directions || []).find((d) => String(d.id) === sp.get('direction_id'))?.name;
   const stageName = (stages || []).find((s) => String(s.id) === sp.get('stage_id'))?.label;
 
+  // Поля панели. Цикл/стадия/«Закрытые» есть только в списке — канбан их
+  // игнорирует, поэтому и в панели на доске их нет.
+  const searchFields: FilterField[] = [
+    { kind: 'text', key: 'student', label: 'Ученик', placeholder: 'Имя ученика' },
+    {
+      kind: 'select', key: 'assignee_id', label: 'Ответственный', allLabel: 'Все ответственные',
+      options: (assignees || []).map((a) => ({ value: String(a.id), label: a.full_name })),
+    },
+    {
+      kind: 'select', key: 'direction_id', label: 'Направление', allLabel: 'Все направления',
+      options: (directions || []).map((d) => ({ value: String(d.id), label: d.name })),
+    },
+    ...(view === 'list' ? ([
+      {
+        kind: 'select', key: 'stage_id', label: 'Стадия', allLabel: 'Все стадии',
+        options: (stages || []).map((st) => ({ value: String(st.id), label: st.label })),
+      },
+      { kind: 'text', key: 'cycle_no', label: 'Номер цикла', numeric: true },
+      { kind: 'checkbox', key: 'include_closed', label: 'Закрытые' },
+    ] as FilterField[]) : []),
+  ];
+  const panelValues: Record<string, string> = {};
+  for (const f of searchFields) {
+    const v = sp.get(f.key);
+    if (v) panelValues[f.key] = v;
+  }
+  // Меняем только ключи панели; остальные параметры адреса (view, task) остаются.
+  const applyPanel = (values: Record<string, string>) => {
+    const next = new URLSearchParams(sp);
+    for (const f of searchFields) {
+      const v = values[f.key];
+      if (v) next.set(f.key, v); else next.delete(f.key);
+    }
+    setSp(next, { replace: true });
+  };
+
   const chips: { key: string; label: string }[] = [];
   if (sp.get('student')) chips.push({ key: 'student', label: `Поиск: ${sp.get('student')}` });
   if (sp.get('assignee_id')) chips.push({ key: 'assignee_id', label: `Ответственный: ${assigneeName ?? sp.get('assignee_id')}` });
@@ -141,60 +174,12 @@ export default function RenewalsPage() {
         <div className="rnl-toolbar__row">
           {/* Поиск — часть панели фильтрации, а не отдельный контрол внутри
               каждой колонки: искать ученика приходится, НЕ зная его стадии. */}
-          <SearchInput
-            value={sp.get('student') ?? ''}
-            onChange={(v) => setFilter('student', v)}
-            placeholder="Поиск по имени ученика…"
-            width={240}
+          <TableFilterPanel
+            fields={searchFields}
+            filters={panelValues}
+            onApply={applyPanel}
+            label="Поиск по продлениям"
           />
-
-          {/* Пустое значение названо самоописательно — так триггер объясняет
-              себя без uppercase-подписи сверху, которая съедала 20px высоты. */}
-          <SelectInput
-            className="rnl-toolbar__select"
-            value={sp.get('assignee_id') ?? ''}
-            onChange={(e) => setFilter('assignee_id', e.target.value)}
-            options={[
-              { value: '', label: 'Все ответственные' },
-              ...(assignees || []).map((a) => ({ value: String(a.id), label: a.full_name })),
-            ]}
-          />
-          <SelectInput
-            className="rnl-toolbar__select"
-            value={sp.get('direction_id') ?? ''}
-            onChange={(e) => setFilter('direction_id', e.target.value)}
-            options={[
-              { value: '', label: 'Все направления' },
-              ...(directions || []).map((d) => ({ value: String(d.id), label: d.name })),
-            ]}
-          />
-
-          {view === 'list' && (
-            <>
-              <SelectInput
-                className="rnl-toolbar__select"
-                value={sp.get('stage_id') ?? ''}
-                onChange={(e) => setFilter('stage_id', e.target.value)}
-                options={[
-                  { value: '', label: 'Все стадии' },
-                  ...(stages || []).map((s) => ({ value: String(s.id), label: s.label })),
-                ]}
-              />
-              <TextInput
-                className="rnl-toolbar__cycle"
-                inputMode="numeric"
-                placeholder="Цикл"
-                aria-label="Номер цикла"
-                value={sp.get('cycle_no') ?? ''}
-                onChange={(e) => setFilter('cycle_no', e.target.value.replace(/\D/g, ''))}
-              />
-              <Checkbox
-                label="Закрытые"
-                checked={sp.get('include_closed') === 'true'}
-                onChange={(e) => setFilter('include_closed', e.target.checked ? 'true' : '')}
-              />
-            </>
-          )}
         </div>
 
         {chips.length > 0 && (

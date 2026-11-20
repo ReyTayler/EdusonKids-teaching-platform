@@ -8,7 +8,7 @@ import { TableSkeleton } from '../ui/Skeleton';
 import { EmptyState } from '../ui/EmptyState';
 import { ClampText } from '../ui/ClampText';
 import { EntityLink } from '../EntityLink';
-import { DateInput } from '../form/DateInput';
+import type { FilterField } from '../filters';
 import { fmtDate, fmtDateTime } from '../../lib/format';
 import { FEEDBACK_LABELS } from '../../lib/labels';
 import type { LessonFeedbackRow } from '../../lib/types';
@@ -34,7 +34,7 @@ export function LessonFeedbackTable({ groupId }: { groupId?: number }) {
 
   // Перевёрнутый период сервер отклоняет 400, а keepPreviousData оставил бы на
   // экране старые строки без объяснения. Такой период не отправляем вовсе и
-  // говорим об этом под полями дат (ISO-строки сравниваются лексикографически).
+  // говорим об этом рядом с лупой (ISO-строки сравниваются лексикографически).
   const rangeInverted = Boolean(
     debouncedFilters.date_from && debouncedFilters.date_to
     && debouncedFilters.date_from > debouncedFilters.date_to,
@@ -120,12 +120,12 @@ export function LessonFeedbackTable({ groupId }: { groupId?: number }) {
   }
   if (isLoading) return <TableSkeleton rows={8} cols={columns.length} />;
 
-  // Даты живут в тех же f.*-фильтрах, что и селекты: «Сбросить» чистит всё разом.
-  const setDate = (key: 'date_from' | 'date_to') => (e: { target: { value: string } }) => {
-    const next = { ...filters };
-    if (e.target.value) next[key] = e.target.value; else delete next[key];
-    setFilters(next);
-  };
+  // Даты живут в тех же f.*-фильтрах, что и селекты, и лежат в той же панели поиска:
+  // «×» сбрасывает всё разом.
+  const dateFields: FilterField[] = [
+    { kind: 'date', key: 'date_from', label: FEEDBACK_LABELS.dateFrom },
+    { kind: 'date', key: 'date_to', label: FEEDBACK_LABELS.dateTo },
+  ];
 
   return (
     <DataTable<LessonFeedbackRow>
@@ -133,13 +133,8 @@ export function LessonFeedbackTable({ groupId }: { groupId?: number }) {
       columns={columns}
       title={FEEDBACK_LABELS.title}
       isLoading={isFetching}
-      headerActions={
-        <div className="fb-dates">
-          <DateInput value={filters.date_from ?? ''} onChange={setDate('date_from')} placeholder={FEEDBACK_LABELS.dateFrom} aria-label={FEEDBACK_LABELS.dateFrom} />
-          <DateInput value={filters.date_to ?? ''} onChange={setDate('date_to')} placeholder={FEEDBACK_LABELS.dateTo} aria-label={FEEDBACK_LABELS.dateTo} />
-          {rangeInverted && <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div>}
-        </div>
-      }
+      extraFields={dateFields}
+      headerActions={rangeInverted ? <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div> : undefined}
       serverPagination={{
         page, pageSize, total,
         sortBy: 'lesson_date', sortDir: 'desc', filters,

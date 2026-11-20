@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useFreeWindows } from '../../hooks/useFreeWindows';
 import { useToast } from '../../components/ui/Toast';
 import { Button } from '../../components/ui/Button';
-import { SearchInput } from '../../components/ui/SearchInput';
+import { TableFilterPanel, type FilterField } from '../../components/filters';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { BlockLoading } from '../../components/ui/Skeleton';
 import { DOW_SHORT, WEEK_DOW, formatIntervals, toMinutes } from '../../shared/availability/grid';
@@ -27,6 +27,8 @@ function summaryLines(t: FreeWindowsTeacher): string[] {
 function blockText(t: FreeWindowsTeacher): string {
   return [t.name, ...summaryLines(t)].join('\n');
 }
+
+const SEARCH_FIELDS: FilterField[] = [{ kind: 'text', key: 'q', label: 'Имя преподавателя' }];
 
 export default function FreeWindowsSummary() {
   const { data, isLoading, isError } = useFreeWindows();
@@ -63,7 +65,12 @@ export default function FreeWindowsSummary() {
   return (
     <div className="free-windows">
       <div className="free-windows__toolbar">
-        <SearchInput value={query} onChange={setQuery} placeholder="Поиск по имени" width={280} />
+        <TableFilterPanel
+          fields={SEARCH_FIELDS}
+          filters={query ? { q: query } : {}}
+          onApply={(next) => setQuery(next.q ?? '')}
+          label="Поиск по преподавателям"
+        />
         <Button
           variant="secondary"
           disabled={copiable.length === 0}

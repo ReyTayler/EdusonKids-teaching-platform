@@ -62,8 +62,8 @@
 /* ============================================================
  *  ФИЛЬТР-БАР (общий для доски и недели)
  *  Один ряд управления на весь раздел: слева — что показываем (сегменты,
- *  быстрые селекторы, «Фильтры», поиск), справа — чем показываем. Выбор
- *  воронки уехал в полосу слева, редкие фильтры — под кнопку «Фильтры»,
+ *  панель поиска под лупой), справа — чем показываем. Выбор
+ *  воронки уехал в полосу слева, все поля поиска — в панели под лупой,
  *  поэтому отдельного ряда-тулбара и строки сброса больше нет.
  * ============================================================ */
 .tasks-filterbar {
@@ -77,32 +77,9 @@
   border-radius: var(--r);
 }
 
-.tasks-filterbar__select { width: 170px; }
-.tasks-filterbar__select .select-input__trigger {
-  box-sizing: border-box;
-  width: 100%;
-  height: 34px;
-  padding: 0 var(--space-3);
-  background: var(--bg2);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-sm);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-sm);
-  outline: none;
-  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
-}
-.tasks-filterbar__select .select-input__trigger:focus,
-.tasks-filterbar__select.is-open .select-input__trigger {
-  border-color: var(--accent);
-  box-shadow: var(--focus-ring);
-}
-.tasks-filterbar__select .select-input__value { font-size: var(--fs-sm); }
-
 @media (max-width: 720px) {
   /* На узком экране ряд разваливается в столбец: каждый контрол во всю ширину. */
   .tasks-filterbar > * { flex: 1 1 100%; }
-  .tasks-filterbar__select { width: 100%; }
 }
 
 /* ============================================================
@@ -1250,71 +1227,12 @@
 
 .task-segments__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.task-filters__trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  height: 34px;
-  padding: 0 var(--space-3);
-  background: var(--bg2);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-sm);
-  font: inherit;
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  color: var(--text2);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
-              color var(--t-fast) var(--ease);
-}
-
-.task-filters__trigger:hover { color: var(--text); border-color: var(--text3); }
-.task-filters__trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-.task-filters__trigger.is-active,
-.task-filters__trigger[data-state="open"] {
-  border-color: var(--accent);
-  color: var(--text);
-  background: var(--bg2);
-}
-
-.task-filters__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-  color: var(--on-accent);   /* как .ui-btn--primary: единственный текст поверх акцента */
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  line-height: 1;
-}
-
-.task-filters__panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  width: 260px;
-  padding: var(--space-3);
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  box-shadow: var(--shadow-popover);
-  z-index: var(--z-popover);
-}
-
 /* Radix кладёт Content в свою обёртку с transform, а transform создаёт stacking
    context — z-index на самой панели остаётся внутри него. Чтобы панель не ушла
    под модалку, поднимаем именно обёртку. */
 /* Обёртка Radix позиционируется transform'ом и создаёт свой контекст
    наложения — z-index самой панели остаётся внутри него. Поднимаем обёртку,
    иначе всплывашка уедет под модалку. */
-[data-radix-popper-content-wrapper]:has(> .task-filters__panel),
 [data-radix-popper-content-wrapper]:has(> .task-view__panel) { z-index: var(--z-popover); }
 
 /* ============================================================

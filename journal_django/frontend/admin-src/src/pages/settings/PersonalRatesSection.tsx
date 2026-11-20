@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { usePersonalRates, usePersonalRateMutations } from '../../hooks/useMotivation';
 import { useTeachers } from '../../hooks/useTeachers';
 import { useGroupsAll } from '../../hooks/useGroups';
-import { Combobox } from '../../components/form/Combobox';
+import { FilterToolbar, TableFilterPanel, type FilterField } from '../../components/filters';
 import { Switch } from '../../components/form/Switch';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { ActionMenu } from '../../components/ui/ActionMenu';
@@ -41,14 +41,17 @@ export function PersonalRatesSection() {
   const teachers = useTeachers(true);
   const groups = useGroupsAll(true);
 
-  const teacherOptions = useMemo(() => [
-    { value: '', label: 'Все преподаватели' },
-    ...(teachers.data ?? []).map((t) => ({ value: String(t.id), label: t.name, muted: !t.active })),
-  ], [teachers.data]);
-  const groupOptions = useMemo(() => [
-    { value: '', label: 'Все группы' },
-    ...(groups.data ?? []).map((g) => ({ value: String(g.id), label: g.name, muted: !g.active })),
-  ], [groups.data]);
+  // Пункт «Все …» добавляет сама панель поиска.
+  const searchFields = useMemo<FilterField[]>(() => [
+    {
+      kind: 'combobox', key: 'teacher', label: 'Преподаватель', allLabel: 'Все преподаватели',
+      options: (teachers.data ?? []).map((t) => ({ value: String(t.id), label: t.name, muted: !t.active })),
+    },
+    {
+      kind: 'combobox', key: 'group', label: 'Группа', allLabel: 'Все группы',
+      options: (groups.data ?? []).map((g) => ({ value: String(g.id), label: g.name, muted: !g.active })),
+    },
+  ], [teachers.data, groups.data]);
 
   const confirmDelete = () => {
     if (!deleting) return;
@@ -92,20 +95,14 @@ export function PersonalRatesSection() {
         Ставка преподавателя в конкретной группе: вместо ставки школы или надбавка к ней.
       </p>
 
-      <div className="filterbar settings-filters">
-        <div className="filterbar__fields">
-          <div className="filterbar__field settings-filters__field">
-            <Combobox value={teacher} options={teacherOptions} placeholder="Все преподаватели"
-              aria-label="Фильтр по преподавателю"
-              onChange={(v) => { setTeacher(v); setPage(1); }} />
-          </div>
-          <div className="filterbar__field settings-filters__field">
-            <Combobox value={group} options={groupOptions} placeholder="Все группы"
-              aria-label="Фильтр по группе"
-              onChange={(v) => { setGroup(v); setPage(1); }} />
-          </div>
-        </div>
-      </div>
+      <FilterToolbar>
+        <TableFilterPanel
+          fields={searchFields}
+          filters={{ ...(teacher ? { teacher } : {}), ...(group ? { group } : {}) }}
+          onApply={(next) => { setTeacher(next.teacher ?? ''); setGroup(next.group ?? ''); setPage(1); }}
+          label="Поиск персональных ставок"
+        />
+      </FilterToolbar>
 
       {q.isLoading ? <BlockLoading rows={4} /> : q.isError ? (
         // Сбой загрузки не должен читаться как «ставок нет».

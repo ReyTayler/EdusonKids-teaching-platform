@@ -1636,7 +1636,6 @@
   gap: var(--space-3); flex-wrap: wrap;
 }
 .tgroups__head .sub-header { margin-bottom: 0; }
-.tgroups__search { min-width: 220px; }
 .tgroups__list { display: flex; flex-direction: column; }
 
 .tgroup {

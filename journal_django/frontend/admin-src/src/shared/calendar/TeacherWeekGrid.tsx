@@ -13,6 +13,9 @@ const TIME_COL_W = 56;
 /** Минимальная ширина одной дорожки и колонки преподавателя (имя должно читаться). */
 const LANE_W = 96;
 const MIN_TEACHER_COL_W = 120;
+/** Шкала дня по умолчанию: 08:00–22:00; ранний/поздний урок расширяет день, чтобы не обрезаться. */
+const DAY_START_HOUR = 8;
+const DAY_END_HOUR = 22;
 const DAY_SHORT = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
 
 export interface GridTeacher {
@@ -43,7 +46,7 @@ interface DayBlock {
   date: Date;
   iso: string;
   isToday: boolean;
-  /** Первый час диапазона дня (0–23) и число строк-часов; 0 строк — день без уроков. */
+  /** Первый час диапазона дня (0–23) и число строк-часов: ≥ 14 (шкала 08–22, шире — если урок выходит за границы). */
   startHour: number;
   rows: number;
   /** teacherId → раскладка уроков в колонке. */
@@ -84,9 +87,9 @@ const NowLine = memo(function NowLine({ startMin, bodyH, withDot }: { startMin: 
 /**
  * Вид «по преподавателям» (admin, «Все преподаватели», неделя): колонки —
  * преподаватели, строки — часы, сгруппированные по дням Пн…Вс. У каждого дня
- * своя шкала: от самого раннего до самого позднего урока этого дня, так что
- * пустая ночь не растягивает таблицу. Слева закреплены день и время, сверху —
- * имена преподавателей.
+ * своя шкала: по умолчанию 08:00–22:00 (даже в пустой день), а если урок выходит
+ * за эти границы — день расширяется ровно настолько, чтобы урок не обрезался.
+ * Слева закреплены день и время, сверху — имена преподавателей.
  */
 export function TeacherWeekGrid({
   monday,
@@ -106,7 +109,7 @@ export function TeacherWeekGrid({
   resolveColor: (occ: Occurrence) => string;
   /** teacherId → дата → окна. Нет ключа у преподавателя — графика нет, фон не рисуем. */
   availabilityByTeacher?: Record<string, Record<string, Interval[]>> | null;
-  /** false, пока показаны данные прошлой недели (placeholder): ни «нет занятий», ни прокрутки. */
+  /** false, пока показаны данные прошлой недели (placeholder): автопрокрутку откладываем до настоящих данных. */
   dataReady?: boolean;
 }) {
   const { days, cols, maxLanes } = useMemo(() => {
@@ -162,9 +165,9 @@ export function TeacherWeekGrid({
         }
       }
       const has = Number.isFinite(first);
-      const startHour = has ? Math.floor(first / 60) : 0;
-      const endHour = has ? Math.min(24, Math.max(startHour + 1, Math.ceil(last / 60))) : 0;
-      const rows = has ? endHour - startHour : 0;
+      const startHour = has ? Math.min(DAY_START_HOUR, Math.floor(first / 60)) : DAY_START_HOUR;
+      const endHour = has ? Math.min(24, Math.max(DAY_END_HOUR, Math.ceil(last / 60))) : DAY_END_HOUR;
+      const rows = endHour - startHour;
       if (perCol) {
         for (const [key, list] of perCol) {
           const l = layoutColumn(list, rows * ROW_H, ROW_H, startHour * 60);
@@ -206,7 +209,7 @@ export function TeacherWeekGrid({
     const headH = headRef.current?.offsetHeight ?? 0;
     const blockTop = block.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop;
     const nowOffset = ((mskNowMinutes() - todayBlock.startHour * 60) / 60) * ROW_H;
-    if (todayBlock.rows > 0 && nowOffset >= 0 && nowOffset <= todayBlock.rows * ROW_H) {
+    if (nowOffset >= 0 && nowOffset <= todayBlock.rows * ROW_H) {
       // Шапка залипает и закрывает headH px вьюпорта — центрируем «сейчас» в оставшейся части.
       wrap.scrollTop = blockTop + nowOffset - (headH + wrap.clientHeight) / 2;
     } else {
@@ -248,98 +251,87 @@ export function TeacherWeekGrid({
             <span className="tw-day-date">{d.date.getUTCDate()}</span>
           </div>
 
-          {d.rows === 0 ? (
-            <>
-              <div className="tw-time-cell tw-time-cell--empty" />
-              <div className="tw-empty-row">
-                {dataReady && <span className="tw-empty-text">нет занятий</span>}
+          <div className="tw-time-cell" style={{ height: d.rows * ROW_H }}>
+            {/* Подпись стоит на линии начала часа; у первого часа линии сверху
+                нет — подпись сидит под границей дня. */}
+            {Array.from({ length: d.rows }, (_, i) => (
+              <div
+                key={i}
+                className={`cal-hour-label${i === 0 ? ' tw-hour-label--first' : ''}`}
+                style={{ top: i === 0 ? 2 : i * ROW_H }}
+              >
+                {String(d.startHour + i).padStart(2, '0')}:00
               </div>
-            </>
-          ) : (
-            <>
-              <div className="tw-time-cell" style={{ height: d.rows * ROW_H }}>
-                {/* Подпись стоит на линии начала часа; у первого часа линии сверху
-                    нет — подпись сидит под границей дня. */}
-                {Array.from({ length: d.rows }, (_, i) => (
-                  <div
-                    key={i}
-                    className={`cal-hour-label${i === 0 ? ' tw-hour-label--first' : ''}`}
-                    style={{ top: i === 0 ? 2 : i * ROW_H }}
-                  >
-                    {String(d.startHour + i).padStart(2, '0')}:00
-                  </div>
-                ))}
+            ))}
+          </div>
+
+          {cols.map((t, ti) => {
+            const sched = t.id != null ? availabilityByTeacher?.[String(t.id)] : undefined;
+            const windows = sched ? sched[d.iso] ?? [] : null;
+            const bodyH = d.rows * ROW_H;
+            const startMin = d.startHour * 60;
+            return (
+              <div
+                key={t.key}
+                className={`cal-col tw-cell${d.isToday ? ' today' : ''}${sched ? ' has-availability' : ''}`}
+                style={{ height: bodyH }}
+              >
+                {/* Рабочие окна — до блоков уроков, чтобы уроки были поверх. */}
+                {windows?.map(([start, end], i) => {
+                  const top = Math.max(0, ((toMinutes(start) - startMin) / 60) * ROW_H);
+                  const bottom = Math.min(bodyH, ((toMinutes(end) - startMin) / 60) * ROW_H);
+                  if (bottom <= top) return null;
+                  return (
+                    <div
+                      key={`av-${i}`}
+                      className="cal-avail"
+                      style={{ top, height: bottom - top, ['--avail-top' as any]: `${top}px` }}
+                      aria-hidden
+                    />
+                  );
+                })}
+
+                {(d.laid.get(t.key) ?? []).map(({ occ, key, top, height, lane, lanes }) => {
+                  const dur = occ.durationMinutes ?? 60;
+                  // Время показываем, только если занятие не «ровно час в начале часа»:
+                  // иначе оно и так читается по линиям сетки.
+                  const desc = `${occ.groupDisplay}, ${occ.time}–${endTime(occ.time!, dur)}, ${t.name}${occ.status === 'moved' || occ.status === 'cancelled' ? ` — ${occ.label}` : ''}`;
+                  const offGrid = !(occ.time!.endsWith(':00') && dur === 60);
+                  return (
+                    <div
+                      key={key}
+                      className={`lb${occ.status === 'overdue' ? ' overdue' : ''}${occ.status === 'done' ? ' done' : ''}${occ.status === 'cancelled' ? ' cancelled' : ''}${occ.isExtra || occ.extraLessonId ? ' makeup' : ''}`}
+                      style={{
+                        top,
+                        height,
+                        left: `calc(${(lane / lanes) * 100}% + 2px)`,
+                        width: `calc(${100 / lanes}% - 5px)`,
+                        right: 'auto',
+                        ['--subject-color' as any]: resolveColor(occ),
+                      }}
+                      onClick={(e) => onSelect(occ, e)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault(); // пробел не должен листать контейнер
+                          onSelect(occ, e);
+                        }
+                      }}
+                      title={desc}
+                      aria-label={desc}
+                    >
+                      {occ.movedFrom && <span className="cal-moved" title={`Перенесён с ${occ.movedFrom}`} aria-label="перенесён">↪</span>}
+                      <div className="lb-title">{occ.groupDisplay}</div>
+                      {offGrid && <div className="lb-time">{`${occ.time}–${endTime(occ.time!, dur)}`}</div>}
+                    </div>
+                  );
+                })}
+
+                {d.isToday && <NowLine startMin={startMin} bodyH={bodyH} withDot={ti === 0} />}
               </div>
-
-              {cols.map((t, ti) => {
-                const sched = t.id != null ? availabilityByTeacher?.[String(t.id)] : undefined;
-                const windows = sched ? sched[d.iso] ?? [] : null;
-                const bodyH = d.rows * ROW_H;
-                const startMin = d.startHour * 60;
-                return (
-                  <div
-                    key={t.key}
-                    className={`cal-col tw-cell${d.isToday ? ' today' : ''}${sched ? ' has-availability' : ''}`}
-                    style={{ height: bodyH }}
-                  >
-                    {/* Рабочие окна — до блоков уроков, чтобы уроки были поверх. */}
-                    {windows?.map(([start, end], i) => {
-                      const top = Math.max(0, ((toMinutes(start) - startMin) / 60) * ROW_H);
-                      const bottom = Math.min(bodyH, ((toMinutes(end) - startMin) / 60) * ROW_H);
-                      if (bottom <= top) return null;
-                      return (
-                        <div
-                          key={`av-${i}`}
-                          className="cal-avail"
-                          style={{ top, height: bottom - top, ['--avail-top' as any]: `${top}px` }}
-                          aria-hidden
-                        />
-                      );
-                    })}
-
-                    {(d.laid.get(t.key) ?? []).map(({ occ, key, top, height, lane, lanes }) => {
-                      const dur = occ.durationMinutes ?? 60;
-                      // Время показываем, только если занятие не «ровно час в начале часа»:
-                      // иначе оно и так читается по линиям сетки.
-                      const desc = `${occ.groupDisplay}, ${occ.time}–${endTime(occ.time!, dur)}, ${t.name}${occ.status === 'moved' || occ.status === 'cancelled' ? ` — ${occ.label}` : ''}`;
-                      const offGrid = !(occ.time!.endsWith(':00') && dur === 60);
-                      return (
-                        <div
-                          key={key}
-                          className={`lb${occ.status === 'overdue' ? ' overdue' : ''}${occ.status === 'done' ? ' done' : ''}${occ.status === 'cancelled' ? ' cancelled' : ''}${occ.isExtra || occ.extraLessonId ? ' makeup' : ''}`}
-                          style={{
-                            top,
-                            height,
-                            left: `calc(${(lane / lanes) * 100}% + 2px)`,
-                            width: `calc(${100 / lanes}% - 5px)`,
-                            right: 'auto',
-                            ['--subject-color' as any]: resolveColor(occ),
-                          }}
-                          onClick={(e) => onSelect(occ, e)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault(); // пробел не должен листать контейнер
-                              onSelect(occ, e);
-                            }
-                          }}
-                          title={desc}
-                          aria-label={desc}
-                        >
-                          {occ.movedFrom && <span className="cal-moved" title={`Перенесён с ${occ.movedFrom}`} aria-label="перенесён">↪</span>}
-                          <div className="lb-title">{occ.groupDisplay}</div>
-                          {offGrid && <div className="lb-time">{`${occ.time}–${endTime(occ.time!, dur)}`}</div>}
-                        </div>
-                      );
-                    })}
-
-                    {d.isToday && <NowLine startMin={startMin} bodyH={bodyH} withDot={ti === 0} />}
-                  </div>
-                );
-              })}
-            </>
-          )}
+            );
+          })}
         </div>
       ))}
     </div>

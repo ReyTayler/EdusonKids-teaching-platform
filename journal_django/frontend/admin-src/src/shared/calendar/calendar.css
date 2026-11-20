@@ -407,8 +407,7 @@
 .tw-day-cell {
   position: sticky; left: 0; z-index: 4; background: var(--bg2);
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
-  /* Высота ячейки (отступ + подпись + круг) обязана быть ниже строки-часа (48px):
-     иначе день с одним часом растягивается и под сеткой остаётся полоса без линий. */
+  /* Ячейка дня всегда ≥ 14 строк-часов (шкала 08–22), так что высоты хватает с запасом. */
   padding-top: var(--space-1); border-right: 1px solid var(--line);
 }
 .tw-day-name {
@@ -426,13 +425,4 @@
 .tw-day.today .tw-day-date { background: var(--accent); color: var(--on-accent); }
 /* Колонка времени — вторая залипающая слева; sticky даёт контекст для .cal-hour-label. */
 .tw-time-cell { position: sticky; left: var(--tw-day-w); z-index: 4; background: var(--bg2); }
-.tw-time-cell--empty { height: var(--row-h); }
 .tw-hour-label--first { transform: none; } /* top задаётся инлайном (отступ от границы дня) */
-.tw-empty-row {
-  grid-column: 3 / -1; height: var(--row-h);
-  display: flex; align-items: center; background: var(--bg3);
-}
-.tw-empty-text {
-  position: sticky; left: calc(var(--tw-day-w) + var(--tw-time-w) + var(--space-3));
-  font-size: var(--fs-xs); color: var(--text4);
-}

@@ -125,13 +125,13 @@ export function LessonFeedbackTable({ groupId, pageTitle }: { groupId?: number; 
       title={pageTitle}
       actions={(
         <>
-          {rangeInverted && <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div>}
           <TableFilterPanel
             fields={columnFilterFields(columns, dateFields)}
             filters={filters}
             onApply={setFilters}
             label={`Поиск: ${pageTitle}`}
           />
+          {rangeInverted && <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div>}
         </>
       )}
     />
@@ -155,24 +155,24 @@ export function LessonFeedbackTable({ groupId, pageTitle }: { groupId?: number; 
 
   return (
     <>
-    {header}
-    <DataTable<LessonFeedbackRow>
-      data={rows}
-      columns={columns}
-      title={FEEDBACK_LABELS.title}
-      isLoading={isFetching}
-      extraFields={dateFields}
-      searchOutside={!!pageTitle}
-      headerActions={!pageTitle && rangeInverted ? <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div> : undefined}
-      serverPagination={{
-        page, pageSize, total,
-        sortBy: 'lesson_date', sortDir: 'desc', filters,
-        onPageChange: setPage,
-        onPageSizeChange: setPageSize,
-        onSortChange: () => {},
-        onFiltersChange: setFilters,
-      }}
-    />
+      {header}
+      <DataTable<LessonFeedbackRow>
+        data={rows}
+        columns={columns}
+        title={FEEDBACK_LABELS.title}
+        isLoading={isFetching}
+        extraFields={dateFields}
+        searchOutside={!!pageTitle}
+        headerActions={!pageTitle && rangeInverted ? <div className="field-hint" role="alert">{FEEDBACK_LABELS.rangeInverted}</div> : undefined}
+        serverPagination={{
+          page, pageSize, total,
+          sortBy: 'lesson_date', sortDir: 'desc', filters,
+          onPageChange: setPage,
+          onPageSizeChange: setPageSize,
+          onSortChange: () => {},
+          onFiltersChange: setFilters,
+        }}
+      />
     </>
   );
 }

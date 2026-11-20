@@ -131,6 +131,12 @@ export default function ChangelogListPage() {
       count={isLoading ? undefined : total}
       actions={(
         <>
+          <TableFilterPanel
+            fields={OPERATION_FIELDS}
+            filters={operation ? { op: operation } : {}}
+            onApply={(next) => setExtras({ op: next.op || null })}
+            label="Поиск по журналу изменений"
+          />
           {entityFilterLabel && (
             <span className="filter-chip">
               {entityFilterLabel}
@@ -142,12 +148,6 @@ export default function ChangelogListPage() {
               >×</button>
             </span>
           )}
-          <TableFilterPanel
-            fields={OPERATION_FIELDS}
-            filters={operation ? { op: operation } : {}}
-            onApply={(next) => setExtras({ op: next.op || null })}
-            label="Поиск по журналу изменений"
-          />
         </>
       )}
     />

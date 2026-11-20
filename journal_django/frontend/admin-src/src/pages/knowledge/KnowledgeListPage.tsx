@@ -175,7 +175,7 @@ export default function KnowledgeListPage() {
             ? [{ label: 'Wiki', to: '/admin/knowledge' }, { label: openSection.title }]
             : undefined
         }
-        actions={(
+        actions={(sectionList.length > 0 || canWrite) ? (
           <>
             {/* Лупа в шапке; без разделов искать негде. */}
             {sectionList.length > 0 && (
@@ -188,7 +188,7 @@ export default function KnowledgeListPage() {
             )}
             {canWrite && <CreateMenu onSection={askCreateSection} onDocument={askCreateDocument} />}
           </>
-        )}
+        ) : undefined}
       />
 
       {sectionList.length === 0 ? (

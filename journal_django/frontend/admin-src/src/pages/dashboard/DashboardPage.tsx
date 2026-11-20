@@ -5,6 +5,7 @@ import { PageHeader } from '../../components/shell/PageHeader';
 import { TableFilterPanel, columnFilterFields } from '../../components/filters';
 import { useListSearchParams } from '../../hooks/useListSearchParams';
 import { REGISTRY_COLUMNS } from './registry/RegistryTable';
+import { FillSearch } from './fill/FillSearch';
 
 // Реестр — отдельный чанк: таблица/сигналы грузятся только при открытии вкладки.
 const RegistryTab = lazy(() => import('./registry/RegistryTab'));
@@ -30,10 +31,10 @@ export default function DashboardPage() {
     <div className="dashboard">
       <PageHeader
         title="Дашборд"
-        // Лупа реестра — в шапке; у «Заполнить» своя строка внутри вкладки.
+        // Лупа — в шапке для обеих вкладок (по активной).
         actions={tab === 'registry' ? (
           <TableFilterPanel fields={columnFilterFields(REGISTRY_COLUMNS)} filters={filters} onApply={setFilters} label="Поиск: Реестр" />
-        ) : undefined}
+        ) : <FillSearch />}
       />
 
       <nav className="dash-tabs" role="tablist" aria-label="Разделы дашборда">

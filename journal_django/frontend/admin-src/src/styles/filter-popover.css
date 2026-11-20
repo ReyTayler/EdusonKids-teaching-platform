@@ -20,6 +20,9 @@
 .filter-pop__btn.is-active,
 .filter-pop__btn.is-active:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); position: relative; }
 
+/* В шапке страницы лупа одной высоты с .btn-add (7px×2 + 1px×2 + 13px×1.45 ≈ 35px). */
+.page-header__actions .filter-pop__btn { width: 35px; height: 35px; }
+
 .filter-pop__panel {
   width: 560px; max-width: calc(100vw - 32px);
   padding: var(--space-5);

@@ -151,6 +151,9 @@ tbody tr:hover td.col-actions { background: var(--bg); }
 }
 .entity-card__head:hover { background: var(--bg); }
 .entity-card__head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Заголовок без сворачивания: не кнопка, поэтому без курсора и подсветки. */
+.entity-card .entity-card__head--static,
+.entity-card .entity-card__head--static:hover { cursor: default; background: transparent; }
 .entity-card__title {
   font-size: var(--fs-2xs); font-weight: 500; letter-spacing: .04em;
   text-transform: uppercase; color: var(--text3);

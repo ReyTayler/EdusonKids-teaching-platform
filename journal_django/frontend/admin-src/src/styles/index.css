@@ -5,6 +5,7 @@
 @import './components.css';
 @import './table.css';
 @import './forms.css';
+@import './filter-popover.css';
 @import './modal.css';
 @import './pages/detail.css';
 @import './pages/payroll.css';

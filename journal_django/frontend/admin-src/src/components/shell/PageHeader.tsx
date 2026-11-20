@@ -22,6 +22,8 @@ interface Props {
    * Обычные разделы (списки, карточки сущностей) остаются на общем ритме.
    */
   dense?: boolean;
+  /** Плоская шапка без отрицательного подтяга к следующему блоку: за ней идёт панель с лупой. */
+  flat?: boolean;
 }
 
 /**
@@ -36,9 +38,9 @@ interface Props {
  * Липкие элементы страниц (панель редактора, колонка статьи) отсчитывают верх
  * от --header-h: на десктопе он 0, на узком экране — высота TopBar.
  */
-export function PageHeader({ title, count, crumbs, actions, sub, dense }: Props) {
+export function PageHeader({ title, count, crumbs, actions, sub, dense, flat }: Props) {
   return (
-    <header className={`page-header${dense ? ' page-header--dense' : ''}`}>
+    <header className={`page-header${dense ? ' page-header--dense' : ''}${flat ? ' page-header--flat' : ''}`}>
       <div className="page-header__inner">
         <div className="page-header__main">
           {!!crumbs?.length && (

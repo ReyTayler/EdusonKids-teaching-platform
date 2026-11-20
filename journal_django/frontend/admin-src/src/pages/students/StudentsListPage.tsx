@@ -13,6 +13,7 @@ import { fmtDate, fmtAge } from '../../lib/format';
 import type { Student } from '../../lib/types';
 import { PageHeader } from '../../components/shell/PageHeader';
 import StudentFormModal from './StudentFormModal';
+import { StudentsFilter } from './StudentsFilter';
 
 export default function StudentsListPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -24,7 +25,8 @@ export default function StudentsListPage() {
   // Стадии воронки — варианты фильтра колонки «Стадия» (бэк ждёт filter[stage_id]).
   const { data: stages } = useRenewalStages();
 
-  // Debounce фильтров — не гоним запрос на каждый символ.
+  // Фильтры меняются только по «Искать»; deferred оставлен, чтобы смена фильтра
+  // не блокировала отрисовку текущей таблицы.
   const debouncedFilters = useDeferredValue(filters);
 
   const { data, isLoading, isFetching } = useStudents({
@@ -38,8 +40,8 @@ export default function StudentsListPage() {
   const rows: Student[] = data?.rows || [];
   const total = data?.total || 0;
 
-  // Whitelist sortable/searchable строго по тому, что поддерживает бэкенд.
-  // Client-side searchable: function удалена — бэк фильтрует сам.
+  // Фильтры колонок вынесены в панель-лупу (StudentsFilter), поэтому searchable
+  // везде false: встроенная строка фильтров DataTable не рисуется.
   const columns: Column<Student>[] = [
     {
       key: 'id',
@@ -56,7 +58,7 @@ export default function StudentsListPage() {
       key: 'full_name',
       label: 'Ученик',
       sortable: true,
-      searchable: true,
+      searchable: false,
       cell: (r) => (
         <div className="person-cell">
           <Avatar name={r.full_name} size={32} />
@@ -90,29 +92,28 @@ export default function StudentsListPage() {
       key: 'parent1_phone',
       label: 'Телефон родителя 1',
       sortable: false,
-      searchable: true,
+      searchable: false,
       cell: (r) => r.parent1_phone || '—',
     },
     {
       key: 'parent1_name',
       label: 'Родитель 1',
       sortable: false,
-      searchable: true,
+      searchable: false,
       cell: (r) => r.parent1_name || '—',
     },
     {
       key: 'platform_id',
       label: 'Platform ID',
       sortable: false,
-      searchable: true,
+      searchable: false,
       cell: (r) => r.platform_id || '—',
     },
     {
       key: 'manager_id',
       label: 'Менеджер',
       sortable: false,
-      searchable: true,
-      searchOptions: (assignees || []).map((a) => ({ value: String(a.id), label: a.full_name })),
+      searchable: false,
       cell: (r) => r.manager_name || '—',
     },
     {
@@ -123,21 +124,32 @@ export default function StudentsListPage() {
       label: 'Стадия',
       sortKey: 'stage',
       sortable: true,
-      searchable: true,
-      searchOptions: (stages || []).map((s) => ({ value: String(s.id), label: s.label })),
+      searchable: false,
       cell: (r) => <StudentStageBadge row={r} />,
     },
   ];
 
   // Шапка рисуется и во время загрузки: раньше страница возвращала скелетон
   // ДО неё, и при каждом переходе между разделами заголовок пропадал и
-  // появлялся заново — экран «моргал» названием.
+  // появлялся заново — экран «моргал» названием. Полоса с лупой — туда же,
+  // иначе после загрузки она сдвигала бы таблицу вниз.
   const header = (
-    <PageHeader
-      title="Ученики"
-      count={isLoading ? undefined : total}
-      actions={<button type="button" className="btn-add" onClick={() => setModalOpen(true)}>+ Новый</button>}
-    />
+    <>
+      <PageHeader
+        title="Ученики"
+        flat
+        count={isLoading ? undefined : total}
+        actions={<button type="button" className="btn-add" onClick={() => setModalOpen(true)}>+ Новый</button>}
+      />
+      <div className="filter-toolbar">
+        <StudentsFilter
+          filters={filters}
+          managerOptions={(assignees || []).map((a) => ({ value: String(a.id), label: a.full_name }))}
+          stageOptions={(stages || []).map((s) => ({ value: String(s.id), label: s.label }))}
+          onApply={setFilters}
+        />
+      </div>
+    </>
   );
 
   if (isLoading) return <>{header}<TableSkeleton rows={6} cols={10} roomy /></>;

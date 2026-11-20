@@ -13,44 +13,7 @@
   gap: var(--space-5);
 }
 
-/* Поиск: слитная группа [лупа | ×] рядом с навигацией недели + панель-поповер. */
-.cal-search { display: inline-flex; align-items: stretch; }
-.cal-search__btn {
-  width: 32px; height: 32px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--line-2); background: var(--bg2); color: var(--text2);
-  font-size: var(--fs-lg); line-height: 1; cursor: pointer;
-  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-.cal-search__btn:first-child { border-radius: var(--r-sm) 0 0 var(--r-sm); }
-.cal-search__btn:last-child { border-radius: 0 var(--r-sm) var(--r-sm) 0; }
-.cal-search__btn:only-child { border-radius: var(--r-sm); }
-.cal-search__reset { margin-left: -1px; }
-/* Hover — как у .cal-nav-btn: рамка и текст темнее; position нужен, чтобы рамка наведённой кнопки легла поверх соседней. */
-.cal-search__btn:hover { border-color: var(--text3); color: var(--text); position: relative; }
-.cal-search__btn:active { transform: var(--press); }
-.cal-search__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-/* Открытая панель / включённый фильтр — чёрная заливка (акцент Eduson монохромный). */
-.cal-search__btn.is-active,
-.cal-search__btn.is-active:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); position: relative; }
-
-.cal-search__panel {
-  width: 560px; max-width: calc(100vw - 32px);
-  padding: var(--space-5);
-  background: var(--bg2); border: 3px solid var(--accent);
-  border-radius: var(--r-lg); box-shadow: var(--shadow-popover);
-  z-index: var(--z-popover);
-}
-.cal-search__panel:focus { outline: none; }
-/* Обёртка Radix создаёт stacking context — z-index поднимаем на ней (как у task-filters). */
-[data-radix-popper-content-wrapper]:has(> .cal-search__panel) { z-index: var(--z-popover); }
-.cal-search__arrow { fill: var(--accent); }
-.cal-search__form { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
-.cal-search__fields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-.cal-search__actions { display: flex; justify-content: flex-end; }
-@media (max-width: 600px) {
-  .cal-search__fields { grid-template-columns: 1fr; }
-}
+/* Поиск календаря — общий компонент FilterPopover, стили в styles/filter-popover.css. */
 
 /* ── Вкладка «Сводка»: свободные окна преподавателей ── */
 .free-windows { display: flex; flex-direction: column; gap: var(--space-4); }

@@ -73,9 +73,13 @@ export function CalendarSearch({ filters, teacherOptions, directionOptions, onAp
         <Popover.Content
           className="cal-search__panel"
           data-floating-popover
-          align="end"
+          side="bottom"
+          align="start"
           sideOffset={10}
           collisionPadding={16}
+          // Панель растёт вправо от лупы (влево она перекрывала бы сайдбар); отступ
+          // не даёт стрелке уехать в скруглённый угол, пока она указывает на лупу.
+          arrowPadding={12}
           aria-label="Поиск по календарю"
           onOpenAutoFocus={(e) => {
             // Radix по умолчанию фокусирует первое поле, а Combobox на фокусе

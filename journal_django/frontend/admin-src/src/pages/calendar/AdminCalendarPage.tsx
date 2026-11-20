@@ -1,17 +1,20 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTeachers } from '../../hooks/useTeachers';
 import { useAdminCalendar } from '../../hooks/useAdminCalendar';
-import { CalendarView } from '../../shared/calendar/CalendarView';
-import { Combobox } from '../../components/form/Combobox';
+import { useDirections } from '../../hooks/useDirections';
+import { CalendarView, NO_DIRECTION_KEY, type CalendarViewMode } from '../../shared/calendar/CalendarView';
+import { CalendarSearch } from './CalendarSearch';
 import { currentMondayMsk, addDays, isoDate } from '../../shared/calendar/lib';
 import type { Occurrence } from '../../shared/calendar/types';
-import { PageHeader } from '../../components/shell/PageHeader';
+
+/** Стабильная ссылка: views попадает в useState/deps CalendarView. */
+const WEEK_ONLY: CalendarViewMode[] = ['week'];
 
 /**
  * Раздел «Календарь» admin SPA — read-only расписание (RequireRole manager/
  * admin/superadmin в App.tsx). По умолчанию показывает занятия ВСЕХ
- * преподавателей (вся школа); фильтр «Преподаватель» сужает до одного. Обёртка
+ * преподавателей (вся школа); окно поиска (лупа) сужает по преподавателю и/или направлению. Обёртка
  * над презентационным CalendarView (см. teacher-src CalendarPage.tsx для
  * оригинального паттерна) — без onAction/onLessonAction, попап занятия
  * строго read-only, с кнопкой перехода в план группы (onOpenGroup).
@@ -19,7 +22,9 @@ import { PageHeader } from '../../components/shell/PageHeader';
 export default function AdminCalendarPage() {
   const navigate = useNavigate();
   const teachers = useTeachers(true); // включая архивных — можно посмотреть их прошлое расписание
+  const directions = useDirections(true); // включая архивные — в их прошлых уроках направление ещё встречается
   const [teacherId, setTeacherId] = useState<number | null>(null);
+  const [direction, setDirection] = useState<string | null>(null);
   const [range, setRange] = useState(() => {
     const monday = currentMondayMsk();
     return { from: isoDate(monday), to: isoDate(addDays(monday, 6)) };
@@ -35,6 +40,22 @@ export default function AdminCalendarPage() {
     ],
     [teachers.data],
   );
+
+  // Направление фильтруется по названию (occ.direction — строка с сервера).
+  const directionOptions = useMemo(
+    () => [
+      { value: '', label: 'Все направления' },
+      ...(directions.data || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+        .map((d) => ({ value: d.name, label: d.name })),
+      { value: NO_DIRECTION_KEY, label: 'Без направления' },
+    ],
+    [directions.data],
+  );
+
+  // Имя преподавателя — ссылкой на карточку (в шапке колонок и в карточке занятия).
+  const renderTeacher = useCallback((name: string, id: number) => (
+    <Link to={`/admin/teachers/${id}`}>{name}</Link>
+  ), []);
 
   // Колонки вида «по преподавателям»: активные несервисные по алфавиту, затем
   // «дополнительные» (неактивные/служебные) — сетка покажет их, только если у них
@@ -61,23 +82,9 @@ export default function AdminCalendarPage() {
 
   return (
     <div className="admin-calendar-page">
-      {/* Раньше страница начиналась сразу с фильтра — без заголовка нельзя было
-          понять, в каком ты разделе. Фильтр преподавателя перенесён в шапку:
-          это единственный управляющий элемент страницы. */}
-      <PageHeader
-        title="Календарь"
-        sub="Занятия всех преподавателей. Клик по занятию — карточка группы."
-        actions={
-          <div className="calendar-teacher-filter">
-            <Combobox
-              value={teacherId != null ? String(teacherId) : ''}
-              onChange={(v) => setTeacherId(v ? Number(v) : null)}
-              options={teacherOptions}
-              placeholder="Все преподаватели"
-            />
-          </div>
-        }
-      />
+      {/* Только заголовок: без липкой шапки, линии и подзаголовка. Фильтры живут в окне
+          поиска рядом с навигацией недели (headExtra). */}
+      <h1 className="page-header__title">Календарь</h1>
 
       <CalendarView
         occurrences={data?.occurrences ?? []}
@@ -97,6 +104,19 @@ export default function AdminCalendarPage() {
         onVisibleRangeChange={onVisibleRangeChange}
         role="admin"
         showTitle={false}
+        // Админу нужна только неделя; на узком экране CalendarView сам включает список.
+        views={WEEK_ONLY}
+        directionFilter={direction}
+        legendInteractive={false}
+        renderTeacher={renderTeacher}
+        headExtra={
+          <CalendarSearch
+            filters={{ teacherId, direction }}
+            teacherOptions={teacherOptions}
+            directionOptions={directionOptions}
+            onApply={(f) => { setTeacherId(f.teacherId); setDirection(f.direction); }}
+          />
+        }
         onOpenGroup={onOpenGroup}
       />
     </div>

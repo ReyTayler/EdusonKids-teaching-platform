@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Modal } from './Modal';
 import { StatusPill } from './StatusPill';
 import { Button } from '../../components/ui/Button';
@@ -24,6 +25,7 @@ export function LessonPopup({
   onAction,
   onOpenGroup,
   role,
+  renderTeacher,
 }: {
   lesson: Occurrence;
   onClose: () => void;
@@ -32,6 +34,8 @@ export function LessonPopup({
   /** Кнопка «Открыть группу» — не связана с onAction/onSubmit, видна независимо от role, если передан И lesson.groupId задан. Используется admin-календарём («Календарь» → /admin/groups/:id), не задействован ни в teacher, ни в GroupDetailPage (там карточка группы уже открыта). */
   onOpenGroup?: (lesson: Occurrence) => void;
   role?: 'teacher' | 'admin';
+  /** Имя преподавателя ссылкой (admin → карточка). Не передан (teacher) — обычный текст. */
+  renderTeacher?: (name: string, teacherId: number) => ReactNode;
 }) {
   // done — занятие уже проведено, операции плана его не трогают (инвариант
   // "никогда не двигать done", docs/lesson-scheduling.md). Отмена — только
@@ -56,7 +60,7 @@ export function LessonPopup({
       <div>
         <div className="t-sec-label">Информация</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-          <div className="t-info-row"><span className="t-info-ico">👤</span><span>Преподаватель: {displayTeacher}</span></div>
+          <div className="t-info-row"><span className="t-info-ico">👤</span><span>Преподаватель: {renderTeacher && lesson.teacherId != null ? renderTeacher(displayTeacher, lesson.teacherId) : displayTeacher}</span></div>
           {lesson.teacherOverride && lesson.teacherOverride !== lesson.teacher && (
             <div className="t-info-row"><span className="t-info-ico">🔁</span><span>Замена вместо: {lesson.teacher}</span></div>
           )}

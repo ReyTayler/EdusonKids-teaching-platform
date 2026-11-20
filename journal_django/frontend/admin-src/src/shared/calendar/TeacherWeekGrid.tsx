@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import type { Occurrence } from './types';
 import { addDays, sameDay, isoDate } from './lib';
 import type { Interval } from '../availability/types';
@@ -98,6 +98,7 @@ export function TeacherWeekGrid({
   today,
   onSelect,
   resolveColor,
+  renderTeacher,
   availabilityByTeacher,
   dataReady = true,
 }: {
@@ -107,6 +108,8 @@ export function TeacherWeekGrid({
   today: Date;
   onSelect: (occ: Occurrence, e: React.MouseEvent | React.KeyboardEvent) => void;
   resolveColor: (occ: Occurrence) => string;
+  /** Имя преподавателя в шапке колонки (admin — ссылка на карточку). Для «Без преподавателя» (id = null) не вызывается. */
+  renderTeacher?: (name: string, teacherId: number) => ReactNode;
   /** teacherId → дата → окна. Нет ключа у преподавателя — графика нет, фон не рисуем. */
   availabilityByTeacher?: Record<string, Record<string, Interval[]>> | null;
   /** false, пока показаны данные прошлой недели (placeholder): автопрокрутку откладываем до настоящих данных. */
@@ -232,7 +235,7 @@ export function TeacherWeekGrid({
             className={`tw-teacher-head${c.muted ? ' muted' : ''}`}
             title={c.hint ? `${c.name} (${c.hint})` : c.name}
           >
-            <span className="tw-teacher-name">{c.name}</span>
+            <span className="tw-teacher-name">{renderTeacher && c.id != null ? renderTeacher(c.name, c.id) : c.name}</span>
             {c.hint && <span className="tw-teacher-hint">{c.hint}</span>}
           </div>
         ))}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { resolveDirectionColor, NO_DIRECTION_COLOR, EXTRA_LESSON_COLOR } from './lib';
 import type { Occurrence, UnscheduledGroup, UnscheduledReason } from './types';
 import {
@@ -23,7 +23,7 @@ function useIsNarrow(bp = 768): boolean {
 }
 
 /** Спец-значение directionFilter для «уроков без направления» (null / группа не найдена в карте). */
-const NO_DIRECTION_KEY = '__no-direction__';
+export const NO_DIRECTION_KEY = '__no-direction__';
 
 export type CalendarViewMode = 'week' | 'month' | 'list';
 
@@ -139,9 +139,26 @@ export interface CalendarViewProps {
   views?: CalendarViewMode[];
   /**
    * Рисовать ли собственный заголовок «Календарь». По умолчанию true (teacher).
-   * Admin-страница уже несёт PageHeader — второй заголовок там лишний.
+   * Admin-страница рисует свой заголовок «Календарь» — второй там лишний.
    */
   showTitle?: boolean;
+  /**
+   * Управляемый фильтр направления (admin-календарь: выбор — в окне поиска).
+   * undefined — фильтр внутренний, его включает клик по легенде (teacher, план
+   * группы); null — «все направления»; строка — название направления либо
+   * NO_DIRECTION_KEY.
+   */
+  directionFilter?: string | null;
+  /** false — легенда только цветовая подсказка, клик по ней ничего не фильтрует. По умолчанию true. */
+  legendInteractive?: boolean;
+  /**
+   * Как показать имя преподавателя, у которого известен id: admin подставляет
+   * ссылку на карточку. Передаётся функцией, а не зашито Link'ом: shared-код
+   * подключает и teacher SPA, где маршрутов admin нет (и свой экземпляр роутера).
+   */
+  renderTeacher?: (name: string, teacherId: number) => ReactNode;
+  /** Слот в строке заголовка рядом с навигацией недели (admin: кнопка поиска и чипы фильтров). */
+  headExtra?: ReactNode;
 }
 
 /**
@@ -171,11 +188,16 @@ export function CalendarView({
   showKpi = true,
   views = ALL_VIEWS,
   showTitle = true,
+  directionFilter: directionFilterProp,
+  legendInteractive = true,
+  renderTeacher,
+  headExtra,
 }: CalendarViewProps) {
   const [monday, setMonday] = useState(() => currentMondayMsk());
   const [monthAnchor, setMonthAnchor] = useState(() => firstOfMonthMsk());
   const [view, setView] = useState<CalendarViewMode>(() => views[0] ?? 'week');
-  const [directionFilter, setDirectionFilter] = useState<string | null>(null);
+  const [directionFilterOwn, setDirectionFilter] = useState<string | null>(null);
+  const directionFilter = directionFilterProp !== undefined ? directionFilterProp : directionFilterOwn;
   const [selected, setSelected] = useState<Occurrence | null>(null);
 
   const narrow = useIsNarrow();
@@ -366,6 +388,8 @@ export function CalendarView({
           )}
         </div>
 
+        {headExtra}
+
         <div className="cal-toolbar">
           {/* Переключатель бессмыслен, когда выбирать не из чего (views={['month']}). */}
           {!narrow && views.length > 1 && (
@@ -401,11 +425,13 @@ export function CalendarView({
         {legendItems.map((item) => (
           <span
             key={item.key}
-            className={`legend-item${directionFilter && directionFilter !== item.key ? ' muted' : ''}`}
-            onClick={() => setDirectionFilter((cur) => (cur === item.key ? null : item.key))}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter') setDirectionFilter((cur) => (cur === item.key ? null : item.key)); }}
+            className={`legend-item${directionFilter && directionFilter !== item.key ? ' muted' : ''}${legendInteractive ? '' : ' legend-item--static'}`}
+            {...(legendInteractive ? {
+              onClick: () => setDirectionFilter((cur) => (cur === item.key ? null : item.key)),
+              role: 'button',
+              tabIndex: 0,
+              onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') setDirectionFilter((cur) => (cur === item.key ? null : item.key)); },
+            } : {})}
           >
             <span className="legend-dot" style={{ background: item.color }} />
             {item.label}
@@ -438,7 +464,7 @@ export function CalendarView({
       ) : (
         <>
           {effectiveView === 'week' && byTeacher
-            ? <TeacherWeekGrid monday={monday} occurrences={timedLessons} teachers={teachers!} today={today} onSelect={handleSelect} resolveColor={colorOf} availabilityByTeacher={availabilityByTeacher} dataReady={dataReady && (!dataWindow || (dataWindow.from <= isoDate(monday) && dataWindow.to >= isoDate(addDays(monday, 6))))} />
+            ? <TeacherWeekGrid monday={monday} occurrences={timedLessons} teachers={teachers!} today={today} onSelect={handleSelect} resolveColor={colorOf} renderTeacher={renderTeacher} availabilityByTeacher={availabilityByTeacher} dataReady={dataReady && (!dataWindow || (dataWindow.from <= isoDate(monday) && dataWindow.to >= isoDate(addDays(monday, 6))))} />
             : effectiveView === 'week'
             ? <WeekGrid monday={monday} occurrences={timedLessons} today={today} onSelect={handleSelect} resolveColor={colorOf} availability={availability} />
             : effectiveView === 'month'
@@ -483,6 +509,7 @@ export function CalendarView({
           onAction={onAction ? (kind, occ) => { setSelected(null); onAction(kind, occ); } : undefined}
           onOpenGroup={onOpenGroup}
           role={role}
+          renderTeacher={renderTeacher}
         />
       )}
     </div>

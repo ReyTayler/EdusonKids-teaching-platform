@@ -208,7 +208,7 @@ def test_backfill_command_restores_old_deals(
 @pytest.mark.django_db
 def test_rebuild_writes_snapshot_for_closed_cycles(
         student_on_course, make_attendance, make_payment):
-    """Пересбор сделок («Синхро») сносит сделки и создаёт заново — снимок он
+    """Пересбор сделок (rebuild_all) сносит сделки и создаёт заново — снимок он
     обязан проставить сам, иначе каждый запуск стирал бы историю направлений.
 
     Дёргаем _write_plan напрямую: rebuild_all() чистит ВСЕ сделки в БД, а

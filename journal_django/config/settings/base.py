@@ -246,8 +246,8 @@ else:
 CELERY_BROKER_URL = REDIS_URL or 'redis://localhost:6379/2'
 # cache+memory:// — in-process backend без внешних зависимостей. Раньше здесь тоже
 # был 'redis://localhost:6379/0' — не проблема, пока ничего не читало eager-результат
-# из backend'а. apps.sync.views.SyncStatusView — первый потребитель, которому это
-# нужно и в dev/тестах (REDIS_URL не задан, Redis намеренно не поднят локально).
+# из backend'а. Статус и скачивание отчётов (apps.reports.views) читают его и
+# в dev/тестах (REDIS_URL не задан, Redis намеренно не поднят локально).
 CELERY_RESULT_BACKEND = REDIS_URL or 'cache+memory://'
 # Срок хранения результатов задач (в Celery по умолчанию — 24 ч). Результат отчёта несёт
 # готовый xlsx в base64: держать его сутки в общем Redis — значит копить мегабайты и
@@ -258,7 +258,7 @@ CELERY_TIMEZONE = 'Europe/Moscow'
 CELERY_ENABLE_UTC = False
 CELERY_TASK_ALWAYS_EAGER = not REDIS_URL
 # В eager-режиме результат по умолчанию НЕ кладётся в result backend — доступен
-# только напрямую из возврата .delay(). SyncStatusView всегда читает через
+# только напрямую из возврата .delay(). Вьюхи отчётов всегда читают через
 # AsyncResult(task_id) из backend'а, поэтому без этой опции dev/тесты не работали бы.
 CELERY_TASK_STORE_EAGER_RESULT = True
 # Очереди (спека 2026-07-13, фаза A): один воркер слушает обе
@@ -346,25 +346,6 @@ NOTIFICATIONS_HISTORY_LIMIT: int = env('NOTIFICATIONS_HISTORY_LIMIT')
 # меняется: выключается только запрет. Читается в момент вызова
 # (django.conf.settings), а не при импорте, — чтобы override_settings в тестах работал.
 PAYMENT_BALANCE_GUARD: bool = env('PAYMENT_BALANCE_GUARD')
-
-# ---------------------------------------------------------------------------
-# Кнопка «Обновить данные с прода» в «Синхро» (apps.sync.prod_refresh)
-# ---------------------------------------------------------------------------
-# Запускает scripts/refresh_from_prod.sh --soft — мягкое обновление учебных данных из
-# старой системы Eduson. Только для локальной работы, пока источник правды — старая
-# система: по умолчанию выключено, на проде платформы флага нет (кнопка стёрла бы
-# живые уроки). Путь к bash — Git Bash (в Windows «bash» из PATH бывает WSL);
-# пусто — стандартный путь Git for Windows, иначе bash из PATH.
-EDUSON_PROD_REFRESH_BUTTON: bool = env.bool('EDUSON_PROD_REFRESH_BUTTON', default=False)
-EDUSON_REFRESH_BASH: str = env('EDUSON_REFRESH_BASH', default='')
-EDUSON_REFRESH_SCRIPT: Path = REPO_ROOT / 'scripts' / 'refresh_from_prod.sh'
-# SSH-алиас сервера staging: задан — тот же снимок после локального синка уходит и на
-# staging (шаг скрипта; здесь — только чтобы кнопка сказала об этом).
-EDUSON_STAGING_SSH: str = env('EDUSON_STAGING_SSH', default='')
-# Каталог снимков, лога и лока скрипта — тот же, что у самого скрипта (EDUSON_SNAPSHOT_DIR,
-# относительный путь — от platform/). Снимки — ПДн, каталог вне репозитория.
-_snapshot_dir = Path(env('EDUSON_SNAPSHOT_DIR', default='../data/prod-snapshots'))
-EDUSON_SNAPSHOT_DIR: Path = (_snapshot_dir if _snapshot_dir.is_absolute() else REPO_ROOT / _snapshot_dir).resolve()
 
 # ---------------------------------------------------------------------------
 # База знаний (apps.knowledge) — хранилище картинок

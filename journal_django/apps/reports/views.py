@@ -7,7 +7,7 @@
 
 Отчёты НЕ хранятся на платформе: генерация уходит в Celery, готовый файл живёт
 только в celery result backend (эфемерно, с TTL) и стримится клиенту по task_id.
-В нашу БД ничего не пишется. Паттерн опроса — как в apps.sync (AsyncResult).
+В нашу БД ничего не пишется. Опрос статуса — через AsyncResult(task_id).
 """
 from __future__ import annotations
 

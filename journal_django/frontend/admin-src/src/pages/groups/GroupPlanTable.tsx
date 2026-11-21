@@ -48,8 +48,8 @@ const STATUS_LABEL: Record<OccStatus, string> = {
  * Показываем fact_date, если он есть, иначе scheduled_date. Порядок именно
  * такой из-за легаси: в базе ещё остались строки, привязанные к факту до
  * введения инварианта, где даты разошлись. Для них фактическая — единственная
- * правда, а плановая соврала бы. Найти такие строки можно проверкой
- * «Планы групп» в разделе «Синхро» (ключ date_mismatch).
+ * правда, а плановая соврала бы. Найти такие строки можно проверкой планов
+ * apps.scheduling.health (ключ date_mismatch), по группе — GroupPlanHealthBlock.
  */
 export default function GroupPlanTable({ groupId }: { groupId: number }) {
   const { data: rows = [], isLoading } = useGroupPlan(groupId);

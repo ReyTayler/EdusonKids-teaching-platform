@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import {
   canSeePayroll, canSeeAccounts, canSeeAudit, canSeeChangelog,
-  canSeeSync, canSeeSettings, canSeeArchive, type Role,
+  canSeeSettings, canSeeArchive, type Role,
 } from '../../lib/permissions';
 
 /**
@@ -137,7 +137,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'audit', label: 'Журнал ИБ', path: '/admin/audit', can: canSeeAudit },
       { key: 'changelog', label: 'Журнал изменений', path: '/admin/changelog', can: canSeeChangelog },
       { key: 'notifications', label: 'Уведомления', path: '/admin/notifications', can: canSeeChangelog },
-      { key: 'sync', label: 'Синхро', path: '/admin/sync', can: canSeeSync },
       { key: 'settings', label: 'Настройки', path: '/admin/settings', can: canSeeSettings },
     ],
   },

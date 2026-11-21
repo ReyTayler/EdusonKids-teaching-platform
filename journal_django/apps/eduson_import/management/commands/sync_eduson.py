@@ -5,8 +5,8 @@
     python manage.py sync_eduson /путь/okk.db --as-of 2026-10-20 --sheets-dir /путь/sheets-…
     python manage.py sync_eduson /путь/okk.db --dry-run         # всё выполнить и откатить
 
-Запускается скриптом scripts/refresh_from_prod.sh --soft (кнопка «Обновить данные с
-прода» в разделе «Синхро»). Решение владельца 2026-10-20: обновляются только учебные
+Запускается скриптом scripts/refresh_from_prod.sh --soft (только вручную; раздел
+«Синхро» с кнопкой запуска удалён 2026-11-21). Решение владельца 2026-10-20: обновляются только учебные
 данные — ученики, группы, уроки, отзывы и всё, что с уроками связано. Спека:
 EdusonPlatform/docs/specs/2026-10-20-eduson-sync-soft-refresh-design.md.
 
@@ -53,7 +53,7 @@ from apps.eduson_import.steps.people import sync_people
 from apps.eduson_import.sync import facts_without_history, purge_group_facts, restore_manual_payroll
 from apps.payroll.recalc import recalculate
 
-# Строка итога — её ищут скрипт обновления и кнопка в «Синхро» (apps.sync.prod_refresh).
+# Строка итога — по ней скрипт обновления (refresh_from_prod.sh) признаёт синк успешным.
 DONE_LINE = 'Мягкое обновление Eduson завершено.'
 
 

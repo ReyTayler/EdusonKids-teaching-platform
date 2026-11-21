@@ -104,7 +104,7 @@ def reconcile(src: EdusonSource, ctx: ImportContext,
             'в Eduson роли нет: колонка Eduson — сколько назначено --superadmin')
         if not superadmins:
             warnings.append('нет суперадмина — управлять учётками будет некому (учётки, 2FA, зарплата, '
-                            'Синхро доступны только superadmin); укажите --superadmin EMAIL')
+                            'журнал ИБ доступны только superadmin); укажите --superadmin EMAIL')
         row('преподаватели', src.count('teachers'), Teacher.objects.count(),
             len(set(ctx.teacher_by_eduson.values())), 'администраторы без групп, уроков и отзывов — только учётка')
         row('ученики', participants, Student.objects.count(), students,

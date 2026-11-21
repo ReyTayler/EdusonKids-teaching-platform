@@ -83,8 +83,11 @@ compute-on-read выражал плохо.
 курса, два занятия на одну дату. `check_all()` — сводка по всем активным группам
 одним запросом, `check_group(id)` — детали строк по одной группе.
 
-В интерфейсе — раздел «Синхро», группа карточек «Проверки», действие
-`check-plan-health` (`IsSuperAdmin`, ничего не меняет).
+В интерфейсе — только по одной группе: предупреждение о расхождении плана на странице
+группы (`GroupPlanHealthBlock`, `GET /api/admin/groups/<id>/plan/health`, `IsSuperAdmin`).
+Сводка по всем группам (`check_all`, обёртка `apps.sync.backfills.check_plan_health`)
+из интерфейса больше не запускается — раздел «Синхро» удалён 2026-11-21; `check_all`
+вызывает сверка импорта Eduson (`apps/eduson_import/reconcile.py`).
 
 ## Модель `PlannedLesson`
 

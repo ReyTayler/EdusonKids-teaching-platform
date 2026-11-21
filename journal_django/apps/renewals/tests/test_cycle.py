@@ -17,7 +17,7 @@ def test_open_cycle_no_matches_rebuild_plan():
     """
     Единый механизм: номер открытого цикла обязан совпадать с раскладкой
     пересбора (rebuild.plan_for_student) на всей сетке 0..12 с шагом 0.5 —
-    иначе ручное создание сделки и «Синхро → пересобрать» разойдутся.
+    иначе ручное создание сделки и пересбор сделок (rebuild_all) разойдутся.
     """
     from datetime import date
     from apps.renewals import rebuild

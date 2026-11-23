@@ -142,16 +142,16 @@ def test_favorite_hidden_document_is_404(teacher_client, admin_client, section):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_deleted_document_moves_to_archive_and_back(admin_client, section):
+def test_deleted_document_cannot_be_restored(admin_client, section):
     doc = _doc(admin_client, section, '__test_kb_док', 'текст')
     admin_client.delete(f"{DOCS}/{doc['id']}")
 
-    assert _titles(admin_client.get(f'{DOCS}?scope=archive')) == ['__test_kb_док']
+    assert _titles(admin_client.get(f'{DOCS}?scope=archive')) == []
     assert admin_client.get(DOCS).json()['rows'] == []
 
     restored = admin_client.post(f"{DOCS}/{doc['id']}/restore", {}, format='json')
-    assert restored.status_code == 200
-    assert _titles(admin_client.get(DOCS)) == ['__test_kb_док']
+    assert restored.status_code == 404
+    assert _titles(admin_client.get(DOCS)) == []
     assert admin_client.get(f'{DOCS}?scope=archive').json()['rows'] == []
 
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import type { Editor } from '@tiptap/react';
 import { DragHandle } from '@tiptap/extension-drag-handle-react';
@@ -36,9 +36,12 @@ import type { TipTapDoc } from '../../lib/knowledge';
 export default function DocumentEditor({
   content,
   onChange,
+  toolbarEnd,
 }: {
   content: TipTapDoc;
   onChange: (doc: TipTapDoc) => void;
+  /** Правый край закреплённой панели: статус автосохранения и «Готово». */
+  toolbarEnd?: ReactNode;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const attachInput = useRef<HTMLInputElement>(null);
@@ -336,6 +339,7 @@ export default function DocumentEditor({
       <EditorToolbar
         editor={editor}
         uploading={uploadImage.isPending}
+        trailing={toolbarEnd}
         onPickImage={() => fileInput.current?.click()}
         onPickFile={() => attachInput.current?.click()}
       />

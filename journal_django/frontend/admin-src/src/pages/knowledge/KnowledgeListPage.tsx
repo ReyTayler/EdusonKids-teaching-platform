@@ -1,20 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { PageHeader } from '../../components/shell/PageHeader';
 import { Button } from '../../components/ui/Button';
-import { IconButton } from '../../components/ui/IconButton';
+import { Field } from '../../components/form/Field';
+import { SelectInput } from '../../components/form/SelectInput';
 import { TableFilterPanel, type FilterField } from '../../components/filters';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { PageLoading } from '../../components/ui/Skeleton';
 import { Paginator } from '../../components/table/Paginator';
 import { LibraryNav, type LibrarySelection } from '../../components/knowledge/LibraryNav';
-import { DocumentCards, DocumentTable } from '../../components/knowledge/DocumentList';
+import { DocumentTable } from '../../components/knowledge/DocumentList';
 import {
   DocIcon,
   EmptyLibraryIcon,
-  GridViewIcon,
-  ListViewIcon,
   PlusIcon,
 } from '../../components/knowledge/knowledgeIcons';
 import { ConfirmDialog, NameDialog } from './KnowledgeDialogs';
@@ -30,20 +28,10 @@ import type {
   DocumentStatus,
   KnowledgeDocumentRow,
   KnowledgeSection,
-  LibraryScope,
 } from '../../lib/knowledge';
 import type { Role } from '../../lib/permissions';
 
 const WRITE_ROLES: Role[] = ['admin', 'superadmin'];
-
-type View = 'grid' | 'list';
-const VIEW_STORAGE_KEY = 'kb-view';
-
-const SCOPE_TITLES: Record<LibraryScope, string> = {
-  all: 'Wiki',
-  favorites: 'Избранное',
-  archive: 'Архив',
-};
 
 /** Поля панели поиска: пункт «все» добавляет сама панель. */
 const SEARCH_FIELDS: FilterField[] = [
@@ -58,7 +46,7 @@ const SEARCH_FIELDS: FilterField[] = [
 ];
 
 /**
- * Библиотека: слева подборки и папки, справа документы.
+ * Папки над списком документов: одна навигация и один вид списка.
  *
  * Состояние экрана целиком живёт в адресе (?scope=&section=&q=&status=). Так на
  * любую выборку можно дать ссылку, «Назад» возвращает к предыдущей, а поиск
@@ -75,13 +63,13 @@ export default function KnowledgeListPage() {
   const {
     createSection, renameSection, deleteSection,
     createDocument, deleteDocument, setDocumentPublished,
-    restoreDocument, duplicateDocument, setFavorite,
+    duplicateDocument,
   } = useKnowledgeMutations();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const rawSection = searchParams.get('section');
   const sectionId = rawSection && /^\d+$/.test(rawSection) ? Number(rawSection) : null;
-  const scope = readScope(searchParams.get('scope'));
+  const scope = 'all' as const;
   const query = searchParams.get('q') ?? '';
   const statusFilter = readStatus(searchParams.get('status'));
   const page = readPositive(searchParams.get('page'), 1);
@@ -121,13 +109,6 @@ export default function KnowledgeListPage() {
   >(null);
   const closeDialog = () => setDialog(null);
 
-  const [view, setView] = useState<View>(() =>
-    (localStorage.getItem(VIEW_STORAGE_KEY) as View) === 'list' ? 'list' : 'grid',
-  );
-  useEffect(() => {
-    localStorage.setItem(VIEW_STORAGE_KEY, view);
-  }, [view]);
-
   const visible = library.data?.rows ?? [];
   const total = library.data?.total ?? 0;
 
@@ -137,20 +118,15 @@ export default function KnowledgeListPage() {
 
   const actions = {
     canWrite,
-    archived: scope === 'archive',
     onEdit: (id: number) => navigate(`/admin/knowledge/${id}`, { state: { edit: true } }),
     onTogglePublish: (doc: KnowledgeDocumentRow) =>
-      setDocumentPublished.mutate({ id: doc.id, published: doc.status === 'draft' }),
+      setDocumentPublished.mutate({ id: doc.id, published: doc.status === 'draft' }, { onError: (err) => showError(err) }),
     onDuplicate: (doc: KnowledgeDocumentRow) =>
       duplicateDocument.mutate(doc.id, {
         onSuccess: (copy) => navigate(`/admin/knowledge/${copy.id}`, { state: { edit: true } }),
         onError: (err) => showError(err),
       }),
     onDelete: (doc: KnowledgeDocumentRow) => setDialog({ kind: 'delete-document', doc }),
-    onRestore: (doc: KnowledgeDocumentRow) =>
-      restoreDocument.mutate(doc.id, { onError: (err) => showError(err) }),
-    onToggleFavorite: (doc: KnowledgeDocumentRow) =>
-      setFavorite.mutate({ id: doc.id, value: !doc.is_favorite }, { onError: (err) => showError(err) }),
   };
 
   // isLoading, а не isFetching: с keepPreviousData повторные запросы идут
@@ -164,20 +140,16 @@ export default function KnowledgeListPage() {
     else setDialog({ kind: 'create-document', sectionId: target });
   };
 
-  const title = openSection && scope === 'all' ? openSection.title : SCOPE_TITLES[scope];
+  const title = 'Wiki';
 
   return (
     <div className="page">
       <PageHeader
         title={title}
-        crumbs={
-          openSection && scope === 'all'
-            ? [{ label: 'Wiki', to: '/admin/knowledge' }, { label: openSection.title }]
-            : undefined
-        }
-        actions={(sectionList.length > 0 || canWrite) ? (
+        count={totalDocuments}
+        actions={(
           <>
-            {/* Лупа в шапке; без разделов искать негде. */}
+            {/* Искать негде, пока нет ни одного раздела. */}
             {sectionList.length > 0 && (
               <TableFilterPanel
                 fields={SEARCH_FIELDS}
@@ -186,25 +158,32 @@ export default function KnowledgeListPage() {
                 label="Поиск по Wiki"
               />
             )}
-            {canWrite && <CreateMenu onSection={askCreateSection} onDocument={askCreateDocument} />}
+            {canWrite && <>
+              <Button variant="secondary" onClick={askCreateSection}>Новая папка</Button>
+              <Button variant="primary" iconLeft={<PlusIcon size={16} />} onClick={askCreateDocument}>Новый документ</Button>
+            </>}
           </>
-        ) : undefined}
+        )}
       />
 
-      {sectionList.length === 0 ? (
+      {(sections.isError || library.isError) ? (
+        <EmptyState action={<Button onClick={() => { sections.refetch(); library.refetch(); }}>Повторить</Button>}>
+          Не удалось загрузить Wiki
+        </EmptyState>
+      ) : sectionList.length === 0 ? (
         <EmptyState
           icon={<EmptyLibraryIcon />}
           hint={
             canWrite
-              ? 'Разделы — это папки: «Методика», «Продажи», «Регламенты». Документы лежат внутри них.'
-              : 'Разделы появятся, когда их заведёт администратор.'
+              ? 'Создайте папки по темам: «Методика», «Продажи», «Регламенты».'
+              : 'Папки появятся, когда их создаст администратор.'
           }
-          action={canWrite ? <Button onClick={askCreateSection}>Создать раздел</Button> : undefined}
+          action={canWrite ? <Button onClick={askCreateSection}>Создать папку</Button> : undefined}
         >
           Здесь пока пусто
         </EmptyState>
       ) : (
-        <div className="kb-drive">
+        <div className="kb-library">
           <LibraryNav
             selection={selection}
             onSelect={selectLibrary}
@@ -215,43 +194,26 @@ export default function KnowledgeListPage() {
             onDeleteSection={(section) => setDialog({ kind: 'delete-section', section })}
           />
 
-          <section className="kb-drive__main">
-            <div className="kb-drive__bar">
-              <div className="kb-drive__bar-right">
-                <ViewToggle view={view} onChange={setView} />
-              </div>
+          <section className="kb-drive__main" aria-busy={library.isFetching}>
+            <div className={`kb-library__heading${query ? ' is-search' : ''}`}>
+              <h2>{openSection?.title ?? 'Все документы'}</h2>
+              <span aria-live="polite">{query ? `Найдено: ${total}` : `Документов: ${total}`}</span>
             </div>
-
-            <p className="kb-drive__count" aria-live="polite">
-              {query
-                ? `Найдено: ${total}`
-                : total > 0 ? `Документов: ${total}` : 'Пусто'}
-            </p>
-
             {visible.length === 0 ? (
               <EmptyState
                 icon={<DocIcon size={32} />}
-                hint={emptyHint(scope, query, canWrite)}
+                hint={emptyHint(query, canWrite)}
                 action={
-                  canWrite && scope === 'all' && !query
+                  canWrite && !query
                     ? <Button onClick={askCreateDocument}>Создать документ</Button>
                     : undefined
                 }
               >
-                {emptyTitle(scope, query, openSection?.title)}
+                {emptyTitle(query, openSection?.title)}
               </EmptyState>
             ) : (
               <>
-                {view === 'grid' ? (
-                  <DocumentCards rows={visible} actions={actions} />
-                ) : (
-                  <DocumentTable
-                    rows={visible}
-                    actions={actions}
-                    showSection={sectionId === null}
-                    sections={sectionList}
-                  />
-                )}
+                <DocumentTable rows={visible} actions={actions} showSection={sectionId === null} sections={sectionList} />
                 {total > pageSize && (
                   <Paginator
                     page={page}
@@ -271,11 +233,11 @@ export default function KnowledgeListPage() {
 
       <NameDialog
         open={dialog?.kind === 'create-section'}
-        title="Новый раздел"
-        label="Название раздела"
+        title="Новая папка"
+        label="Название папки"
         placeholder="Например: Методика"
         submitLabel="Создать"
-        hint="Раздел — это папка для документов."
+        hint="Папка объединяет документы по теме."
         busy={createSection.isPending}
         onSubmit={(name) => {
           createSection.mutate(name, {
@@ -309,12 +271,18 @@ export default function KnowledgeListPage() {
           );
         }}
         onClose={closeDialog}
-      />
+      >
+        <Field label="Папка" full required>
+          <SelectInput aria-label="Папка документа" value={dialog?.kind === 'create-document' ? String(dialog.sectionId) : ''}
+            options={sectionList.map((section) => ({ value: String(section.id), label: section.title }))}
+            onChange={(e) => { if (dialog?.kind === 'create-document') setDialog({ ...dialog, sectionId: Number(e.target.value) }); }} />
+        </Field>
+      </NameDialog>
 
       <NameDialog
         open={dialog?.kind === 'rename-section'}
-        title="Переименовать раздел"
-        label="Название раздела"
+        title="Переименовать папку"
+        label="Название папки"
         submitLabel="Переименовать"
         initialValue={dialog?.kind === 'rename-section' ? dialog.section.title : ''}
         busy={renameSection.isPending}
@@ -328,7 +296,7 @@ export default function KnowledgeListPage() {
 
       <ConfirmDialog
         open={dialog?.kind === 'delete-section'}
-        title="Удалить раздел"
+        title="Удалить папку"
         message={
           dialog?.kind === 'delete-section'
             ? `Раздел «${dialog.section.title}» будет удалён. Если в нём есть документы, сначала перенесите или удалите их.`
@@ -351,29 +319,23 @@ export default function KnowledgeListPage() {
 
       <ConfirmDialog
         open={dialog?.kind === 'delete-document'}
-        title="Удалить документ"
+        title="Удалить документ навсегда"
         message={
           dialog?.kind === 'delete-document'
-            // Про архив говорим прямо: иначе «удалить» читается как «навсегда»,
-            // и документ не удаляют даже тогда, когда стоило бы.
-            ? `Документ «${dialog.doc.title}» уедет в архив. Оттуда его можно вернуть.`
+            ? `Документ «${dialog.doc.title}» будет удалён навсегда. Восстановить его не получится.`
             : ''
         }
-        confirmLabel="Удалить"
+        confirmLabel="Удалить навсегда"
         danger
         busy={deleteDocument.isPending}
         onConfirm={() => {
           if (dialog?.kind !== 'delete-document') return;
-          deleteDocument.mutate(dialog.doc.id, { onSuccess: closeDialog });
+          deleteDocument.mutate(dialog.doc.id, { onSuccess: closeDialog, onError: (err) => showError(err) });
         }}
         onClose={closeDialog}
       />
     </div>
   );
-}
-
-function readScope(raw: string | null): LibraryScope {
-  return raw === 'favorites' || raw === 'archive' ? raw : 'all';
 }
 
 function readStatus(raw: string | null): DocumentStatus | '' {
@@ -386,60 +348,12 @@ function readPositive(raw: string | null, fallback: number): number {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-function emptyTitle(scope: LibraryScope, query: string, sectionTitle?: string): string {
-  if (query) return 'Ничего не нашлось';
-  if (scope === 'favorites') return 'В избранном пусто';
-  if (scope === 'archive') return 'Архив пуст';
-  return sectionTitle ? `В разделе «${sectionTitle}» пока нет документов` : 'Документов пока нет';
+function emptyTitle(query: string, sectionTitle?: string): string {
+  if (query) return 'Ничего не найдено';
+  return sectionTitle ? 'В этой папке пока нет документов' : 'Документов пока нет';
 }
 
-function emptyHint(scope: LibraryScope, query: string, canWrite: boolean): string {
-  if (query) return 'Попробуйте другое слово: поиск ищет и по названию, и по тексту документов.';
-  if (scope === 'favorites') return 'Звёздочка в строке документа кладёт его сюда.';
-  if (scope === 'archive') return 'Удалённые документы попадают сюда, и отсюда их можно вернуть.';
-  return canWrite
-    ? 'Создайте первый документ — он появится здесь черновиком, видимым только администраторам.'
-    : 'Документы появятся, когда их опубликуют.';
-}
-
-/** Кнопка «Создать» с выбором: раздел или документ. */
-function CreateMenu({ onSection, onDocument }: { onSection: () => void; onDocument: () => void }) {
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="primary" iconLeft={<PlusIcon size={16} />}>Создать</Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content className="action-menu__list" align="end" sideOffset={6}>
-          <DropdownMenu.Item className="action-menu__item" onSelect={onDocument}>
-            Документ
-          </DropdownMenu.Item>
-          <DropdownMenu.Item className="action-menu__item" onSelect={onSection}>
-            Раздел
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-  );
-}
-
-function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {
-  return (
-    <div className="kb-view" role="group" aria-label="Вид списка">
-      <IconButton
-        size="sm"
-        label="Карточками"
-        active={view === 'grid'}
-        icon={<GridViewIcon size={18} />}
-        onClick={() => onChange('grid')}
-      />
-      <IconButton
-        size="sm"
-        label="Таблицей"
-        active={view === 'list'}
-        icon={<ListViewIcon size={18} />}
-        onClick={() => onChange('list')}
-      />
-    </div>
-  );
+function emptyHint(query: string, canWrite: boolean): string {
+  if (query) return 'Попробуйте другое слово: поиск ищет по названию и тексту документов.';
+  return canWrite ? 'Создайте документ и опубликуйте его, когда он будет готов.' : 'Документы появятся, когда их опубликуют.';
 }

@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import { LibraryNav, type LibrarySelection } from '@shared/components/knowledge/LibraryNav';
-import { DocumentCards } from '@shared/components/knowledge/DocumentList';
+import { DocumentTable } from '@shared/components/knowledge/DocumentList';
 import { DocIcon, EmptyLibraryIcon } from '@shared/components/knowledge/knowledgeIcons';
 import { SearchInput } from '@shared/components/ui/SearchInput';
 import { EmptyState } from '@shared/components/ui/EmptyState';
@@ -8,10 +8,8 @@ import { Paginator } from '@shared/components/table/Paginator';
 import {
   DEFAULT_PAGE_SIZE,
   useKnowledgeLibrary,
-  useKnowledgeMutations,
   useKnowledgeSections,
 } from '@shared/hooks/useKnowledge';
-import type { LibraryScope } from '@shared/lib/knowledge';
 import { PageHead } from '../../components/ui/PageHead';
 
 /** Корень адресов раздела в teacher SPA — им же размечены ссылки в дереве. */
@@ -20,7 +18,7 @@ export const KB_BASE = '/knowledge';
 /**
  * Wiki у преподавателя — только чтение.
  *
- * Экран собран из тех же деталей, что и админский (дерево разделов, карточки
+ * Экран собран из тех же деталей, что и админский (папки, список
  * документов, поиск, постраничная выборка): раздел один, и расходиться им
  * незачем. Отличий ровно два, и оба — про права:
  *
@@ -31,22 +29,19 @@ export const KB_BASE = '/knowledge';
  *      Это тоже решает сервер (repository.visible_documents_qs), клиент про
  *      чужие документы просто не знает.
  *
- * Избранное при этом доступно: закладка личная и правкой документа не
- * является (permissions.KnowledgePersonalMark).
  */
 export default function KnowledgeLibraryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const rawSection = searchParams.get('section');
   const sectionId = rawSection && /^\d+$/.test(rawSection) ? Number(rawSection) : null;
-  const scope: LibraryScope = searchParams.get('scope') === 'favorites' ? 'favorites' : 'all';
+  const scope = 'all' as const;
   const query = searchParams.get('q') ?? '';
   const page = readPositive(searchParams.get('page'), 1);
   const pageSize = readPositive(searchParams.get('size'), DEFAULT_PAGE_SIZE);
 
   const sections = useKnowledgeSections();
   const library = useKnowledgeLibrary({ sectionId, q: query, scope, status: '', page, pageSize });
-  const { setFavorite } = useKnowledgeMutations();
 
   // Состояние экрана живёт в адресе: на найденное можно дать ссылку коллеге,
   // «Назад» возвращает к прежней выборке.
@@ -71,9 +66,7 @@ export default function KnowledgeLibraryPage() {
   const total = library.data?.total ?? 0;
   const openSection = sectionList.find((item) => item.id === sectionId) ?? null;
 
-  const title = scope === 'favorites'
-    ? 'Избранное'
-    : openSection?.title ?? 'Wiki';
+  const title = 'Wiki';
 
   return (
     <div className="kb-teacher">
@@ -91,14 +84,13 @@ export default function KnowledgeLibraryPage() {
           Здесь пока пусто
         </EmptyState>
       ) : (
-        <div className="kb-drive">
+        <div className="kb-library">
           <LibraryNav
             selection={selection}
             onSelect={selectLibrary}
             sections={sectionList}
             totalCount={sections.data?.total ?? 0}
             canWrite={false}
-            basePath={KB_BASE}
           />
 
           <section className="kb-drive__main">
@@ -120,24 +112,15 @@ export default function KnowledgeLibraryPage() {
                 hint={
                   query
                     ? 'Попробуйте другое слово: поиск ищет и по названию, и по тексту документов.'
-                    : scope === 'favorites'
-                      ? 'Звёздочка в карточке документа кладёт его сюда.'
-                      : 'Документы появятся, когда их опубликуют.'
+                    : 'Документы появятся, когда их опубликуют.'
                 }
               >
-                {query ? 'Ничего не нашлось' : scope === 'favorites' ? 'В избранном пусто' : 'Документов пока нет'}
+                {query ? 'Ничего не найдено' : 'Документов пока нет'}
               </EmptyState>
             ) : (
               <>
-                <DocumentCards
-                  rows={rows}
-                  basePath={KB_BASE}
-                  actions={{
-                    canWrite: false,
-                    onToggleFavorite: (doc) =>
-                      setFavorite.mutate({ id: doc.id, value: !doc.is_favorite }),
-                  }}
-                />
+                <DocumentTable rows={rows} basePath={KB_BASE} actions={{ canWrite: false }}
+                  showSection={sectionId === null} sections={sectionList} />
                 {total > pageSize && (
                   <Paginator
                     page={page}

@@ -70,11 +70,14 @@ export function EditorToolbar({
   onPickImage,
   onPickFile,
   uploading,
+  trailing,
 }: {
   editor: Editor;
   onPickImage: () => void;
   onPickFile: () => void;
   uploading: boolean;
+  /** Правый край панели: статус автосохранения и «Готово». Панель закреплена, поэтому они всегда на виду. */
+  trailing?: ReactNode;
 }) {
   const state = useEditorState({
     editor,
@@ -331,6 +334,7 @@ export function EditorToolbar({
             />
           ) : null
         }
+        trailing={trailing}
       />
     </Tooltip.Provider>
   );
@@ -534,10 +538,12 @@ function RovingToolbar({
   groups,
   before,
   after,
+  trailing,
 }: {
   groups: Tool[][];
   before?: ReactNode;
   after?: ReactNode;
+  trailing?: ReactNode;
 }) {
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -626,6 +632,11 @@ function RovingToolbar({
           <Separator />
           {after}
         </>
+      )}
+      {trailing && (
+        // Не часть roving-фокуса инструментов: стрелки внутри этого блока не
+        // должны перебрасывать фокус на кнопки форматирования.
+        <div className="kb-editor__toolbar-end" onKeyDown={(e) => e.stopPropagation()}>{trailing}</div>
       )}
     </div>
   );

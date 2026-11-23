@@ -345,8 +345,10 @@ def get_document_for_write(document_id: int) -> Optional[KnowledgeDocument]:
     return KnowledgeDocument.objects.filter(id=document_id, active=True).first()
 
 
-def soft_delete_document(document_id: int) -> bool:
-    return KnowledgeDocument.objects.filter(id=document_id).update(active=False) > 0
+def delete_document(document_id: int) -> bool:
+    """Permanently remove the document and its dependent usage/bookmark rows."""
+    deleted, _ = KnowledgeDocument.objects.filter(id=document_id).delete()
+    return deleted > 0
 
 
 def reorder_documents(section_id: int, order: list[int]) -> None:

@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { PageHeader } from '../../components/shell/PageHeader';
@@ -10,7 +11,7 @@ import { DocumentView } from '../../components/knowledge/DocumentView';
 import { TableOfContents } from '../../components/knowledge/TableOfContents';
 import { collectHeadings } from '../../components/knowledge/headingAnchors';
 import { DocumentSide } from '../../components/knowledge/DocumentSide';
-import { PencilIcon, StarIcon } from '../../components/knowledge/knowledgeIcons';
+import { PencilIcon } from '../../components/knowledge/knowledgeIcons';
 import { ReaderRolesField } from '../../components/knowledge/ReaderRolesField';
 import { ConfirmDialog } from './KnowledgeDialogs';
 import { AccessDialog } from './AccessDialog';
@@ -54,7 +55,7 @@ export default function KnowledgeDocumentPage() {
 
   const { data, isLoading, isError } = useKnowledgeDocument(documentId);
   const { update, setPublished } = useDocumentMutations(documentId);
-  const { deleteDocument, duplicateDocument, setFavorite } = useKnowledgeMutations();
+  const { deleteDocument, duplicateDocument } = useKnowledgeMutations();
   const sections = useKnowledgeSections();
 
   const wantsEdit = Boolean((location.state as { edit?: boolean } | null)?.edit);
@@ -189,24 +190,10 @@ export default function KnowledgeDocumentPage() {
         actions={
           editing ? (
             <>
-              <SaveIndicator state={autosave.state} reason={autosave.reason} />
               <Button variant="ghost" onClick={() => setAccessOpen(true)}>Доступ</Button>
-              <Button variant="primary" onClick={leaveEditing}>Готово</Button>
             </>
           ) : (
             <>
-              <IconButton
-                label={data.is_favorite ? 'Убрать из избранного' : 'В избранное'}
-                className={`kb-star${data.is_favorite ? ' is-on' : ''}`}
-                active={data.is_favorite}
-                icon={<StarIcon size={18} filled={data.is_favorite} />}
-                onClick={() =>
-                  setFavorite.mutate(
-                    { id: documentId, value: !data.is_favorite },
-                    { onError: (err) => showError(err) },
-                  )
-                }
-              />
               {canWrite && (
                 <>
                   <IconButton
@@ -252,13 +239,14 @@ export default function KnowledgeDocumentPage() {
           Обновлён {fmtDateTimeShort(data.updated_at)}
         </span>
         {data.status === 'draft' && (
-          <span className="kb-doc-meta__hint">Читателям он пока не виден.</span>
+          <HelpPopover>Читателям он пока не виден.</HelpPopover>
         )}
       </div>
 
       {editing ? (
         <Suspense fallback={<PageLoading />}>
-          <DocumentEditor content={content} onChange={(doc) => edit({ content: doc })} />
+          <DocumentEditor content={content} onChange={(doc) => edit({ content: doc })}
+            toolbarEnd={<><SaveIndicator state={autosave.state} reason={autosave.reason} /><Button variant="primary" onClick={leaveEditing}>Готово</Button></>} />
         </Suspense>
       ) : (
         <div className="kb-reader">
@@ -309,9 +297,9 @@ export default function KnowledgeDocumentPage() {
 
       <ConfirmDialog
         open={confirmDelete}
-        title="Удалить документ"
-        message={`Документ «${data.title}» уедет в архив. Оттуда его можно вернуть.`}
-        confirmLabel="Удалить"
+        title="Удалить документ навсегда"
+        message={`Документ «${data.title}» будет удалён навсегда. Восстановить его не получится.`}
+        confirmLabel="Удалить навсегда"
         danger
         busy={deleteDocument.isPending}
         onConfirm={() =>

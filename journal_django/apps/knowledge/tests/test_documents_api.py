@@ -125,15 +125,21 @@ def test_unpublish_returns_to_draft(admin_client, section):
 # --- удаление и список -----------------------------------------------------
 
 @pytest.mark.django_db
-def test_delete_is_soft(admin_client, section):
+def test_delete_is_permanent(admin_client, section):
     doc = admin_client.post(
         DOCS, {'section_id': section['id'], 'title': '__test_kb_d'}, format='json',
     ).json()
+    assert admin_client.post(f"{DOCS}/{doc['id']}/favorite", {}, format='json').status_code == 200
     assert admin_client.delete(f"{DOCS}/{doc['id']}").status_code == 204
     assert admin_client.get(f"{DOCS}/{doc['id']}").status_code == 404
     with connection.cursor() as cur:
         cur.execute('SELECT active FROM knowledge_documents WHERE id = %s', [doc['id']])
-        assert cur.fetchone()[0] is False
+        assert cur.fetchone() is None
+
+        cur.execute('SELECT count(*) FROM knowledge_favorites WHERE document_id = %s', [doc['id']])
+        assert cur.fetchone()[0] == 0
+    assert admin_client.delete(f"{DOCS}/{doc['id']}").status_code == 404
+    assert admin_client.post(f"{DOCS}/{doc['id']}/restore", {}, format='json').status_code == 404
 
 
 @pytest.mark.django_db

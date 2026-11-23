@@ -1,24 +1,13 @@
 import { Link } from 'react-router-dom';
 import { ActionMenu } from '../ui/ActionMenu';
-import { IconButton } from '../ui/IconButton';
 import { DocumentStatusBadge } from '../ui/StatusBadge';
-import { DocIcon, StarIcon } from './knowledgeIcons';
+import { DocIcon } from './knowledgeIcons';
 import { fmtDateTimeShort } from '../../lib/format';
 import type { KnowledgeDocumentRow, KnowledgeSection } from '../../lib/knowledge';
 
-/**
- * Список документов в двух видах: таблица и карточки.
- *
- * Оба вида показывают одно и то же и делят набор действий — иначе меню в
- * карточке и в строке рано или поздно разъедутся. Различается только плотность:
- * таблица держит сотни строк, карточки нужны небольшой базе, где важнее
- * увидеть, о чём документ, чем уместить их побольше.
- */
-
+/** One document list, shared by administrators and readers. */
 export interface DocumentActions {
   canWrite: boolean;
-  /** Архив: вместо правки и публикации предлагается восстановление. */
-  archived?: boolean;
   /**
    * Действия правки — необязательные: у читателя (teacher SPA) их нет вовсе,
    * и требовать от него пустые заглушки означало бы делать вид, будто правка
@@ -28,8 +17,6 @@ export interface DocumentActions {
   onTogglePublish?: (doc: KnowledgeDocumentRow) => void;
   onDuplicate?: (doc: KnowledgeDocumentRow) => void;
   onDelete?: (doc: KnowledgeDocumentRow) => void;
-  onRestore?: (doc: KnowledgeDocumentRow) => void;
-  onToggleFavorite: (doc: KnowledgeDocumentRow) => void;
 }
 
 /**
@@ -40,9 +27,6 @@ const DEFAULT_BASE_PATH = '/admin/knowledge';
 
 function menuItems(doc: KnowledgeDocumentRow, actions: DocumentActions) {
   if (!actions.canWrite) return [];
-  if (actions.archived) {
-    return [{ label: 'Восстановить', onSelect: () => actions.onRestore?.(doc) }];
-  }
   return [
     { label: 'Редактировать', onSelect: () => actions.onEdit?.(doc.id) },
     {
@@ -52,31 +36,6 @@ function menuItems(doc: KnowledgeDocumentRow, actions: DocumentActions) {
     { label: 'Дублировать', onSelect: () => actions.onDuplicate?.(doc) },
     { label: 'Удалить', danger: true, onSelect: () => actions.onDelete?.(doc) },
   ];
-}
-
-function FavoriteButton({
-  doc,
-  onToggle,
-}: {
-  doc: KnowledgeDocumentRow;
-  onToggle: (doc: KnowledgeDocumentRow) => void;
-}) {
-  const on = !!doc.is_favorite;
-  return (
-    <IconButton
-      size="sm"
-      className={`kb-star${on ? ' is-on' : ''}`}
-      label={on ? `Убрать «${doc.title}» из избранного` : `В избранное: ${doc.title}`}
-      active={on}
-      icon={<StarIcon size={16} filled={on} />}
-      onClick={(event) => {
-        // Строка целиком — ссылка на документ; звёздочка не должна её открывать.
-        event.preventDefault();
-        event.stopPropagation();
-        onToggle(doc);
-      }}
-    />
-  );
 }
 
 export function DocumentTable({
@@ -102,8 +61,7 @@ export function DocumentTable({
     >
       <div className="kb-rows__head" role="row">
         <span role="columnheader">Название</span>
-        {showSection && <span role="columnheader" className="kb-rows__optional">Раздел</span>}
-        <span role="columnheader" className="kb-rows__optional">Автор</span>
+        {showSection && <span role="columnheader" className="kb-rows__optional">Папка</span>}
         <span role="columnheader">Изменён</span>
         <span role="columnheader" className="kb-rows__spacer" aria-label="Действия" />
       </div>
@@ -148,60 +106,10 @@ function DocumentRow({
       {sectionName !== null && (
         <span className="kb-rows__muted kb-rows__optional" role="cell">{sectionName}</span>
       )}
-      <span className="kb-rows__muted kb-rows__optional" role="cell">
-        {doc.author_name || '—'}
-      </span>
       <span className="kb-rows__muted" role="cell">{fmtDateTimeShort(doc.updated_at)}</span>
       <span className="kb-rows__actions" role="cell">
-        <FavoriteButton doc={doc} onToggle={actions.onToggleFavorite} />
         {items.length > 0 && <ActionMenu items={items} label={`Действия: ${doc.title}`} />}
       </span>
     </div>
-  );
-}
-
-export function DocumentCards({
-  rows,
-  actions,
-  basePath = DEFAULT_BASE_PATH,
-}: {
-  rows: KnowledgeDocumentRow[];
-  actions: DocumentActions;
-  basePath?: string;
-}) {
-  return (
-    <ul className="kb-cards">
-      {rows.map((doc) => (
-        <DocumentCard key={doc.id} doc={doc} actions={actions} basePath={basePath} />
-      ))}
-    </ul>
-  );
-}
-
-function DocumentCard({
-  doc,
-  actions,
-  basePath,
-}: {
-  doc: KnowledgeDocumentRow;
-  actions: DocumentActions;
-  basePath: string;
-}) {
-  const items = menuItems(doc, actions);
-
-  return (
-    <li className="kb-card">
-      <Link to={`${basePath}/${doc.id}`} className="kb-card__body">
-        <span className="kb-card__icon" aria-hidden="true"><DocIcon size={20} /></span>
-        <span className="kb-card__title">{doc.title}</span>
-        <span className="kb-card__excerpt">{doc.excerpt?.trim() || 'Пустой документ'}</span>
-      </Link>
-      <div className="kb-card__foot">
-        {doc.status === 'draft' ? <DocumentStatusBadge status="draft" /> : null}
-        <span className="kb-card__date">{fmtDateTimeShort(doc.updated_at)}</span>
-        <FavoriteButton doc={doc} onToggle={actions.onToggleFavorite} />
-        {items.length > 0 && <ActionMenu items={items} label={`Действия: ${doc.title}`} />}
-      </div>
-    </li>
   );
 }

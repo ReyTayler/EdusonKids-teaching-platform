@@ -236,7 +236,7 @@ class DocumentDetailView(APIView):
         return Response(document)
 
     def delete(self, request: Request, pk: int) -> Response:
-        if not repository.soft_delete_document(pk):
+        if not repository.delete_document(pk):
             raise NotFound()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

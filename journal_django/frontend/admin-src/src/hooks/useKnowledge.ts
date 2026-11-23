@@ -69,36 +69,6 @@ export function useKnowledgeLibrary(params: LibraryQuery) {
   });
 }
 
-/**
- * Сколько документов раздела показывает дерево слева.
- *
- * Дерево — навигация, а не список: сотня строк в панели шириной 240px уже
- * бесполезна, а вот запрос за ними стоит столько же, сколько за всей базой.
- * Что не поместилось, открывается в основной части экрана с пагинацией.
- */
-export const TREE_BRANCH_SIZE = 50;
-
-/**
- * Документы одного раздела для ветки дерева.
- *
- * Отдельный хук, а не useKnowledgeLibrary с другими параметрами: у ветки свои
- * правила — фиксированный размер выборки, отсутствие фильтров и запрос ТОЛЬКО
- * когда ветка раскрыта (enabled). Смешай их — и любой фильтр основного списка
- * начал бы менять содержимое дерева.
- */
-export function useSectionDocuments(sectionId: number, enabled: boolean) {
-  return useQuery({
-    queryKey: [...KEY, 'documents', 'branch', sectionId],
-    queryFn: () =>
-      api<Paginated<KnowledgeDocumentRow>>(
-        'GET',
-        `${BASE}/documents?section_id=${sectionId}&page=1&page_size=${TREE_BRANCH_SIZE}`,
-      ),
-    enabled,
-    placeholderData: keepPreviousData,
-  });
-}
-
 export function useKnowledgeDocument(id: number | undefined) {
   return useQuery({
     queryKey: [...KEY, 'document', id ?? 0],
@@ -139,7 +109,10 @@ export function useKnowledgeMutations() {
     }),
     deleteDocument: useMutation({
       mutationFn: (id: number) => api<void>('DELETE', `${BASE}/documents/${id}`),
-      onSuccess: invalidateDocuments,
+      onSuccess: (_data, id) => {
+        qc.removeQueries({ queryKey: [...KEY, 'document', id], exact: true });
+        invalidateDocuments();
+      },
     }),
     // Публикация с id в аргументе — для списков. Хук useDocumentMutations(id)
     // привязан к одному документу и на экране со списком породил бы столько же
@@ -156,28 +129,10 @@ export function useKnowledgeMutations() {
         invalidateDocuments();
       },
     }),
-    restoreDocument: useMutation({
-      mutationFn: (id: number) =>
-        api<KnowledgeDocument>('POST', `${BASE}/documents/${id}/restore`, {}),
-      onSuccess: invalidateDocuments,
-    }),
     duplicateDocument: useMutation({
       mutationFn: (id: number) =>
         api<KnowledgeDocument>('POST', `${BASE}/documents/${id}/duplicate`, {}),
       onSuccess: invalidateDocuments,
-    }),
-    // Закладка личная и меняется одним щелчком по звёздочке, поэтому список
-    // обновляем целиком: пересчитывать её вручную в кэше — лишний источник
-    // расхождения между «звёздочка горит» и «документ в избранном».
-    setFavorite: useMutation({
-      mutationFn: async ({ id, value }: { id: number; value: boolean }) => {
-        if (value) await api<{ is_favorite: boolean }>('POST', `${BASE}/documents/${id}/favorite`, {});
-        else await api<void>('DELETE', `${BASE}/documents/${id}/favorite`);
-      },
-      onSuccess: (_data, { id }) => {
-        invalidateDocuments();
-        qc.invalidateQueries({ queryKey: [...KEY, 'document', id] });
-      },
     }),
     uploadImage: useMutation({
       mutationFn: (file: File) => apiUpload<KnowledgeImage>(`${BASE}/images`, file),

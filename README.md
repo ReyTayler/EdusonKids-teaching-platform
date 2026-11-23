@@ -156,7 +156,7 @@ cd journal_django
 - [`docs/renewals-reference.md`](docs/renewals-reference.md) — продления
 - [`docs/design-system.md`](docs/design-system.md) — дизайн-токены и компоненты
 - [`docs/eduson/`](docs/eduson/) — перенос данных Eduson, бэклог, требования к развёртыванию
-- [`CLAUDE.md`](CLAUDE.md) — соглашения проекта для разработчиков и ИИ-ассистентов
+- [`AGENTS.md`](AGENTS.md) — соглашения проекта для разработчиков и ИИ-ассистентов
 
 В комментариях кода встречаются ссылки на `docs/superpowers/...` — это архив проектных
 документов исходной платформы KOTOKOD; в этот репозиторий он не входит.

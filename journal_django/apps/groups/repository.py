@@ -568,7 +568,7 @@ def get_group_progress(group_id: int) -> Optional[dict]:
     if grp is None:
         return None
 
-    # Half-lesson: 45 минут → шаг 0.5 (см. CLAUDE.md); слот = lesson_number / step.
+    # Half-lesson: 45 минут → шаг 0.5 (см. AGENTS.md); слот = lesson_number / step.
     step = 0.5 if grp['lesson_duration_minutes'] == 45 else 1.0
     # «Пройдено до учёта» (импорт Eduson / группа-продолжение): слоты 1..N в этой
     # группе физически не существуют — даты старой системой не сохранены. Фронт

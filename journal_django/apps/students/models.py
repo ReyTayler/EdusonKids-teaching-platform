@@ -68,7 +68,7 @@ class StudentComment(models.Model):
     Комментарий менеджера/админа к ученику. Append-only: без UpdateEvent, без
     API редактирования. Не трекается pghistory — сам факт (author+created_at)
     уже виден в UI, отдельный changelog-след избыточен (осознанное отступление
-    от общего правила CLAUDE.md, см. docs/superpowers/specs/2026-07-10-student-comments-design.md).
+    от общего правила AGENTS.md, см. docs/superpowers/specs/2026-07-10-student-comments-design.md).
     """
 
     id = models.BigAutoField(primary_key=True)

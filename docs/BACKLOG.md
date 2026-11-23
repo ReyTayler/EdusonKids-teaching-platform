@@ -152,7 +152,7 @@ router.param('id', (req, res, next, id) => {
 
 ---
 
-## 🟢 Долгосрочно — миграционные фазы из CLAUDE.md
+## 🟢 Долгосрочно — миграционные фазы из AGENTS.md
 
 ### Phase 5 — Cleanup Sheets-кода
 
@@ -165,7 +165,7 @@ router.param('id', (req, res, next, id) => {
 4. ✅ ~~Удалить старые admin-SPA fallback-файлы~~ — сделано в backend cleanup (2026-06-04): `public/admin.html`, `public/admin-app.js`, `public/Index.html.backup-phase4-1` удалены.
 5. ✅ ~~Почистить `services/repository.js`~~ — сделано в backend cleanup (2026-06-04): proxy удалён, `routes/teacher.js` → `services/teacher-repo.js` напрямую.
 6. Выпилить `DUAL_WRITE_ENABLED` и `READ_FROM` из `.env` и кода.
-7. Снять раздел «Sheets-инварианты» из CLAUDE.md (становится историей).
+7. Снять раздел «Sheets-инварианты» из AGENTS.md (становится историей).
 8. Решить судьбу `scripts/backfill-*` — оставить как архив или удалить. Скорее оставить.
 
 **Risk:** низкий. Teacher SPA и Admin SPA уже на PG, Sheets не источник правды.

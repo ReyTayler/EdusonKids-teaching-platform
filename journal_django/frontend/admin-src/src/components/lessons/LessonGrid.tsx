@@ -16,7 +16,7 @@ export function LessonGrid({ group, selectedSlot, onSelectSlot }: Props) {
   const direction = directions.find((d) => d.id === group.direction_id) || null;
   const color = directionColor(direction);
 
-  // Half-lesson: 45 минут → шаг 0.5 (см. CLAUDE.md), слот = lesson_number / step.
+  // Half-lesson: 45 минут → шаг 0.5 (см. AGENTS.md), слот = lesson_number / step.
   // Для обычных групп (step=1) совпадает со старым Math.ceil (номера целые); для
   // 45-мин групп каждая половина урока получает свой слот (0.5→1, 1.0→2, …) —
   // без схлопывания пары половинок в одну ячейку (был баг: ceil(0.5)===ceil(1)).

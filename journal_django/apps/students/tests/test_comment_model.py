@@ -27,7 +27,7 @@ def test_student_on_delete_cascade():
 
 def test_not_pghistory_tracked():
     """
-    Осознанное исключение из общего правила CLAUDE.md («каждая новая модель →
+    Осознанное исключение из общего правила AGENTS.md («каждая новая модель →
     pghistory + registry») — см. docs/superpowers/specs/2026-07-10-student-comments-design.md.
     Комментарий уже self-audit (author+created_at видны в UI), отдельный
     changelog-след избыточен.

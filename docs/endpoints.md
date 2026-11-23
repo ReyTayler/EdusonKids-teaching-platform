@@ -108,7 +108,7 @@ students/0016). «Статус» — стадия последней сделк�
 | GET/POST | `/api/admin/payroll/personal-rates` | Персональные ставки (paginated, `?teacher=&group=`) |
 | PATCH/DELETE | `/api/admin/payroll/personal-rates/:id` | Правка/удаление → пересчёт группы (`recalculated`) |
 
-Всё под `/api/admin/payroll` — только superadmin. Правила расчёта — `CLAUDE.md`, раздел «Зарплата преподавателей».
+Всё под `/api/admin/payroll` — только superadmin. Правила расчёта — `AGENTS.md`, раздел «Зарплата преподавателей».
 
 ### Teachers / Directions / Tokens / Memberships
 

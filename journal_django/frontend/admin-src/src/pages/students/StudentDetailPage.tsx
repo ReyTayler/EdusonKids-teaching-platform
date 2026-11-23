@@ -15,18 +15,19 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/form/Field';
 import { useToast } from '../../components/ui/Toast';
 import { usePaymentModal } from '../../providers/PaymentModalProvider';
-import { fmtDate, fmtDateTime, fmtAge } from '../../lib/format';
+import { fmtDate, fmtAge } from '../../lib/format';
 import type { Student } from '../../lib/types';
 import StudentFormModal from './StudentFormModal';
 import StudentLearningBlock from './StudentLearningBlock';
 import StudentLessonsTable from '../../components/lessons/StudentLessonsTable';
 import StudentKpiRow from './StudentKpiRow';
 import { StudentBalanceBlock } from './StudentBalanceBlock';
-import StudentCommentsBlock from './StudentCommentsBlock';
+import { EntityCommentsBlock } from '../../components/comments/EntityCommentsBlock';
+import { LastCommentCard } from '../../components/comments/LastCommentCard';
 import StudentTasksBlock from './StudentTasksBlock';
-import { useLatestStudentComment } from '../../hooks/useStudentComments';
+import { useLatestEntityComment } from '../../hooks/useEntityComments';
 import { useAuth } from '../../hooks/useAuth';
-import { canSeeChangelog, canWriteStudentManager, canWritePayments, type Role } from '../../lib/permissions';
+import { canDeleteStudentComments, canSeeChangelog, canWriteStudentManager, canWritePayments, type Role } from '../../lib/permissions';
 import { EntityChangelogPanel } from '../../components/changelog/EntityChangelogPanel';
 import { useRenewalAssignees } from '../../hooks/useRenewals';
 import { SelectInput } from '../../components/form/SelectInput';
@@ -100,7 +101,7 @@ export default function StudentDetailPage() {
   const { me } = useAuth();
   const { data: groups = [] } = useGroupsAll(true);
   const { data: directions = [] } = useDirections(true);
-  const { data: lastComment } = useLatestStudentComment(id);
+  const { data: lastComment } = useLatestEntityComment('students', id);
   const { data: activeMemberships = [] } = useMemberships({ student_id: id });
   const [editing, setEditing] = useState(false);
   const [managingManager, setManagingManager] = useState(false);
@@ -183,23 +184,7 @@ export default function StudentDetailPage() {
       }
       facts={facts}
       aside={lastComment && (
-        <button
-          type="button"
-          className="hero-comment"
-          onClick={() => setActiveTab('comments')}
-          title="Открыть все комментарии"
-        >
-          <span className="hero-comment-head">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            Последний комментарий
-          </span>
-          <span className="hero-comment-text">{lastComment.body}</span>
-          <span className="hero-comment-meta">
-            {lastComment.author_name || 'Неизвестный автор'} · {fmtDateTime(lastComment.created_at)}
-          </span>
-        </button>
+        <LastCommentCard comment={lastComment} onOpen={() => setActiveTab('comments')} />
       )}
     />
   );
@@ -260,7 +245,16 @@ export default function StudentDetailPage() {
     {
       value: 'comments',
       label: 'Комментарии',
-      content: <StudentCommentsBlock studentId={student.id} />,
+      content: (
+        <EntityCommentsBlock
+          key={student.id}
+          entity="students"
+          entityId={student.id}
+          canDelete={canDeleteStudentComments(me?.role as Role)}
+          placeholder="Оставьте комментарий об ученике…"
+          emptyHint="Здесь появятся заметки об ученике"
+        />
+      ),
     },
   ];
 

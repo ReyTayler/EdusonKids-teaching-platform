@@ -66,6 +66,9 @@ export const canDeleteTask = isAdminUp;
 // Бэк: IsAdminOrSuperAdmin на PATCH /api/admin/renewals/:id/outcome-date.
 export const canEditRenewalOutcomeDate = isAdminUp;
 export const canDeleteStudentComments = isAdminUp; // удаление комментария к ученику
+// Комментарии к преподавателю: читать/писать — manager+, удалять — admin/superadmin
+// (как у ученика); бэк проверяет то же на /api/admin/teachers/:id/comments.
+export const canDeleteTeacherComments = isAdminUp;
 // Вкладка «Уроки» на странице группы (сетка занятий + редактор урока). Менеджеру
 // не нужна — уроки он всё равно не правит (canWriteLessons), а вкладка только
 // шумит (решение 2026-07-28). Набор группы («Ученики») менеджеру доступен.

@@ -94,3 +94,28 @@ class TeacherUpdateSerializer(serializers.Serializer):
         if '@' not in value or '.' not in value.split('@')[-1]:
             raise serializers.ValidationError('Enter a valid email address.')
         return value
+
+
+class TeacherCommentSerializer(serializers.Serializer):
+    """Read-only элемент списка комментариев (GET .../comments). Форма — как у StudentCommentSerializer."""
+
+    id = serializers.IntegerField()
+    body = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    author_id = serializers.IntegerField(allow_null=True)
+    author_name = serializers.SerializerMethodField()
+
+    def get_author_name(self, obj) -> str | None:
+        return obj.author.full_name if obj.author_id and obj.author else None
+
+
+class TeacherCommentWriteSerializer(serializers.Serializer):
+    """Ввод для POST .../comments."""
+
+    body = serializers.CharField(max_length=5000, allow_blank=False)
+
+    def validate_body(self, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise serializers.ValidationError('body must not be blank')
+        return stripped

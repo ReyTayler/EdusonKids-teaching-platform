@@ -20,6 +20,21 @@ def get_teacher(teacher_id: int) -> Optional[dict]:
     return repository.get_teacher(teacher_id)
 
 
+def teacher_exists(teacher_id: int) -> bool:
+    """Факт существования преподавателя — для 404-гейтов, без выборки полей и Telegram."""
+    return repository.teacher_exists(teacher_id)
+
+
+def add_comment(teacher_id: int, body: str, author_id: Optional[int]):
+    """Создаёт комментарий к преподавателю."""
+    return repository.add_comment(teacher_id, body, author_id)
+
+
+def delete_comment(teacher_id: int, comment_id: int) -> bool:
+    """Удаляет комментарий. False если не найден."""
+    return repository.delete_comment(teacher_id, comment_id)
+
+
 def create_teacher(data: dict) -> dict:
     """Создаёт преподавателя. 409 при UniqueViolation поднимает view."""
     return repository.create_teacher(data)

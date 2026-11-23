@@ -7,12 +7,24 @@ URL маршруты для раздела teachers.
 from django.urls import path
 
 from apps.notifications.views import TeacherTelegramView
-from apps.teachers.views import TeacherDetailView, TeacherListCreateView, TeacherStatsView
+from apps.teachers.views import (
+    TeacherCommentDetailView,
+    TeacherCommentListView,
+    TeacherDetailView,
+    TeacherListCreateView,
+    TeacherStatsView,
+)
 
 urlpatterns = [
     path('', TeacherListCreateView.as_view(), name='teachers-list-create'),
     path('/<int:pk>', TeacherDetailView.as_view(), name='teachers-detail'),
     path('/<int:pk>/stats', TeacherStatsView.as_view(), name='teachers-stats'),
+    path('/<int:pk>/comments', TeacherCommentListView.as_view(), name='teachers-comments'),
+    path(
+        '/<int:pk>/comments/<int:comment_id>',
+        TeacherCommentDetailView.as_view(),
+        name='teachers-comment-detail',
+    ),
     path('/<int:teacher_id>/telegram', TeacherTelegramView.as_view(),
          name='teacher-telegram'),
 ]

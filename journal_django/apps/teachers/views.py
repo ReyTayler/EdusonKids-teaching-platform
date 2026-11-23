@@ -7,25 +7,36 @@ TeachersView — тонкий ViewSet для /api/admin/teachers.
   POST   /api/admin/teachers        → create()         → 201 | 409
   PATCH  /api/admin/teachers/:id    → partial_update() → 200 | 404
   DELETE /api/admin/teachers/:id    → destroy()        → 204 | 404
+  GET    /api/admin/teachers/:id/comments              → 200 | 404 (пагинация)
+  POST   /api/admin/teachers/:id/comments              → 201 | 400 | 404
+  DELETE /api/admin/teachers/:id/comments/:comment_id  → 204 | 404
 
 Параметры: ?include_inactive=1 (GET список).
 Права: чтение — manager/admin/superadmin; запись — только superadmin (ReadStaffWriteSuperAdmin).
+Комментарии — как у ученика: список/добавление manager+, удаление admin+.
 """
 from __future__ import annotations
 
 import re
 
 from django.db import IntegrityError
-from rest_framework import status
+from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.permissions import IsManagerOrAdmin, ReadStaffWriteSuperAdmin
+from apps.core.pagination import StandardPagination
+from apps.core.permissions import IsManagerOrAdmin, ReadStaffWriteAdmin, ReadStaffWriteSuperAdmin
 from apps.core.utils.dates import msk_now
 from apps.teachers import services
-from apps.teachers.serializers import TeacherUpdateSerializer, TeacherWriteSerializer
+from apps.teachers.models import TeacherComment
+from apps.teachers.serializers import (
+    TeacherCommentSerializer,
+    TeacherCommentWriteSerializer,
+    TeacherUpdateSerializer,
+    TeacherWriteSerializer,
+)
 
 
 class TeacherListCreateView(APIView):
@@ -125,6 +136,59 @@ class TeacherStatsView(APIView):
         # из JWT, не из параметра запроса.
         with_payroll = getattr(request.user, 'role', None) == 'superadmin'
         return Response(services.get_teacher_stats(pk, month, with_payroll=with_payroll))
+
+
+class TeacherCommentListView(generics.ListAPIView):
+    """
+    GET  /api/admin/teachers/:id/comments — список комментариев, пагинация
+    POST /api/admin/teachers/:id/comments — добавить комментарий → 201
+
+    Права как у комментариев ученика (IsManagerOrAdmin). Шире карточки это не
+    открывает: саму карточку (GET /teachers/:id) читают те же manager/admin/
+    superadmin. Запись карточки — только superadmin, но комментарий не правит
+    карточку, а дописывает заметку к ней, как у ученика.
+    404 если преподавателя нет (единообразно с TeacherStatsView).
+    """
+
+    permission_classes = [IsManagerOrAdmin]
+    pagination_class = StandardPagination
+    serializer_class = TeacherCommentSerializer
+
+    def get_queryset(self):
+        # -id — тай-брейк: created_at совпадает у строк одной транзакции
+        # (импорт), без него границы страниц плавают.
+        return (
+            TeacherComment.objects
+            .filter(teacher_id=self.kwargs['pk'])
+            .select_related('author')
+            .order_by('-created_at', '-id')
+        )
+
+    def get(self, request: Request, pk: int) -> Response:
+        if not services.teacher_exists(pk):
+            raise NotFound({'error': 'Not found'})
+        return super().get(request, pk)
+
+    def post(self, request: Request, pk: int) -> Response:
+        if not services.teacher_exists(pk):
+            raise NotFound({'error': 'Not found'})
+        ser = TeacherCommentWriteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        comment = services.add_comment(
+            pk, ser.validated_data['body'], getattr(request.user, 'id', None))
+        return Response(TeacherCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+
+
+class TeacherCommentDetailView(APIView):
+    """DELETE /api/admin/teachers/:id/comments/:comment_id — только admin/superadmin."""
+
+    permission_classes = [ReadStaffWriteAdmin]
+
+    def delete(self, request: Request, pk: int, comment_id: int) -> Response:
+        ok = services.delete_comment(pk, comment_id)
+        if not ok:
+            raise NotFound({'error': 'Not found'})
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------

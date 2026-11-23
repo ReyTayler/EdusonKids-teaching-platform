@@ -54,3 +54,31 @@ class Teacher(models.Model):
                 condition=models.Q(active=True),
             ),
         ]
+
+
+class TeacherComment(models.Model):
+    """
+    Комментарий менеджера/админа к преподавателю. Повторяет StudentComment:
+    append-only (без API редактирования) и не трекается pghistory — автор и
+    время уже видны в UI, отдельный changelog-след избыточен (то же осознанное
+    отступление от общего правила, что у комментариев ученика).
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    teacher = models.ForeignKey(
+        Teacher, on_delete=models.CASCADE,
+        db_column='teacher_id', related_name='comments',
+    )
+    body = models.TextField()
+    author = models.ForeignKey(
+        'accounts.Account', on_delete=models.SET_NULL, null=True, blank=True,
+        db_column='author_id', related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'teacher_comment'
+        indexes = [
+            models.Index(fields=['teacher', '-created_at'], name='teacher_comment_teacher_idx'),
+        ]

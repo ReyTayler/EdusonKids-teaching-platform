@@ -29,12 +29,10 @@ export function AccessDialog({
       onOpenChange={(next) => { if (!next) onClose(); }}
       title="Доступ к документу"
       footer={<Button variant="primary" onClick={onClose}>Готово</Button>}
-    >
+     help={<>Изменения вступят в силу после сохранения документа.</>}>
       <div className="kb-access">
         {footer}
-        <p className="kb-dialog__hint">
-          Изменения вступят в силу после сохранения документа.
-        </p>
+
       </div>
     </Dialog>
   );

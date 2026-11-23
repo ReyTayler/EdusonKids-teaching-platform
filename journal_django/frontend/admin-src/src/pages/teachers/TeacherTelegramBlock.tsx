@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { useMemo, useState } from 'react';
 import { Combobox, type Option } from '../../components/form/Combobox';
 import { TelegramIcon } from '../../components/ui/icons';
@@ -99,6 +100,9 @@ export function TeacherTelegramBlock({ teacher }: { teacher: Teacher }) {
         <span className="tg-card__title">
           <TelegramIcon size={14} />
           Telegram
+          {canWrite && !isLoading && options.length === 0 && <HelpPopover>
+              Боту ещё никто не писал: аккаунт появится в списке после команды /start.
+            </HelpPopover>}
         </span>
         <TelegramStatus telegram={teacher.telegram} />
       </div>
@@ -141,11 +145,7 @@ export function TeacherTelegramBlock({ teacher }: { teacher: Teacher }) {
               </button>
             )}
           </div>
-          {!isLoading && options.length === 0 && (
-            <div className="tg-card__hint">
-              Боту ещё никто не писал: аккаунт появится в списке после команды /start.
-            </div>
-          )}
+
         </>
       )}
     </div>

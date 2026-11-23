@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../../components/ui/HelpPopover';
 import { useMemo, useState } from 'react';
 import { fmtRub } from '../../../lib/format';
 import type { ProductRow } from '../../../lib/types';
@@ -101,7 +102,6 @@ export function ProductsTable({ rows }: { rows: ProductRow[] }) {
             {COLUMNS.map((c) => (
               <th
                 key={c.key}
-                title={c.hint}
                 aria-sort={sort.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                 className={c.numeric ? 'products-table__num' : undefined}
               >
@@ -111,6 +111,7 @@ export function ProductsTable({ rows }: { rows: ProductRow[] }) {
                     {sort.key === c.key ? (sort.dir === 'asc' ? '↑' : '↓') : ''}
                   </span>
                 </button>
+                <HelpPopover label={`Подсказка: ${c.label}`}>{c.hint}</HelpPopover>
               </th>
             ))}
           </tr>

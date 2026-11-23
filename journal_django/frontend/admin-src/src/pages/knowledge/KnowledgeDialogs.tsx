@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/ui/Dialog';
 import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/form/Field';
@@ -14,6 +14,7 @@ import { TextInput } from '../../components/form/TextInput';
  */
 
 interface NameDialogProps {
+  children?: ReactNode;
   open: boolean;
   title: string;
   label: string;
@@ -29,6 +30,7 @@ interface NameDialogProps {
 
 /** Модалка с одним текстовым полем — создание и переименование. */
 export function NameDialog({
+  children,
   open,
   title,
   label,
@@ -69,7 +71,7 @@ export function NameDialog({
           </Button>
         </>
       }
-    >
+     help={hint && <>{hint}</>}>
       {/* form + onSubmit: Enter в поле подтверждает, как в нативном prompt. */}
       <form
         className="modal-form"
@@ -89,7 +91,8 @@ export function NameDialog({
             onChange={(e) => setValue(e.target.value)}
           />
         </Field>
-        {hint && <p className="kb-dialog__hint">{hint}</p>}
+        {children}
+
       </form>
     </Dialog>
   );

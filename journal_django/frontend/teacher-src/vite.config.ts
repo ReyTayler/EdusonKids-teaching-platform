@@ -33,7 +33,7 @@ export default defineConfig({
     // др. из СВОЕГО node_modules → без dedupe в бандл попали бы ДВЕ копии React
     // (диспетчер хуков null → «Cannot read properties of null (reading useState)»).
     // dedupe принуждает резолвить эти пакеты в единственную копию из teacher-src.
-    dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+    dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query', '@radix-ui/react-dismissable-layer', '@radix-ui/react-focus-scope'],
     alias: {
       '@': path.resolve(__dirname, 'src'),
       '@shared': path.resolve(__dirname, '../admin-src/src'),

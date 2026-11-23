@@ -1,3 +1,5 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
+import { TableScrollArea } from '../../components/table/TableScrollArea';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useStudentBalance } from '../../hooks/useStudentBalance';
 import { usePaymentMutations } from '../../hooks/usePayments';
@@ -132,9 +134,9 @@ function HistoryRow({
           {surcharges.length > 0 && (
             <span
               className="fin-tag fin-tag--surcharge"
-              title="Есть доплаты к абонементам — итог по курсу отличается от суммы этой оплаты"
+
             >
-              +{fmtRub(surchargeTotal)}
+              +{fmtRub(surchargeTotal)} <HelpPopover>Есть доплаты к абонементам — итог по курсу отличается от суммы этой оплаты</HelpPopover>
             </span>
           )}
         </td>
@@ -368,7 +370,7 @@ export function StudentBalanceBlock({ studentId }: Props) {
 
         {topLevelPayments.length > 0 && (
           <FinSection title="История оплат" meta={topLevelPayments.length} defaultOpen>
-            <div className="table-wrap fin-history">
+            <TableScrollArea className="fin-history">
               <table>
                 <thead>
                   <tr>
@@ -395,7 +397,7 @@ export function StudentBalanceBlock({ studentId }: Props) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableScrollArea>
           </FinSection>
         )}
       </div>

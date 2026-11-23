@@ -55,7 +55,8 @@ function StudentManagerDialog({ student, onClose }: { student: Student; onClose:
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title="Сменить менеджера ученика">
+    <Dialog open onOpenChange={(o) => !o && onClose()} title="Сменить менеджера ученика" help={<>Смена менеджера сразу переставит ответственного в активной сделке продления
+          этого ученика в разделе «Продления». Закрытые сделки не меняются.</>}>
       <div className="status-form">
         <Field label="Менеджер">
           <SelectInput
@@ -67,10 +68,7 @@ function StudentManagerDialog({ student, onClose }: { student: Student; onClose:
             ]}
           />
         </Field>
-        <div className="status-form__hint">
-          Смена менеджера сразу переставит ответственного в активной сделке продления
-          этого ученика в разделе «Продления». Закрытые сделки не меняются.
-        </div>
+
         <div className="status-form__footer">
           <button type="button" className="btn-cancel" onClick={onClose}>Отмена</button>
           <button

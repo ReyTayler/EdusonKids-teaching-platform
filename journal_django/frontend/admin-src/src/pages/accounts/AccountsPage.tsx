@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { useState, type FormEvent } from 'react';
 import { useAccounts, useAccountMutations, type CreatedAccount, type InviteResult } from '../../hooks/useAccounts';
 import { useTeachers } from '../../hooks/useTeachers';
@@ -250,10 +251,8 @@ function InviteRevealModal({ title, email, inviteUrl, expiresAt, onClose }: Invi
       }
     >
       <div className="password-reveal">
-        <p className="password-reveal__hint">
-          Передайте эту ссылку сотруднику <strong>лично или в мессенджере</strong>. По ней он сам
-          задаст пароль и настроит 2FA. Ссылка одноразовая и действует до <strong>{expiresText}</strong>.
-        </p>
+        <div className="help-label"><span>Одноразовая ссылка действует до <strong>{expiresText}</strong>.</span>
+          <HelpPopover label="Как передать ссылку сотруднику">Передайте эту ссылку сотруднику лично или в мессенджере. По ней он сам задаст пароль и настроит 2FA.</HelpPopover></div>
         <div className="password-reveal__email">{email}</div>
         <div className="password-reveal__box">
           <code className="password-reveal__value">{fullUrl}</code>

@@ -1,3 +1,4 @@
+import { HelpPopover } from '../ui/HelpPopover';
 import { Checkbox } from '../form/Checkbox';
 import { ROLE_LABELS } from '../../lib/labels';
 import type { KnowledgeRole } from '../../lib/knowledge';
@@ -25,7 +26,9 @@ export function ReaderRolesField({
 
   return (
     <fieldset className="kb-roles">
-      <legend className="kb-roles__legend">Кто может читать</legend>
+      <legend className="kb-roles__legend">Кто может читать <HelpPopover>
+        Администраторы видят документ всегда, включая черновики.
+      </HelpPopover></legend>
       {SELECTABLE.map((role) => (
         <Checkbox
           key={role}
@@ -35,9 +38,7 @@ export function ReaderRolesField({
           label={ROLE_LABELS[role] ?? role}
         />
       ))}
-      <p className="kb-roles__hint">
-        Администраторы видят документ всегда, включая черновики.
-      </p>
+
     </fieldset>
   );
 }

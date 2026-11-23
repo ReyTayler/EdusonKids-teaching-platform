@@ -1,0 +1,102 @@
+{
+  "date": "2026-11-23",
+  "scope": "KOTOKOD UI/UX improvements -> Eduson; Eduson branding and business rules retained",
+  "transferred": [
+    {
+      "area": "Contextual help",
+      "result": "Shared HelpPopover; hints attached to field labels, section headings and dialogs; renewals consolidated in PageHeader; no separate blank hint rows"
+    },
+    {
+      "area": "Schedule",
+      "result": "24h grid, keyboard/drag selection, day intervals, copy day, date overrides, fullscreen, unsaved changes guard; shared admin/teacher editor"
+    },
+    {
+      "area": "Tables",
+      "result": "TableScrollArea measures actual available viewport height; keeps pagination visible; payroll summary also scrolls horizontally on mobile"
+    },
+    {
+      "area": "Archive",
+      "result": "Unified list, type counters and filters, search popover, global server search before pagination; no refresh button; retry only on failure"
+    },
+    {
+      "area": "Payroll",
+      "result": "Search in header; period and teacher/group/kind filters inside popover; summary has period search; precise amounts and reset confirmation retained"
+    },
+    {
+      "area": "Groups/lessons",
+      "result": "Unpaid skip explanation included in attendance help; contextual help beside lesson-grid headings"
+    },
+    {
+      "area": "Wiki",
+      "result": "List-only library, compact mobile folder selector, no favorites/archive UI; hard deletion already transferred; sticky toolbar now includes save state and Done"
+    },
+    {
+      "area": "Dashboard",
+      "result": "KPI help outside clickable action, independent search component avoids eager RegistryTable import"
+    },
+    {
+      "area": "Filters",
+      "result": "Removed FilterPopover arrow; retained richer Eduson date/muted options and controlled filters"
+    }
+  ],
+  "already_present_or_preserved": [
+    "Header search across entity lists",
+    "Eduson Geist typography, monochrome accent, own tokens and table density",
+    "School motivation UI with group and individual rates, previews, history, import offsets",
+    "Mandatory teacher recording URL and feedback",
+    "Payroll visibility for superadmin only and richer cancellation/manual-payment calculations",
+    "Student disambiguation by contacts, teacher links, registry cancellation segment",
+    "Wiki mobile justify fix and distinct callout rendering"
+  ],
+  "validation": {
+    "pytest": {
+      "passed": 4137,
+      "skipped": 3,
+      "warnings": 116,
+      "duration_seconds": 761.05,
+      "database": "eduson_test"
+    },
+    "typescript": "admin and teacher passed",
+    "vite": "admin and teacher builds passed; existing asset/font runtime references and chunk-size warnings",
+    "browser_origin": "http://127.0.0.1:8180",
+    "browser_routes": [
+      "dashboard",
+      "students",
+      "groups",
+      "teachers",
+      "directions",
+      "renewals",
+      "tasks",
+      "lessons",
+      "extra-lessons",
+      "calendar",
+      "feedback",
+      "subscriptions",
+      "payroll",
+      "knowledge",
+      "reports",
+      "archive",
+      "accounts",
+      "audit",
+      "changelog",
+      "notifications",
+      "settings"
+    ],
+    "browser_interactions": [
+      "archive global search empty result",
+      "payroll list and summary filters",
+      "renewals header help",
+      "schedule fullscreen and discarded draft transition",
+      "mobile schedule intervals",
+      "mobile Wiki folder selector",
+      "help Escape closes popup while keeping rates dialog open",
+      "table pagination fits viewport"
+    ],
+    "limitations": [
+      "Local archive currently empty: populated results and pagination covered by 11 archive API tests",
+      "No Wiki documents in local Eduson: existing document editor not opened through real data",
+      "Teacher SPA typechecked and built; shared schedule visually tested through admin"
+    ],
+    "published": false
+  }
+}

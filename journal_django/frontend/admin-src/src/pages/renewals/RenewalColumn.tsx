@@ -117,7 +117,7 @@ export function RenewalColumn({ col, filters, onOpen }: Props) {
           badge={isAutoOnly ? (
             <span
               className="renewal-col__auto-badge"
-              title="Двигает только система по событиям — вручную перенести сделку сюда нельзя"
+
             >
               авто
             </span>
@@ -146,7 +146,7 @@ export function RenewalColumn({ col, filters, onOpen }: Props) {
           searching ? (
             <div className="renewal-col__note">Никого не найдено</div>
           ) : (
-            <EmptyState hint="На этой стадии пока никого нет">Нет учеников</EmptyState>
+            <EmptyState>Нет учеников</EmptyState>
           )
         ) : (
           cards.map((card) => (

@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { PrePlatformNote } from '../../shared/progress/PrePlatformNote';
 import { useRef, useState } from 'react';
 import { useParams, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -237,9 +238,7 @@ export default function GroupDetailPage() {
       label: 'Уроки',
       content: (
         <div className="detail__section">
-          <div className="lesson-grid-hint">
-            Серые — не проведены, цветные — проведены. Клик по любому квадрату — открыть/создать.
-          </div>
+          <div className="section-help-heading"><h3>Уроки группы</h3><HelpPopover>Серые — не проведены, цветные — проведены. Клик по любому квадрату — открыть/создать.</HelpPopover></div>
           <LessonGrid
             group={group}
             selectedSlot={selected?.slot ?? null}
@@ -262,9 +261,7 @@ export default function GroupDetailPage() {
       label: 'Прогресс',
       content: (
         <div className="detail__section">
-          <div className="lesson-grid-hint">
-            Посещаемость каждого ученика по урокам группы. Наведите на плитку — номер урока и дата.
-          </div>
+          <div className="section-help-heading"><h3>Посещаемость учеников</h3><HelpPopover>Посещаемость каждого ученика по урокам группы. Наведите на плитку — номер урока и дата.</HelpPopover></div>
           <GroupProgressBlock groupId={group.id} />
         </div>
       ),

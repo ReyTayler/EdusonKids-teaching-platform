@@ -1,3 +1,4 @@
+import { HelpPopover } from './HelpPopover';
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { useCallback, type ReactNode } from 'react';
 import { handleShiftWheel } from './shiftWheelScroll';
@@ -6,12 +7,14 @@ interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  help?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  className?: string;
 }
 
-export function Dialog({ open, onOpenChange, title, children, footer, wide }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, help, children, footer, wide, className }: DialogProps) {
   // Shift+колесо внутри модалки: замок прокрутки Radix (react-remove-scroll)
   // гасит его в Chromium — подробности в shiftWheelScroll.ts. Callback-ref с
   // очисткой (React 19) надёжно ловит монтирование содержимого через портал.
@@ -27,7 +30,7 @@ export function Dialog({ open, onOpenChange, title, children, footer, wide }: Di
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="modal-overlay">
           <RadixDialog.Content
-            className={`modal${wide ? ' modal--wide' : ''}`}
+            className={`modal${wide ? ' modal--wide' : ''}${className ? ` ${className}` : ''}`}
             aria-describedby={undefined}
             onInteractOutside={(e) => {
               // Выпадающие списки/календари рендерятся порталом в body (вне модалки).
@@ -37,7 +40,9 @@ export function Dialog({ open, onOpenChange, title, children, footer, wide }: Di
             }}
           >
             <div className="modal-header">
-              <RadixDialog.Title className="modal-title">{title}</RadixDialog.Title>
+              <div className="help-label"><RadixDialog.Title className="modal-title">{title}</RadixDialog.Title>
+                {help && <HelpPopover label={`Справка: ${title}`}>{help}</HelpPopover>}
+              </div>
               <RadixDialog.Close className="modal-close" aria-label="Закрыть">×</RadixDialog.Close>
             </div>
             <div className="modal-body" ref={bodyRef}>{children}</div>

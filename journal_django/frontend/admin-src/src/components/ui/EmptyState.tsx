@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { HelpPopover } from './HelpPopover';
 
 interface Props {
   /** Иконка 24–28px. Только inline-SVG — эмодзи в системе не используются. */
@@ -23,8 +24,10 @@ export function EmptyState({ icon, children, hint, action }: Props) {
   return (
     <div className="empty-state">
       {icon && <div className="empty-state__icon" aria-hidden="true">{icon}</div>}
-      <p className="empty-state__title">{children}</p>
-      {hint && <p className="empty-state__hint">{hint}</p>}
+      <div className="empty-state__heading">
+        <p className="empty-state__title">{children}</p>
+        {hint && <HelpPopover label="Подсказка к пустому списку">{hint}</HelpPopover>}
+      </div>
       {action && <div className="empty-state__action">{action}</div>}
     </div>
   );

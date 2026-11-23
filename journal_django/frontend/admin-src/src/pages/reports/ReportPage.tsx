@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Checkbox } from '../../components/form/Checkbox';
@@ -88,7 +89,7 @@ function ReportForm({ def }: { def: ReportTypeDef }) {
                   }}
                   disabled={isBusy}
                 />
-                {t.hint && <span className="report-form__hint">{t.hint}</span>}
+                {t.hint && <HelpPopover label={`Подсказка: ${t.label}`}>{t.hint}</HelpPopover>}
               </div>
             ))}
           </div>
@@ -97,9 +98,7 @@ function ReportForm({ def }: { def: ReportTypeDef }) {
             <button type="submit" className="btn-add" disabled={isBusy || isFuture}>
               {isBusy ? 'Формируется…' : 'Сформировать отчёт'}
             </button>
-            <span className="report-form__hint">
-              Excel-файл формируется в фоне и скачается автоматически — на платформе он не хранится.
-            </span>
+            <HelpPopover>Excel-файл формируется в фоне и скачается автоматически — на платформе он не хранится.</HelpPopover>
           </div>
 
           <div className="report-form__status" role="status">

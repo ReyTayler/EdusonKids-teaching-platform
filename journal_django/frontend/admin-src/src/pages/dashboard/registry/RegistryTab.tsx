@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../../components/ui/HelpPopover';
 import { useDeferredValue } from 'react';
 import { useListSearchParams } from '../../../hooks/useListSearchParams';
 import { useRegistrySummary, useRegistryStudents } from '../../../hooks/useRegistry';
@@ -112,10 +113,10 @@ export default function RegistryTab() {
           className={`reg-chip reg-chip--toggle${noGroup ? ' is-on' : ''}`}
           aria-pressed={noGroup}
           onClick={toggleNoGroup}
-          title="Ученики без активной группы: ещё не распределённые и выбывшие"
         >
           Без группы
         </button>
+        <HelpPopover label="Кто попадает в фильтр без группы">Ученики без активной группы: ещё не распределённые и выбывшие.</HelpPopover>
         {segment !== 'all' && (
           <button
             type="button"

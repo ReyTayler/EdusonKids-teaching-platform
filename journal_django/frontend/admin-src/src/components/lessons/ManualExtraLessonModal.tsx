@@ -125,7 +125,8 @@ export function ManualExtraLessonModal({ defaultGroupId, defaultStudentId, onClo
             onChange={(e) => setDuration(Number(e.target.value))}
           />
         </Field>
-        <Field label="За какой урок (номер, опц.)" full>
+        <Field label="За какой урок (номер, опц.)" full help={<>Если урок №N в группе уже проведён — доп.урок привяжется к нему (нельзя
+            назначить, если ученик на нём был). Если урока №N ещё нет — доп.урок сверх курса.</>}>
           <input
             type="number"
             min="0.5"
@@ -134,10 +135,7 @@ export function ManualExtraLessonModal({ defaultGroupId, defaultStudentId, onClo
             onChange={(e) => setLessonNumber(e.target.value)}
             placeholder="напр. 16 — если урок уже проведён, доп.урок привяжется к нему"
           />
-          <div className="field-hint">
-            Если урок №N в группе уже проведён — доп.урок привяжется к нему (нельзя
-            назначить, если ученик на нём был). Если урока №N ещё нет — доп.урок сверх курса.
-          </div>
+
         </Field>
         <Field label="Ученики группы" full>
           {!groupId ? (

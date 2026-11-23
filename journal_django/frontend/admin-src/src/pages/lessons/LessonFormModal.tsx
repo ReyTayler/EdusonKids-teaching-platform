@@ -84,6 +84,7 @@ export default function LessonFormModal({ onClose }: Props) {
           Создать урок
         </button>
       }
+      help={groupId ? 'Зарплату посчитает система по ставкам школы.' : undefined}
     >
       <form id="lesson-form" className="modal-form" onSubmit={onSubmit}>
         <Field label="Дата" required>
@@ -136,10 +137,6 @@ export default function LessonFormModal({ onClose }: Props) {
               </div>
             ))}
 
-            {/* Сумму не вводим: зарплату считает сервер по ставкам школы. */}
-            <p className="memberships__note">
-              Зарплату посчитает система.
-            </p>
           </>
         )}
       </form>

@@ -1,3 +1,4 @@
+import { HelpPopover } from '../ui/HelpPopover';
 import { useEffect, useRef, useState } from 'react';
 import { useLessonFull, useLessonMutations, useLessonSkips } from '../../hooks/useLessons';
 import { useMemberships } from '../../hooks/useMemberships';
@@ -208,7 +209,7 @@ export function LessonEditor({ group, slot, lessonId, color, onClose }: Props) {
       </div>
       <div className="lesson-editor__row">
         <label>
-          Посещаемость <span className="lesson-editor__hint">(клик по карточке: не был → пришёл → бесплатно)</span>
+          Посещаемость <HelpPopover><p>(клик по карточке: не был → пришёл → бесплатно)</p><p>Неоплачиваемый пропуск: ученик этот урок не посещает (перевод / начал не с 1-го). Денег ноль, в зарплату не входит.</p></HelpPopover>
         </label>
         <div className="attendance-grid">
           {members.length ? members.map((m) => {
@@ -305,7 +306,6 @@ export function LessonEditor({ group, slot, lessonId, color, onClose }: Props) {
                   className={`attendance-skip-btn${isSkip ? ' is-on' : ''}`}
                   onClick={compensated || lockedByTransfer ? undefined : toggleSkip}
                   disabled={compensated || lockedByTransfer || muts.setGroupLessonSkip.isPending}
-                  title="Неоплачиваемый пропуск: ученик этот урок не посещает (перевод / начал не с 1-го). Денег ноль, в зарплату не входит."
                 >
                   {isSkip ? 'Снять' : 'Неопл. пропуск'}
                 </button>

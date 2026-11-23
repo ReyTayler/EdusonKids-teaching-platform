@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../../components/ui/HelpPopover';
 import { useEffect, useState } from 'react';
 import { EntityLink } from '../../../components/EntityLink';
 import { minutesNowMSK, parseHHMM } from '../../../lib/format';
@@ -105,9 +106,9 @@ export function TodayStreamCard({ items }: { items: TodayStreamItem[] }) {
                 <span className="reg-stream__teacher">{it.teacher_name || '—'}</span>
                 <span
                   className={`chip ${STATE_TONE[state]} reg-stream__status reg-stream__status--${state}`}
-                  title={hintFor(state, it)}
                 >
                   {STATE_LABEL[state]}
+                  {hintFor(state, it) && <HelpPopover label="Почему у занятия этот статус">{hintFor(state, it)}</HelpPopover>}
                 </span>
               </li>
             );

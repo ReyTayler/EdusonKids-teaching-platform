@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { Fragment, useMemo, useState } from 'react';
 import { usePersonalRates, usePersonalRateMutations } from '../../hooks/useMotivation';
 import { useTeachers } from '../../hooks/useTeachers';
@@ -86,14 +87,11 @@ export function PersonalRatesSection() {
   return (
     <section className="settings-section" aria-labelledby="personal-rates-title">
       <div className="settings-section__head">
-        <h2 id="personal-rates-title" className="settings-section__title">Персональные ставки</h2>
+        <h2 id="personal-rates-title" className="settings-section__title">Персональные ставки <HelpPopover>Ставка преподавателя в конкретной группе: вместо ставки школы или надбавка к ней.</HelpPopover></h2>
         <button type="button" className="btn-add" onClick={() => setDialog({ editing: null })}>
           Добавить
         </button>
       </div>
-      <p className="settings-section__lead">
-        Ставка преподавателя в конкретной группе: вместо ставки школы или надбавка к ней.
-      </p>
 
       <FilterToolbar>
         <TableFilterPanel

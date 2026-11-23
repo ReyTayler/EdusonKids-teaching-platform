@@ -10,7 +10,7 @@
 }
 .table-wrap {
   overflow: auto;
-  max-height: calc(100vh - 280px - var(--topbar-h));
+  max-height: var(--table-max-height, calc(100dvh - 280px - var(--topbar-h)));
   /* overscroll-behavior НЕ 'contain': при 'contain' скролл не передаётся
      странице на краю таблицы — дойдя до конца, приходилось уводить курсор из
      таблицы, чтобы прокрутить страницу. Дефолт 'auto' даёт нормальную сцепку:
@@ -299,7 +299,7 @@ thead th {
   color: var(--text3);
   font-size: var(--fs-md);
 }
-.data-table__empty svg { display: block; margin: 0 auto var(--space-3); color: var(--text3); }
+.data-table__empty > svg { display: block; margin: 0 auto var(--space-3); color: var(--text3); }
 .data-table__empty-hint {
   margin-top: var(--space-2);
   font-size: var(--fs-xs);

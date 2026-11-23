@@ -1,3 +1,4 @@
+import { HelpPopover } from '../ui/HelpPopover';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMemberships, useMembershipMutations } from '../../hooks/useMemberships';
@@ -135,7 +136,7 @@ export function MembershipsBlock({ config, renderCard, emptyText, showAddPicker 
       )}
 
       {showAddPicker && (atCapacity ? (
-        config.capacityNote && <div className="memberships__note">{config.capacityNote}</div>
+        config.capacityNote && <div className="help-label"><span>Достигнут лимит</span><HelpPopover>{config.capacityNote}</HelpPopover></div>
       ) : (
         <div className="memberships__add">
           <SelectInput

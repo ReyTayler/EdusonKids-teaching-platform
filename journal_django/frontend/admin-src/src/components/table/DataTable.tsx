@@ -1,3 +1,5 @@
+import { HelpPopover } from '../ui/HelpPopover';
+import { TableScrollArea } from './TableScrollArea';
 import { useState, useMemo, type ReactNode } from 'react';
 import { Paginator } from './Paginator';
 import { FilterToolbar, TableFilterPanel, columnFilterFields, type FilterField } from '../filters';
@@ -141,7 +143,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
           title={title}
         />
         <div className={`table-panel data-table-wrapper${panelClass}${isLoading ? ' data-table--loading' : ''}`}>
-          <div className="table-wrap">
+          <TableScrollArea >
             <table className="data-table" aria-label={title}>
               <thead>
                 <tr>
@@ -192,7 +194,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScrollArea>
           <Paginator
             page={sp.page}
             pageSize={sp.pageSize}
@@ -218,7 +220,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
         title={title}
       />
       <div className={`table-panel${panelClass}`}>
-        <div className="table-wrap">
+        <TableScrollArea >
           <table className="data-table" aria-label={title}>
             <thead>
               <tr>
@@ -254,7 +256,7 @@ export function DataTable<T>({ data, columns, title, onRowClick, rowClassName, r
             ))}
             </tbody>
           </table>
-        </div>
+        </TableScrollArea>
       </div>
     </div>
   );
@@ -307,8 +309,7 @@ function EmptyRow({ cols, filtered }: { cols: number; filtered: boolean }) {
         <circle cx="11" cy="11" r="8" />
         <line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
-      <div>Ничего не найдено</div>
-      {filtered && <div className="data-table__empty-hint">Попробуйте сбросить фильтры</div>}
+      <div className="help-label">Ничего не найдено {filtered && <HelpPopover>Попробуйте сбросить фильтры</HelpPopover>}</div>
     </td>
   );
 }

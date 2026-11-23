@@ -114,30 +114,36 @@ export default function GroupFormModal({ initial, onClose }: Props) {
           Сохранить
         </button>
       }
-    >
+     help={isNew && (
+          <>Дни занятий и дату начала зададите после создания — кнопкой «Задать
+            расписание» на карточке группы (вкладка «Расписание»). Тогда же
+            сгенерируется план.</>
+        )}>
       <form id="group-form" className="modal-form" onSubmit={onSubmit}>
         <div className="modal-section-label">Основное</div>
         <Field label="Название группы" required full>
           <TextInput required value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="Направление" required>
+        <Field label="Направление" required help={!isNew && (
+            <>Направление закреплено за группой после создания</>
+          )}>
           <SelectInput value={directionId} onChange={(e) => setDirectionId(e.target.value)} options={directionOptions} required disabled={!isNew} />
-          {!isNew && (
-            <span className="field-hint">Направление закреплено за группой после создания</span>
-          )}
+
         </Field>
-        <Field label="Преподаватель" required>
+        <Field label="Преподаватель" required help={!isNew && (
+            <>Сменить преподавателя можно только операцией «смена преподавателя на все уроки» на странице группы</>
+          )}>
           <SelectInput value={teacherId} onChange={(e) => setTeacherId(e.target.value)} options={teacherOptions} required disabled={!isNew} />
-          {!isNew && (
-            <span className="field-hint">Сменить преподавателя можно только операцией «смена преподавателя на все уроки» на странице группы</span>
-          )}
+
         </Field>
         <Field label="Ссылка на чат ВК" full>
           <TextInput value={vkChat} onChange={(e) => setVkChat(e.target.value)} placeholder="https://vk.me/..." />
         </Field>
 
         <div className="modal-section-label">Параметры</div>
-        <Field label="Формат занятия" full>
+        <Field label="Формат занятия" full help={!isNew && (
+            <>Формат нельзя изменить после создания группы</>
+          )}>
           {/* Формат жёстко закреплён за группой после создания — при редактировании только чтение. */}
           <div className="format-toggle" role="radiogroup" aria-label="Формат занятия">
             <button
@@ -165,11 +171,11 @@ export default function GroupFormModal({ initial, onClose }: Props) {
               <span className="format-toggle__title">Групповой формат</span>
             </button>
           </div>
-          {!isNew && (
-            <span className="field-hint">Формат нельзя изменить после создания группы</span>
-          )}
+
         </Field>
-        <Field label="Длительность">
+        <Field label="Длительность" help={!isNew && (
+            <>Длительность закреплена за группой после создания</>
+          )}>
           <SelectInput
             value={String(duration)}
             onChange={(e) => setDuration(Number(e.target.value) as LessonDuration)}
@@ -180,11 +186,10 @@ export default function GroupFormModal({ initial, onClose }: Props) {
             ]}
             disabled={!isNew}
           />
-          {!isNew && (
-            <span className="field-hint">Длительность закреплена за группой после создания</span>
-          )}
+
         </Field>
-        <Field label="Уроков в группе">
+        <Field label="Уроков в группе" help={<>{sessionsHint
+              || 'Сколько уроков курса пройдёт эта группа. Пусто — весь курс направления.'}</>}>
           <NumberInput
             min={1}
             step={1}
@@ -192,19 +197,10 @@ export default function GroupFormModal({ initial, onClose }: Props) {
             onChange={(e) => setLessonsTotal(e.target.value)}
             placeholder={directionLessons ? `как в направлении (${directionLessons})` : 'как в направлении'}
           />
-          <span className="field-hint">
-            {sessionsHint
-              || 'Сколько уроков курса пройдёт эта группа. Пусто — весь курс направления.'}
-          </span>
+
         </Field>
 
-        {isNew && (
-          <div className="field-hint" style={{ marginTop: 'var(--space-2)' }}>
-            Дни занятий и дату начала зададите после создания — кнопкой «Задать
-            расписание» на карточке группы (вкладка «Расписание»). Тогда же
-            сгенерируется план.
-          </div>
-        )}
+
       </form>
     </Dialog>
   );

@@ -1,3 +1,4 @@
+import { TableScrollArea } from '../table/TableScrollArea';
 /**
  * `roomy` — тот же признак, что и у DataTable: скелетон обязан держать шаг
  * строки той таблицы, которую замещает, иначе при появлении данных вёрстка
@@ -9,7 +10,7 @@ export function TableSkeleton({ rows = 5, cols = 5, roomy }: { rows?: number; co
   const panel = roomy ? 'table-panel table-panel--roomy' : '';
   return (
     <div className={panel}>
-    <div className="table-wrap" aria-busy="true">
+    <TableScrollArea  aria-busy="true">
       <span className="sr-only">Загружаем данные…</span>
       <table>
         <tbody>
@@ -22,7 +23,7 @@ export function TableSkeleton({ rows = 5, cols = 5, roomy }: { rows?: number; co
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScrollArea>
     </div>
   );
 }

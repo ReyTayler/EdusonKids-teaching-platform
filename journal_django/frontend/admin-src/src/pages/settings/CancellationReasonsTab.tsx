@@ -1,3 +1,5 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
+import { TableScrollArea } from '../../components/table/TableScrollArea';
 import { useState } from 'react';
 import { useCancellationReasons, useCancellationReasonMutations } from '../../hooks/useCancellationReasons';
 import { useApiError } from '../../hooks/useApiError';
@@ -69,20 +71,20 @@ export function CancellationReasonsTab() {
 
   return (
     <div className="settings-tab">
-      <p className="settings-section__lead">{CANCELLATION_LABELS.settingsLead}</p>
+
       {SIDES.map((side) => {
         const rows = data[side] ?? [];
         const titleId = `cancel-reasons-${side}`;
         return (
           <section key={side} className="settings-section" aria-labelledby={titleId}>
             <div className="settings-section__head">
-              <h2 id={titleId} className="settings-section__title">{CANCELLATION_SIDE_LABELS[side]}</h2>
+              <h2 id={titleId} className="settings-section__title">{CANCELLATION_SIDE_LABELS[side]} {side === SIDES[0] && <HelpPopover>{CANCELLATION_LABELS.settingsLead}</HelpPopover>}</h2>
               <button type="button" className="btn-add" onClick={() => setDialog({ side, editing: null })}>
                 {CANCELLATION_LABELS.addReason}
               </button>
             </div>
             <div className="table-panel">
-              <div className="table-wrap">
+              <TableScrollArea >
                 <table className="settings-table settings-table--reasons">
                   <thead>
                     <tr>
@@ -116,7 +118,7 @@ export function CancellationReasonsTab() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </TableScrollArea>
             </div>
           </section>
         );

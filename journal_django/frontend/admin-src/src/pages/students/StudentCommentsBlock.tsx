@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { useState, type KeyboardEvent } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { Textarea } from '../../components/form/Textarea';
@@ -73,7 +74,7 @@ export default function StudentCommentsBlock({ studentId }: Props) {
         />
         <div className="comments__composer-foot">
           <span className="comments__hint">
-            {remaining <= 200 ? `Осталось ${remaining}` : 'Ctrl + Enter — отправить'}
+            {remaining <= 200 ? `Осталось ${remaining}` : <HelpPopover label="Как отправить комментарий">Ctrl + Enter — отправить</HelpPopover>}
           </span>
           <button
             type="button"

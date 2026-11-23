@@ -76,7 +76,6 @@ export function FilterPopover({ active, label, children, onOpen, onSubmit, onRes
           collisionPadding={16}
           // Панель растёт вправо от лупы (влево она перекрывала бы сайдбар); отступ
           // не даёт стрелке уехать в скруглённый угол, пока она указывает на лупу.
-          arrowPadding={12}
           aria-label={label}
           onOpenAutoFocus={(e) => {
             // Radix по умолчанию фокусирует первое поле, а Combobox на фокусе
@@ -98,7 +97,6 @@ export function FilterPopover({ active, label, children, onOpen, onSubmit, onRes
               <Button type="submit" variant="primary" iconLeft={<FilterSearchIcon />}>Искать</Button>
             </div>
           </form>
-          <Popover.Arrow className="filter-pop__arrow" width={16} height={8} />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

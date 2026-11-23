@@ -111,6 +111,8 @@ export function SelectInput({
         onClick={() => !disabled && (open ? close() : setOpen(true))}
         onKeyDown={onKey}
         disabled={disabled}
+        aria-label={rest['aria-label']}
+        aria-labelledby={rest['aria-labelledby']}
         aria-haspopup="listbox"
         aria-expanded={open}
       >

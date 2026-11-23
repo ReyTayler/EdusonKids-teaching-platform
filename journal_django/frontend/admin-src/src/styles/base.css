@@ -84,14 +84,15 @@ input:focus, textarea:focus, select:focus {
 .app-page {
   max-width: var(--content-max);
   margin: 0 auto;
-  /* Поля .wrap Eduson: 18px сверху, 60px снизу. */
-  padding: var(--page-pad-y) var(--page-pad-x) 60px;
+  /* Оставляем небольшой нижний отступ; таблицы учитывают его при замере
+     доступной высоты. Safe area защищает контент на мобильных устройствах. */
+  padding: var(--page-pad-y) var(--page-pad-x) max(var(--space-4), env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: var(--section-gap);
 }
 @media (max-width: 900px) {
-  .app-page { padding: var(--space-4) var(--space-4) var(--space-10); }
+  .app-page { padding: var(--space-4) var(--space-4) max(var(--space-4), env(safe-area-inset-bottom)); }
 }
 
 

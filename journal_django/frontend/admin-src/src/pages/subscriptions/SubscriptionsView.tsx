@@ -1,3 +1,4 @@
+import { TableScrollArea } from '../../components/table/TableScrollArea';
 import { useState } from 'react';
 import { useDirections, useDirectionMutations } from '../../hooks/useDirections';
 import { usePayments } from '../../hooks/usePayments';
@@ -54,7 +55,7 @@ export function SubscriptionsView() {
     /* Панель + горизонтальная прокрутка — как у остальных таблиц системы.
        Раньше здесь была голая <table> прямо на холсте. */
     <div className="table-panel">
-      <div className="table-wrap">
+      <TableScrollArea >
         <table className="data-table">
       <thead>
         <tr>
@@ -123,7 +124,7 @@ export function SubscriptionsView() {
         })}
           </tbody>
         </table>
-      </div>
+      </TableScrollArea>
     </div>
   );
 }

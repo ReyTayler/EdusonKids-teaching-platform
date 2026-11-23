@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { useState } from 'react';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { useLessonFull, useLessonMutations } from '../../hooks/useLessons';
@@ -153,8 +154,8 @@ export default function LessonDetailPage() {
                 <div>
                   {a.compensated && (
                     <span className="status-badge status-badge--info"
-                      title="Пропуск закрыт доп.уроком или сожжён — правка только через раздел «Доп.уроки»">
-                      Компенсирован
+                      >
+                      Компенсирован <HelpPopover>Пропуск закрыт доп.уроком или сожжён — правка только через раздел «Доп.уроки»</HelpPopover>
                     </span>
                   )}
                 </div>

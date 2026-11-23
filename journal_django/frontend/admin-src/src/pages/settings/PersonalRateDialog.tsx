@@ -120,15 +120,12 @@ export function PersonalRateDialog({ editing, onClose }: Props) {
           </button>
         </div>
       }
-    >
+      help={editing ? <>Изменения действуют с сегодняшнего дня, прошлые начисления не меняются.</> : undefined}>
       <div className="modal-form">
         {errors.general && <div className="field-error">{errors.general}</div>}
 
         {editing ? (
           <>
-            <p className="field-hint">
-              Изменения действуют с сегодняшнего дня, прошлые начисления не меняются.
-            </p>
             <Field label="Преподаватель" full>
               <TextInput value={editing.teacher_name} readOnly disabled aria-label="Преподаватель" />
             </Field>

@@ -40,12 +40,7 @@ export function RenewalUnassignedDialog({ onClose }: Props) {
       wide
       footer={<button type="button" className="btn-secondary" onClick={onClose}>Закрыть</button>}
     >
-      <p className="renewal-close-dialog__text">
-        Новички: занимаются, но сделки продления у них ещё не было ни разу.
-        Создайте сделку — она сразу встанет в нужную стадию по посещаемости и
-        балансу. Ученика, вернувшегося после ухода, здесь не будет: его сделку
-        нужно переоткрыть в разделе «Список» → «Показать закрытые».
-      </p>
+
       {isLoading ? (
         <div className="renewal-drawer__loading">Загружаем…</div>
       ) : (rows || []).length === 0 ? (

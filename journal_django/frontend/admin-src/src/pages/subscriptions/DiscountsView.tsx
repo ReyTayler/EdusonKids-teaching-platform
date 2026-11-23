@@ -1,3 +1,4 @@
+import { TableScrollArea } from '../../components/table/TableScrollArea';
 import { useState } from 'react';
 import { useDiscounts, useDiscountMutations } from '../../hooks/useDiscounts';
 import { useApiError } from '../../hooks/useApiError';
@@ -134,7 +135,7 @@ export function DiscountsView() {
       )}
 
       <div className="table-panel">
-        <div className="table-wrap">
+        <TableScrollArea >
         <table className="data-table">
         <thead>
           <tr>
@@ -200,7 +201,7 @@ export function DiscountsView() {
           })}
         </tbody>
         </table>
-        </div>
+        </TableScrollArea>
       </div>
     </>
   );

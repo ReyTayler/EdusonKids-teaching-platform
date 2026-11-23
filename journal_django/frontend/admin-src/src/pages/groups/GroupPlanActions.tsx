@@ -436,13 +436,11 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
             Применить
           </Button>
         }
-      >
-        <div className="schedule-form__hint">
-          Задаёт недельный НАБОР слотов (день + время) для всех будущих занятий,
+       help={<>Задаёт недельный НАБОР слотов (день + время) для всех будущих занятий,
           начиная с выбранного, и дату, с которой новое расписание действует.
           Можно добавлять и удалять слоты — так меняется и число занятий в
-          неделю. Преподавателя меняйте через «Сменить преподавателя».
-        </div>
+          неделю. Преподавателя меняйте через «Сменить преподавателя».</>}>
+
         <Field label="С какого занятия" required>
           <SelectInput
             value={pFromSeq}
@@ -589,22 +587,22 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
             Задать и сгенерировать план
           </Button>
         }
-      >
-        <div className="schedule-form__hint">
-          Недельный набор слотов (день + время) и дата начала занятий. После
-          сохранения план курса генерируется автоматически.
-        </div>
-        <Field label="Дата начала занятий" required>
+       help={<>Недельный набор слотов (день + время) и дата начала занятий. После
+          сохранения план курса генерируется автоматически.</>}>
+
+        <Field label="Дата начала занятий" required help={!!group.group_start_date && (
+            <>Дата начала уже закреплена за группой</>
+          )}>
           <DateInput
             value={ssDate}
             onChange={(e) => setSsDate(e.target.value)}
             disabled={!!group.group_start_date}
           />
-          {!!group.group_start_date && (
-            <span className="field-hint">Дата начала уже закреплена за группой</span>
-          )}
+
         </Field>
-        <Field label="Слоты (день + время)" required>
+        <Field label="Слоты (день + время)" required help={!group.is_individual && (
+              <>Групповой формат — один слот в неделю</>
+            )}>
           <div className="slots-block">
             <div id="set-schedule-slots-list">
               {ssSlots.map((s, i) => (
@@ -631,9 +629,7 @@ const GroupPlanActions = forwardRef<GroupPlanActionsHandle, Props>(function Grou
             {canAddSsSlot && (
               <button type="button" className="slot-add" onClick={addSsSlot}>+ Добавить слот</button>
             )}
-            {!group.is_individual && (
-              <span className="field-hint">Групповой формат — один слот в неделю</span>
-            )}
+
           </div>
         </Field>
       </Dialog>

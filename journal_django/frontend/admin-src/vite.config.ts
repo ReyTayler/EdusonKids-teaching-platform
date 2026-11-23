@@ -21,6 +21,7 @@ export default defineConfig({
     },
   },
   resolve: {
+    dedupe: ['@radix-ui/react-dismissable-layer', '@radix-ui/react-focus-scope'],
     alias: {
       '@': path.resolve(__dirname, 'src'),
     },

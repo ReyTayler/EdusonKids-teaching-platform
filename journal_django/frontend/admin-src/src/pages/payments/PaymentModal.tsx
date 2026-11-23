@@ -347,18 +347,13 @@ export function PaymentModal({ open, onClose, studentId, directionId }: Props) {
         {renderBlocksArea()}
 
         {dirId && !noCapacity && (
-          <Field label="">
+          <Field label="" help={isExtra && <>Оплата за доп.урок сверх курса — в это направление, но без учёта лимита. Для отдельных уроков удобнее режим «Поштучно».</>}>
             <Checkbox
               checked={isExtra}
               onChange={(e) => { setIsExtra(e.target.checked); clearError('count'); }}
               label="Доплата сверх курса (мимо лимита)"
             />
-            {isExtra && (
-              <div className="payment-form__hint" style={{ fontStyle: 'italic' }}>
-                Оплата за доп.урок сверх курса — в это направление, но без учёта лимита.
-                Для отдельных уроков удобнее режим «Поштучно».
-              </div>
-            )}
+
           </Field>
         )}
 
@@ -454,13 +449,11 @@ export function PaymentModal({ open, onClose, studentId, directionId }: Props) {
           )}
         </Field>
 
-        <Field label={`Скидки${selectedDiscounts.length > 0 ? ` (применено ${selectedDiscounts.length})` : ''}`}>
-          {!discountsApplicable ? (
-            <div className="payment-form__hint" style={{ fontStyle: 'italic' }}>
-              Скидки применяются только при покупке 1 абонемента за раз.
-              {count > 1 && ' Если нужно несколько со скидками — внеси оплату несколько раз.'}
-            </div>
-          ) : (
+        <Field label={`Скидки${selectedDiscounts.length > 0 ? ` (применено ${selectedDiscounts.length})` : ''}`} help={!discountsApplicable ? <>
+          Скидки применяются только при покупке 1 абонемента за раз.
+          {count > 1 && ' Если нужно несколько со скидками — внеси оплату несколько раз.'}
+        </> : !discounts.data?.length && <>Нет настроенных скидок. Добавь их в разделе «Абонементы → Скидки».</>}>
+          {!discountsApplicable ? <span className="text-muted">Недоступно для выбранной оплаты</span> : (
             <div className="discounts-picker">
               {discountIds.map((id, idx) => {
                 const usedIds = new Set(discountIds.filter((_, i) => i !== idx));
@@ -504,9 +497,7 @@ export function PaymentModal({ open, onClose, studentId, directionId }: Props) {
                 const availableCount = (discounts.data || []).filter((d) => !usedIds.has(d.id)).length;
                 if (availableCount === 0) {
                   return discountIds.length === 0 ? (
-                    <div className="payment-form__hint" style={{ fontStyle: 'italic' }}>
-                      Нет настроенных скидок. Добавь их в разделе «Абонементы → Скидки».
-                    </div>
+                    <span className="text-muted">Нет настроенных скидок</span>
                   ) : null;
                 }
                 return (

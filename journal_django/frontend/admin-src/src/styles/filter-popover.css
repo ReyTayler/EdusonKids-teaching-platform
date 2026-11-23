@@ -33,7 +33,6 @@
 .filter-pop__panel:focus { outline: none; }
 /* Обёртка Radix создаёт stacking context — z-index поднимаем на ней. */
 [data-radix-popper-content-wrapper]:has(> .filter-pop__panel) { z-index: var(--z-popover); }
-.filter-pop__arrow { fill: var(--accent); }
 .filter-pop__form { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 .filter-pop__fields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
 .filter-pop__actions { display: flex; justify-content: flex-end; }

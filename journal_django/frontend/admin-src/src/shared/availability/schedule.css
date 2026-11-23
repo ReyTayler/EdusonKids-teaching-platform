@@ -61,7 +61,10 @@
 .sched-cell { height: var(--sched-row-h); border-bottom: 1px solid var(--border2); cursor: pointer; background-color: var(--bg4); }
 .sched-cell:nth-child(2n) { border-bottom-color: var(--border); }
 .sched-cell.is-open { background-color: var(--bg2); }
-.sched-cell:not(.is-locked):hover { background-image: linear-gradient(var(--accent-soft-h), var(--accent-soft-h)); }
+/* Наведение: полупрозрачный оттенок акцента поверх фона (--avail-hover) + тонкая внутренняя рамка; раскладка не меняется */
+@media (hover: hover) {
+  .sched-cell:not(.is-locked):hover { background-image: linear-gradient(var(--avail-hover), var(--avail-hover)); box-shadow: inset 0 0 0 1px var(--avail-hover-ring); }
+}
 .sched-cell.is-locked { cursor: default; }
 .sched-cell:focus-visible { outline-offset: -2px; position: relative; z-index: 3; }
 .sched-window-label { position: absolute; left: var(--space-1); right: 0; font-size: var(--fs-2xs); font-variant-numeric: tabular-nums; color: var(--text2); pointer-events: none; overflow: hidden; white-space: nowrap; line-height: 24px; }

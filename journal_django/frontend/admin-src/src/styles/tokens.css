@@ -147,6 +147,8 @@
   /* График работы: «окно» заметнее «закрыто» в обеих темах (в тёмной --bg2 темнее --bg3, поэтому своя пара). */
   --avail-open:   var(--bg2);
   --avail-closed: var(--bg3);
+  --avail-hover:  color-mix(in oklab, var(--accent) 9%, transparent);   /* наведение на ячейку графика: полупрозрачный, виден и на белом, и на сером */
+  --avail-hover-ring: color-mix(in oklab, var(--accent) 28%, transparent);
   --on-accent:     #ffffff;
 
   /* Статусы — тройки ink / bg / line (рецепт бейджа: заливка + рамка + тёмный
@@ -353,6 +355,8 @@
   --accent-soft-h: #292929;
   --avail-open:   var(--bg4);
   --avail-closed: var(--bg);
+  --avail-hover:  color-mix(in oklab, var(--accent) 12%, transparent);
+  --avail-hover-ring: color-mix(in oklab, var(--accent) 32%, transparent);
   --on-accent:     #000000;
 
   --ok:   #3dd9a0;  --ok-bg:   #0d2a21;  --ok-line:   #14553f;

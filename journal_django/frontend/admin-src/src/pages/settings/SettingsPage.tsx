@@ -6,12 +6,27 @@ import { PersonalRatesSection } from './PersonalRatesSection';
 import { CancellationReasonsTab } from './CancellationReasonsTab';
 import { LessonsSettingsTab } from './LessonsSettingsTab';
 import { CANCELLATION_LABELS, SETTINGS_TAB_LABELS } from '../../lib/labels';
+import './motivation.css';
 
 function MotivationTab() {
+  const [params, setParams] = useSearchParams();
+  const selected = params.get('motivation') || 'group';
+  const items: TabItem[] = [
+    { value: 'group', label: 'Групповые занятия', content: <SchoolRatesSection format="group" /> },
+    { value: 'individual', label: 'Индивидуальные занятия', content: <SchoolRatesSection format="individual" /> },
+    { value: 'personal', label: 'Персональные ставки', content: <PersonalRatesSection /> },
+  ];
   return (
-    <div className="settings-tab">
-      <SchoolRatesSection />
-      <PersonalRatesSection />
+    <div className="motivation-workspace">
+      <div className="motivation-intro"><h2>Правила оплаты преподавателей</h2>
+        <p>Ставки школы и персональные договорённости с преподавателями</p></div>
+      <Tabs className="motivation-nav" items={items}
+        value={items.some((item) => item.value === selected) ? selected : 'group'}
+        onChange={(value) => {
+          const next = new URLSearchParams(params);
+          if (value === 'group') next.delete('motivation'); else next.set('motivation', value);
+          setParams(next, { replace: true });
+        }} />
     </div>
   );
 }

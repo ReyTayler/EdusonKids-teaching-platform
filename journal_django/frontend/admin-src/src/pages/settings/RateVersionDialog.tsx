@@ -1,3 +1,4 @@
+import { HelpPopover } from '../../components/ui/HelpPopover';
 import { useState } from 'react';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/form/Field';
@@ -9,12 +10,11 @@ import { DirTag } from '../../components/ui/DirTag';
 import { useToast } from '../../components/ui/Toast';
 import { useRateVersionMutations } from '../../hooks/useMotivation';
 import { CANCEL_MODE_LABELS, PENALTY_MODE_LABELS } from '../../lib/labels';
-import { fmtRub } from '../../lib/format';
+import { fmtRub, todayMSK } from '../../lib/format';
 import type {
   CancelMode, PenaltyMode, RateVersion, RateVersionPayload, RateVersionsResponse,
 } from '../../lib/types';
-import { todayMSK } from '../../lib/format';
-import { norm, parseServerErrors, savedMessage, toField, type ServerErrors } from './motivationFormat';
+import { norm, parseServerErrors, savedMessage, toField, cancelText, penaltyText, type ServerErrors } from './motivationFormat';
 
 interface Props {
   directions: RateVersionsResponse['directions'];
@@ -92,128 +92,109 @@ export function RateVersionDialog({ directions, base, editing, defaultDate, onCl
   };
 
   const fe = errors.fields;
-  return (
-    <Dialog
-      open
-      wide
-      onOpenChange={(o) => !o && !pending && onClose()}
-      title={editing ? 'Исправить ставки' : 'Изменить ставки с даты'}
-      footer={
-        <div className="settings-actions">
-          <button type="button" className="btn-cancel" onClick={onClose} disabled={pending}>Отмена</button>
-          <button type="button" className="btn-add" onClick={submit} disabled={pending}>
-            {pending ? 'Сохраняем…' : 'Сохранить'}
-          </button>
-        </div>
-      }
-    >
-      <div className="modal-form">
-        {errors.general && <div className="field-error">{errors.general}</div>}
-
-        <Field label="Действует с" required error={fe.effective_from} full>
-          <DateInput value={date} min={todayMSK()} onChange={(e) => setDate(e.target.value)} />
-          <p className="field-hint">Начисления до этой даты не изменятся.</p>
-        </Field>
-
-        <div className="settings-block">
-          <div className="modal-section-label">Ставка за урок, ₽</div>
-          <div className="table-wrap">
-            <table className="settings-table">
-              <thead>
-                <tr><th>Направление</th><th>Групповой урок</th><th>Индивидуальный урок</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>По умолчанию</td>
-                  <td>
-                    <Field label="" error={fe.group_rate}>
-                      <NumberInput min={0} step="0.01" value={groupRate}
-                        aria-label="Групповой урок, по умолчанию"
-                        onChange={(e) => setGroupRate(e.target.value)} />
-                    </Field>
-                  </td>
-                  <td>
-                    <Field label="" error={fe.individual_rate}>
-                      <NumberInput min={0} step="0.01" value={indRate}
-                        aria-label="Индивидуальный урок, по умолчанию"
-                        onChange={(e) => setIndRate(e.target.value)} />
-                    </Field>
-                  </td>
-                </tr>
-                {directions.map((d) => (
-                  <tr key={d.id}>
-                    <td><DirTag name={d.name} color={d.color} /></td>
-                    <td>
-                      <div className="field">
-                        <NumberInput min={0} step="0.01" value={dirRates[d.id]?.g ?? ''}
-                          aria-label={`${d.name}: групповой урок`}
-                          placeholder={groupRate ? `как у всех (${fmtRub(norm(groupRate))})` : 'как по умолчанию'}
-                          onChange={(e) => setDir(d.id, 'g', e.target.value)} />
-                      </div>
-                    </td>
-                    <td>
-                      <div className="field">
-                        <NumberInput min={0} step="0.01" value={dirRates[d.id]?.i ?? ''}
-                          aria-label={`${d.name}: индивидуальный урок`}
-                          placeholder={indRate ? `как у всех (${fmtRub(norm(indRate))})` : 'как по умолчанию'}
-                          onChange={(e) => setDir(d.id, 'i', e.target.value)} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {directions.map((d, i) => errors.directions[i] && (
-            <div key={d.id} className="field-error">{d.name}: {errors.directions[i]}</div>
-          ))}
-          <p className="field-hint">Пустое поле направления — действует ставка по умолчанию.</p>
-        </div>
-
-        <div className="settings-block">
-          <div className="modal-section-label">Отмена урока</div>
-          <div className="settings-inline">
-            <div className="segmented" role="group" aria-label="Как считать оплату за отмену">
-              {(Object.keys(CANCEL_MODE_LABELS) as CancelMode[]).map((m) => (
-                <button key={m} type="button"
-                  className={`segmented__btn${cancelMode === m ? ' is-active' : ''}`}
-                  aria-pressed={cancelMode === m}
-                  onClick={() => setCancelMode(m)}>
-                  {CANCEL_MODE_LABELS[m]}
-                </button>
-              ))}
-            </div>
-            <Field label="" error={fe.cancel_value}>
-              <NumberInput min={0} step="0.01" value={cancelValue}
-                aria-label={cancelMode === 'percent' ? 'Процент от ставки' : 'Сумма за отмену, ₽'}
-                onChange={(e) => setCancelValue(e.target.value)} />
-            </Field>
-          </div>
-        </div>
-
-        <div className="settings-block">
-          <div className="modal-section-label">Штраф за отчёт не в день урока</div>
-          <Checkbox label="Включён" checked={penaltyOn} onChange={(e) => setPenaltyOn(e.target.checked)} />
-          {penaltyOn && (
-            <div className="settings-inline">
-              <Field label="Сумма, ₽" error={fe.penalty_amount}>
-                <NumberInput min={0} step="0.01" value={penaltyAmount}
-                  onChange={(e) => setPenaltyAmount(e.target.value)} />
-              </Field>
-              <Field label="Как считать" error={fe.penalty_mode}>
-                <SelectInput options={PENALTY_OPTIONS} value={penaltyMode}
-                  onChange={(e) => setPenaltyMode(e.target.value as PenaltyMode)} />
-              </Field>
-            </div>
-          )}
-        </div>
-
-        {editing && (
-          <p className="field-hint field-hint--warn">
-            Версия ещё не начала действовать, поэтому начисления за прошлое не изменятся.
-          </p>
-        )}
+  const summary = {
+    cancel_mode: cancelMode, cancel_value: norm(cancelValue), penalty_enabled: penaltyOn,
+    penalty_mode: penaltyMode, penalty_amount: norm(penaltyAmount) || '0',
+  };
+  const changes: { label: string; before: string; after: string }[] = [];
+  if (base) {
+    if (Number(groupRate) !== Number(base.group_rate)) changes.push({ label: 'Групповой урок', before: fmtRub(base.group_rate), after: groupRate ? fmtRub(groupRate) : '—' });
+    if (Number(indRate) !== Number(base.individual_rate)) changes.push({ label: 'Индивидуальный урок', before: fmtRub(base.individual_rate), after: indRate ? fmtRub(indRate) : '—' });
+    if (cancelText(summary) !== cancelText(base)) changes.push({ label: 'Компенсация отмены', before: cancelText(base), after: cancelText(summary) });
+    if (penaltyText(summary) !== penaltyText(base)) changes.push({ label: 'Поздний отчёт', before: penaltyText(base), after: penaltyText(summary) });
+  }
+  const changedDirections = directions.filter((direction) => {
+    const old = base?.directions.find((item) => item.direction_id === direction.id);
+    const same = (a: string, b: string | null | undefined) => !a && b == null || a !== '' && b != null && Number(a) === Number(b);
+    return !same(norm(dirRates[direction.id]?.g ?? ''), old?.group_rate) || !same(norm(dirRates[direction.id]?.i ?? ''), old?.individual_rate);
+  });
+  return <Dialog open wide className="motivation-editor"
+    onOpenChange={(open) => !open && !pending && onClose()}
+    title={editing ? 'Исправить ставки школы' : 'Ставки школы с даты'}
+    footer={<div className="motivation-editor__footer"><span>Общая версия для групповых и индивидуальных занятий</span>
+      <div className="settings-actions">
+        <button type="button" className="btn-cancel" onClick={onClose} disabled={pending}>Отмена</button>
+        <button type="button" className="btn-add" onClick={submit} disabled={pending}>{pending ? 'Сохраняем…' : 'Сохранить'}</button>
       </div>
-    </Dialog>
-  );
+    </div>}>
+    <div className="motivation-editor__layout">
+      <fieldset className="motivation-editor__fields" disabled={pending}>
+        {errors.general && <div role="alert" className="motivation-form-error">{errors.general}</div>}
+        <section className="motivation-form-section" aria-labelledby="rate-period-heading">
+          <h3 id="rate-period-heading">Период действия</h3>
+          <div className="motivation-period-field">
+            <Field label="Действует с" help="Ставка выбирается по дате занятия. Начисления за предыдущие даты не изменятся." required error={fe.effective_from}>
+              <DateInput aria-label="Действует с" value={date} min={todayMSK()} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+
+          </div>
+        </section>
+        <section className="motivation-form-section" aria-labelledby="rate-default-heading">
+          <h3 id="rate-default-heading">Оплата занятий <HelpPopover>Фиксированная сумма за занятие. Длительность и число учеников не меняют базовую ставку.</HelpPopover></h3>
+          <div className="motivation-rate-field"><div><strong>Групповой урок</strong><span>По умолчанию · за занятие</span></div>
+            <Field label="" error={fe.group_rate}><NumberInput min={0} step="0.01" value={groupRate}
+              aria-label="Групповой урок, по умолчанию" onChange={(e) => setGroupRate(e.target.value)} /></Field>
+          </div>
+          <div className="motivation-rate-field"><div><strong>Индивидуальный урок</strong><span>По умолчанию · за занятие</span></div>
+            <Field label="" error={fe.individual_rate}><NumberInput min={0} step="0.01" value={indRate}
+              aria-label="Индивидуальный урок, по умолчанию" onChange={(e) => setIndRate(e.target.value)} /></Field>
+          </div>
+        </section>
+        <details className="motivation-directions" open={Object.keys(errors.directions).length ? true : undefined}>
+          <summary>Ставки по направлениям <span>{directions.length}</span></summary>
+          <span className="help-label">По направлениям <HelpPopover>Пустое поле — ставка по умолчанию для соответствующего формата.</HelpPopover></span>
+          {directions.map((direction, index) => <div className="motivation-direction" key={direction.id}>
+            <DirTag name={direction.name} color={direction.color} />
+            <div className="motivation-direction__fields">
+              <Field label="Групповой урок, ₽"><NumberInput min={0} step="0.01" value={dirRates[direction.id]?.g ?? ''}
+                aria-label={`${direction.name}: групповой урок`} placeholder={groupRate ? toField(groupRate) : 'По умолчанию'}
+                onChange={(e) => setDir(direction.id, 'g', e.target.value)} /></Field>
+              <Field label="Индивидуальный урок, ₽"><NumberInput min={0} step="0.01" value={dirRates[direction.id]?.i ?? ''}
+                aria-label={`${direction.name}: индивидуальный урок`} placeholder={indRate ? toField(indRate) : 'По умолчанию'}
+                onChange={(e) => setDir(direction.id, 'i', e.target.value)} /></Field>
+            </div>
+            {errors.directions[index] && <p role="alert" className="field-error">{direction.name}: {errors.directions[index]}</p>}
+          </div>)}
+          {!directions.length && <p className="motivation-inline-note">Направлений пока нет. Для новых направлений будет действовать ставка по умолчанию.</p>}
+        </details>
+        <section className="motivation-form-section" aria-labelledby="rate-cancel-heading">
+          <h3 id="rate-cancel-heading">Компенсация отмены <HelpPopover>Для отмен, по которым предусмотрена компенсация преподавателю.</HelpPopover></h3>
+          <div className="motivation-conditional-fields">
+            <Field label="Как считать"><SelectInput aria-label="Как считать оплату за отмену" value={cancelMode}
+              options={(Object.keys(CANCEL_MODE_LABELS) as CancelMode[]).map((value) => ({ value, label: CANCEL_MODE_LABELS[value] }))}
+              onChange={(e) => setCancelMode(e.target.value as CancelMode)} /></Field>
+            <Field label={cancelMode === 'percent' ? 'Процент от ставки' : 'Сумма, ₽'} error={fe.cancel_value}>
+              <NumberInput min={0} max={cancelMode === 'percent' ? 100 : undefined} step="0.01" value={cancelValue}
+                aria-label={cancelMode === 'percent' ? 'Процент от ставки' : 'Сумма за отмену, ₽'}
+                onChange={(e) => setCancelValue(e.target.value)} /></Field>
+          </div>
+        </section>
+        <section className="motivation-form-section" aria-labelledby="rate-penalty-heading">
+          <h3 id="rate-penalty-heading">Поздний отчёт <HelpPopover>Штраф применяется только к позднему отчёту преподавателя из кабинета.</HelpPopover></h3>
+          <Checkbox label="Штрафовать за отчёт позже дня занятия" checked={penaltyOn} onChange={(e) => setPenaltyOn(e.target.checked)} />
+          {penaltyOn && <div className="motivation-conditional-fields">
+            <Field label="Как считать" error={fe.penalty_mode}><SelectInput aria-label="Как начислять штраф" options={PENALTY_OPTIONS} value={penaltyMode}
+              onChange={(e) => setPenaltyMode(e.target.value as PenaltyMode)} /></Field>
+            <Field label="Сумма, ₽" error={fe.penalty_amount}><NumberInput min={0} step="0.01" value={penaltyAmount}
+              aria-label="Сумма штрафа, ₽" onChange={(e) => setPenaltyAmount(e.target.value)} /></Field>
+          </div>}
+
+        </section>
+      </fieldset>
+      <aside className="motivation-preview" aria-label="Проверка новых условий">
+        <h3>Новые условия <HelpPopover>Проверьте суммы перед сохранением. Суммы за занятие. Для направлений с собственной ставкой действуют их значения; затем учитываются персональные ставки.</HelpPopover></h3>
+        <div className="motivation-example"><span>Групповой урок</span><strong>{groupRate ? fmtRub(groupRate) : '—'}</strong></div>
+        <div className="motivation-example"><span>Индивидуальный урок</span><strong>{indRate ? fmtRub(indRate) : '—'}</strong></div>
+
+        <div className="motivation-preview__rule"><span>Компенсация отмены</span><strong>{cancelValue ? cancelText(summary) : '—'}</strong></div>
+        <div className="motivation-preview__rule"><span>Поздний отчёт</span><strong>{penaltyText(summary)}</strong></div>
+        <div className="motivation-changes"><h3>Что изменится</h3>
+          {changes.length > 0 && <ul>{changes.map((item) => <li key={item.label}><span>{item.label}</span><div><del>{item.before}</del> → <strong>{item.after}</strong></div></li>)}</ul>}
+          {changedDirections.length > 0 && <p>Изменены ставки направлений: {changedDirections.map((item) => item.name).join(', ')}.</p>}
+          {!changes.length && !changedDirections.length && <p>{base ? 'Суммы совпадают с выбранной версией.' : 'Будет создана первая версия ставок школы.'}</p>}
+          <p>{editing ? 'Исправляется будущая версия.' : 'Будет сохранена новая версия с указанной даты.'} Ручные суммы сохраняются при пересчёте.</p>
+        </div>
+      </aside>
+    </div>
+  </Dialog>;
 }

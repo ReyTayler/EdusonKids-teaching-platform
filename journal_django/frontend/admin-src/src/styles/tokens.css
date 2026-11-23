@@ -244,6 +244,11 @@
   --selection-bg: #000000;
   --selection-fg: #ffffff;
 
+  /* Настройка мотивации: редактор и колонка проверки условий. */
+  --motivation-width: 1120px;
+  --motivation-preview-width: 320px;
+  --motivation-amount-width: 148px;
+
   /* Раскладка страницы.
      --content-max: потолок 1560px как у .wrap Eduson (статья базы знаний держит свой
      --kb-doc-width). --section-gap — вертикальный ритм между секциями. */

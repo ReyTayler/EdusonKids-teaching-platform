@@ -137,6 +137,7 @@ INSTALLED_APPS = [
     'apps.payroll',
     'apps.dashboard',
     'apps.accounts',
+    'apps.archive',
     'apps.teacher_spa',
     'apps.scheduling',
     'apps.availability',

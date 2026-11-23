@@ -10,6 +10,7 @@ from django.urls import include, path
 from apps.core.views import HealthView
 
 urlpatterns = [
+    path('api/admin/archive', include('apps.archive.urls')),
     path('health', HealthView.as_view(), name='health'),
     # Phase 7 — auth (/api/auth/* — ПЕРВЫМ, как в Express: /api/auth → /api/admin → /api)
     path('api/auth', include('apps.auth_app.urls')),

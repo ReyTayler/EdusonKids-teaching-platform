@@ -1,33 +1,17 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { Teacher, Group, Direction, Paginated } from '../lib/types';
+import type { ArchiveFilter, ArchivePayload } from '../lib/types';
+interface Params { q: string; entity_type: ArchiveFilter; page: number; page_size: number }
 
-export interface ArchivePayload {
-  teachers: Teacher[];
-  groups: Group[];
-  directions: Direction[];
-}
-
-export function useArchive() {
+export function useArchive(params: Params) {
   return useQuery({
-    queryKey: ['archive'],
-    queryFn: async (): Promise<ArchivePayload> => {
-      // teachers/directions отдают ПЛОСКИЙ массив и понимают include_inactive=1.
-      // groups — ПАГИНИРОВАННЫЙ ({rows,total,...}) и include_inactive НЕ знает: у него
-      // серверный фильтр filter[active]. Поэтому берём архивные напрямую сервером
-      // (filter[active]=false) и распаковываем .rows. Раньше здесь groups
-      // типизировались как Group[] и вызывался groups.filter(...) → TypeError на
-      // объекте → весь Promise.all падал → архив пустой целиком.
-      const [teachers, groupsPage, directions] = await Promise.all([
-        api<Teacher[]>('GET', '/api/admin/teachers?include_inactive=1'),
-        api<Paginated<Group>>('GET', '/api/admin/groups?filter[active]=false&page_size=500'),
-        api<Direction[]>('GET', '/api/admin/directions?include_inactive=1'),
-      ]);
-      return {
-        teachers:   teachers.filter((r) => r.active === false),
-        groups:     groupsPage.rows,   // сервер уже вернул только active=false
-        directions: directions.filter((r) => r.active === false),
-      };
+    queryKey: ['archive', params],
+    queryFn: () => {
+      const qs = new URLSearchParams({ q: params.q, entity_type: params.entity_type,
+        page: String(params.page), page_size: String(params.page_size) });
+      return api<ArchivePayload>('GET', `/api/admin/archive?${qs}`);
     },
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   });
 }

@@ -883,3 +883,17 @@ export interface FreeWindowsTeacher {
   days: Record<string, [string, string][]> | null;
 }
 export interface FreeWindowsResponse { teachers: FreeWindowsTeacher[] }
+
+// ===== Archive =====
+export type ArchiveEntityType = 'teacher' | 'group' | 'direction';
+export type ArchiveFilter = 'all' | ArchiveEntityType;
+export interface ArchiveRow {
+  id: number;
+  name: string;
+  entity_type: ArchiveEntityType;
+  description: string;
+}
+export interface ArchivePayload extends Paginated<ArchiveRow> {
+  counts: Record<ArchiveEntityType, number>;
+  archive_counts: Record<ArchiveEntityType, number>;
+}

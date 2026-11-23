@@ -569,3 +569,11 @@ export const PERSONAL_RATE_KIND_LABELS: Record<PersonalRateKind, string> = {
   plus_fixed:   'Надбавка, ₽',
   plus_percent: 'Надбавка, %',
 };
+
+export const ARCHIVE_ENTITY_LABELS = {
+  teacher: 'Преподаватель', group: 'Группа', direction: 'Направление',
+} as const;
+
+export const ARCHIVE_FILTER_LABELS = {
+  all: 'Все записи', teacher: 'Преподаватели', group: 'Группы', direction: 'Направления',
+} as const;

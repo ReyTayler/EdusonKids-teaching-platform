@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Occurrence } from '../calendar/types';
 import { dayMonth } from '../calendar/lib';
-import { DOW_SHORT, GRID_START_MIN, SLOT_COUNT, SLOT_MIN, WEEK_DOW, slotLabel, toMinutes } from './grid';
+import { DOW_SHORT, GRID_START_MIN, SLOT_COUNT, SLOT_MIN, WEEK_DOW, slotLabel, slotsToIntervals, toMinutes } from './grid';
 
 /** Высота строки (30 минут) — час = 48 px. Держать в синхроне с запасным значением --sched-row-h в schedule.css. */
 const ROW_H = 24;
@@ -35,8 +35,6 @@ export interface ScheduleGridProps {
   locked: boolean;
   /** Показывать кнопку «вернуть к шаблону» (нужны права на запись). */
   canClear: boolean;
-  /** Есть несохранённые правки: сброс дня их не увидит, а следующее «Сохранить» вернёт исключение. */
-  dirty: boolean;
   /** Идёт запрос — повторные действия отключены. */
   busy: boolean;
   onSet: (col: number, slot: number, value: boolean) => void;
@@ -46,10 +44,13 @@ export interface ScheduleGridProps {
 interface TapStart { col: number; slot: number; x: number; y: number; id: number }
 
 export function ScheduleGrid({
-  masks, dates, isoDates, todayIso, overrideDates, lessons, locked, canClear, dirty, busy, onSet, onClearDay,
+  masks, dates, isoDates, todayIso, overrideDates, lessons, locked, canClear, busy, onSet, onClearDay,
 }: ScheduleGridProps) {
+  const [focusCell, setFocusCell] = useState({ col: 0, slot: 18 });
+  const [selection, setSelection] = useState<{ col: number; start: number; end: number; value: boolean } | null>(null);
   const painting = useRef(false);
   const paintValue = useRef(true);
+  const lastPaint = useRef<{ col: number; slot: number } | null>(null);
   const tap = useRef<TapStart | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
@@ -70,7 +71,7 @@ export function ScheduleGrid({
 
   // Конец жеста ловим на window: отпускание за пределами сетки тоже должно завершить закраску.
   useEffect(() => {
-    const stop = () => { painting.current = false; tap.current = null; };
+    const stop = () => { painting.current = false; tap.current = null; lastPaint.current = null; setSelection(null); };
     const move = (e: PointerEvent) => {
       pointer.current = { x: e.clientX, y: e.clientY, buttons: e.buttons, type: e.pointerType };
     };
@@ -99,7 +100,19 @@ export function ScheduleGrid({
     }
     const target = Math.max(0, Math.min(DEFAULT_FOCUS_MIN, first) - 60);
     el.scrollTop = (target / SLOT_MIN) * ROW_H;
+    setFocusCell({ col: Math.max(0, isoDates?.findIndex((d) => d >= todayIso) ?? 0), slot: Math.min(SLOT_COUNT - 1, Math.floor(Math.min(DEFAULT_FOCUS_MIN, first) / SLOT_MIN)) });
   }, [scrollKey]);
+
+  const paintCell = (col: number, slot: number) => {
+    const { locked: lk, isoDates: iso, todayIso: today, onSet: set } = latest.current;
+    if (lk || (iso && iso[col] < today)) return;
+    const previous = lastPaint.current;
+    const start = previous?.col === col ? previous.slot : slot;
+    // Быстрый жест может перескочить несколько получасовых ячеек.
+    for (let i = Math.min(start, slot); i <= Math.max(start, slot); i++) set(col, i, paintValue.current);
+    lastPaint.current = { col, slot };
+    setSelection((prev) => prev?.col === col ? { ...prev, end: slot } : { col, start: slot, end: slot, value: paintValue.current });
+  };
 
   // Протяжка у края: курсор неподвижен, а сетка уезжает — pointerenter не приходит,
   // поэтому ячейку под курсором находим сами через elementFromPoint.
@@ -127,8 +140,7 @@ export function ScheduleGrid({
         const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-col][data-slot]');
         if (cell) {
           const c = Number(cell.dataset.col);
-          const { isoDates: iso, todayIso: today, locked: lk, onSet: set } = latest.current;
-          if (!lk && !(iso != null && iso[c] < today)) set(c, Number(cell.dataset.slot), paintValue.current);
+          paintCell(c, Number(cell.dataset.slot));
         }
       }
     }
@@ -145,6 +157,9 @@ export function ScheduleGrid({
 
   return (
     <div className="sched-wrap" ref={wrapRef}>
+      {selection && <div className="sched-selection" role="status"><span>
+        {DOW_SHORT[WEEK_DOW[selection.col]]} {slotLabel(Math.min(selection.start, selection.end))}–{slotLabel(Math.max(selection.start, selection.end) + 1)} · {((Math.abs(selection.end - selection.start) + 1) / 2).toLocaleString('ru-RU')} ч · {selection.value ? 'Рабочее время' : 'Нерабочее время'}
+      </span></div>}
       <div className="sched-head" ref={headRef}>
         <div className="sched-corner" />
         {WEEK_DOW.map((dow, c) => {
@@ -159,26 +174,22 @@ export function ScheduleGrid({
                   <div className="sched-col-date">{dates[c].getUTCDate()}</div>
                   <div className="sched-col-tools">
                   {hasOverride && (
-                    <span
-                      className="sched-dot"
-                      role="img"
-                      aria-label="День отличается от шаблона"
-                      title="День отличается от шаблона"
-                    />
+                    <span className="sched-day-badge" title="Для этой даты действует график, отличный от обычного">Изменён</span>
                   )}
                   {canReset && (
                     <button
                       type="button"
                       className="sched-reset"
-                      title={dirty ? 'Сначала сохраните или отмените изменения' : 'Вернуть день к шаблону'}
+                      title="Вернуть обычный график (применится после сохранения)"
                       aria-label={`Вернуть день ${dayMonth(dates[c])} к шаблону`}
-                      disabled={dirty || busy}
+                      disabled={busy}
                       onClick={() => onClearDay(iso!)}
                     >
                       ↺
                     </button>
                   )}
                   </div>
+                  {iso! < todayIso && <span className="sched-past">Просмотр</span>}
                 </>
               )}
             </div>
@@ -217,7 +228,39 @@ export function ScheduleGrid({
                   data-col={c}
                   data-slot={i}
                   aria-pressed={open}
-                  aria-label={`${DOW_SHORT[dow]} ${slotLabel(i)}, ${open ? 'открыто' : 'закрыто'}`}
+                  aria-label={`${DOW_SHORT[dow]}${dates ? ` ${dayMonth(dates[c])}` : ''} ${slotLabel(i)}–${slotLabel(i + 1)}, ${open ? 'рабочее время' : 'нерабочее время'}${lockedCol ? ', только просмотр' : ''}`}
+                  title={`${DOW_SHORT[dow]} ${slotLabel(i)}–${slotLabel(i + 1)}`}
+                  tabIndex={focusCell.col === c && focusCell.slot === i ? 0 : -1}
+                  onFocus={() => setFocusCell({ col: c, slot: i })}
+                  onKeyDown={(e) => {
+                    if (e.altKey || e.ctrlKey || e.metaKey) return;
+                    if (e.key === ' ' || e.key === 'Enter') {
+                      e.preventDefault();
+                      if (!lockedCol && !e.repeat) onSet(c, i, !open);
+                      return;
+                    }
+                    let col = c, slot = i;
+                    if (e.key === 'ArrowUp') slot--;
+                    else if (e.key === 'ArrowDown') slot++;
+                    else if (e.key === 'ArrowLeft') col--;
+                    else if (e.key === 'ArrowRight') col++;
+                    else if (e.key === 'Home') slot = 0;
+                    else if (e.key === 'End') slot = SLOT_COUNT - 1;
+                    else return;
+                    e.preventDefault();
+                    col = Math.max(0, Math.min(6, col));
+                    slot = Math.max(0, Math.min(SLOT_COUNT - 1, slot));
+                    const cell = wrapRef.current?.querySelector<HTMLElement>(`[data-col="${col}"][data-slot="${slot}"]`);
+                    cell?.focus({ preventScroll: true });
+                    const wrap = wrapRef.current;
+                    if (wrap && cell) {
+                      const top = cell.getBoundingClientRect().top;
+                      const bounds = wrap.getBoundingClientRect();
+                      const headerH = headRef.current?.offsetHeight ?? 0;
+                      if (top < bounds.top + headerH) wrap.scrollTop -= bounds.top + headerH - top;
+                      else if (top + ROW_H > bounds.bottom) wrap.scrollTop += top + ROW_H - bounds.bottom;
+                    }
+                  }}
                   aria-disabled={lockedCol || undefined}
                   className={`sched-cell${open ? ' is-open' : ''}${lockedCol ? ' is-locked' : ''}`}
                   onPointerDown={(e) => {
@@ -232,10 +275,14 @@ export function ScheduleGrid({
                     // тогда не приходит и протяжка не работает.
                     const el = e.target as Element;
                     if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture?.(e.pointerId);
+                    setFocusCell({ col: c, slot: i });
+                    (e.currentTarget as HTMLElement).focus({ preventScroll: true });
+                    setSelection({ col: c, start: i, end: i, value: !open });
+                    lastPaint.current = null;
                     paintValue.current = !open;
                     painting.current = true;
                     pointer.current = { x: e.clientX, y: e.clientY, buttons: e.buttons, type: e.pointerType };
-                    onSet(c, i, paintValue.current);
+                    paintCell(c, i);
                     startAutoScroll();
                   }}
                   onPointerEnter={(e) => {
@@ -243,7 +290,7 @@ export function ScheduleGrid({
                     // Мышь без нажатой левой кнопки: отпустили за окном или нажали правую —
                     // закраска не должна «залипать».
                     if (e.pointerType === 'mouse' && !(e.buttons & 1)) { painting.current = false; return; }
-                    onSet(c, i, paintValue.current);
+                    paintCell(c, i);
                   }}
                   onPointerUp={(e) => {
                     const t = tap.current;
@@ -256,6 +303,12 @@ export function ScheduleGrid({
                   onPointerCancel={() => { tap.current = null; }}
                 />
               ))}
+              {slotsToIntervals(masks[c]).map(([start, end]) => (
+                <span key={start} className="sched-window-label" aria-hidden="true"
+                  style={{ top: (toMinutes(start) / SLOT_MIN) * ROW_H }}>
+                  {start}–{end}
+                </span>
+              ))}
               {dayLessons.map((o, k) => {
                 const top = ((toMinutes(o.time!) - GRID_START_MIN) / SLOT_MIN) * ROW_H;
                 const h = ((o.durationMinutes ?? 60) / SLOT_MIN) * ROW_H;
@@ -263,9 +316,12 @@ export function ScheduleGrid({
                 const t = Math.max(0, top);
                 const height = Math.min(bodyH, top + h) - t;
                 if (height <= 0) return null;
+                const outside = !slotsToIntervals(masks[c]).some(([start, end]) =>
+                  toMinutes(start) <= toMinutes(o.time!) && toMinutes(end) >= toMinutes(o.time!) + (o.durationMinutes ?? 60));
                 return (
-                  <div key={k} className="sched-lesson" style={{ top: t, height }}>
-                    {o.groupDisplay}
+                  <div key={k} className={`sched-lesson${outside ? ' sched-lesson--outside' : ''}`} style={{ top: t, height }}>
+                    <span>{o.time} · {o.groupDisplay}</span>
+                    {outside && <span className="sched-lesson-warning">Вне рабочих часов</span>}
                   </div>
                 );
               })}

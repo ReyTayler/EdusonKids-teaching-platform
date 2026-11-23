@@ -1,3 +1,4 @@
+import { TableScrollArea } from '../../components/table/TableScrollArea';
 import { useMemo, useDeferredValue, useState, type FormEvent } from 'react';
 import { usePayroll, usePayrollSummary, usePayrollMutations } from '../../hooks/usePayroll';
 import { useApiError } from '../../hooks/useApiError';
@@ -19,7 +20,9 @@ import { fmtDate, fmtRub } from '../../lib/format';
 import { PAYROLL_KIND_LABELS, PAYROLL_KIND_FILTER_OPTIONS } from '../../lib/labels';
 import type { PayrollEntry, PayrollSummaryRow } from '../../lib/types';
 import { PageHeader } from '../../components/shell/PageHeader';
-import { TableFilterPanel, columnFilterFields } from '../../components/filters';
+import { FilterPopover } from '../../components/filters';
+import { TextInput } from '../../components/form/TextInput';
+import { SelectInput } from '../../components/form/SelectInput';
 
 /** Колонки вынесены из вида: лупа стоит в шапке страницы, а фильтрует вид —
  * и шапке, и таблице нужен один и тот же список полей. */
@@ -78,10 +81,7 @@ export default function PayrollPage() {
         title="Зарплата"
         actions={(
           <>
-          {/* Лупа только у списка: в сводке фильтровать по колонкам нечего. */}
-          {mode === 'list' && (
-            <TableFilterPanel fields={columnFilterFields(PAYROLL_COLUMNS)} filters={search.filters} onApply={search.setFilters} label="Поиск: Зарплата" />
-          )}
+          <PayrollSearch key={mode} search={search} mode={mode} />
           <div className="segmented" role="group" aria-label="Режим отображения">
             <button
               type="button"
@@ -111,8 +111,54 @@ export default function PayrollPage() {
 
 type SearchProps = ListSearchState & ListSearchControls;
 
+function PayrollSearch({ search, mode }: { search: SearchProps; mode: 'list' | 'summary' }) {
+  const current = () => ({
+    dateFrom: search.getExtra('date_from') || '',
+    dateTo: search.getExtra('date_to') || '',
+    kind: search.filters.kind || '',
+    teacher: search.filters.teacher_name || '',
+    group: search.filters.group_name || '',
+  });
+  const [draft, setDraft] = useState(current);
+  const applied = current();
+  const isList = mode === 'list';
+  const active = !!(applied.dateFrom || applied.dateTo || (isList && (applied.kind || applied.teacher || applied.group)));
+  const apply = (values: typeof draft) => search.setExtras({
+    date_from: values.dateFrom || null,
+    date_to: values.dateTo || null,
+    ...(isList ? {
+      'f.kind': values.kind || null,
+      'f.teacher_name': values.teacher.trim() || null,
+      'f.group_name': values.group.trim() || null,
+    } : {}),
+  });
+
+  return <FilterPopover label="Поиск" active={active} onOpen={() => setDraft(current())}
+    onSubmit={() => apply(draft)}
+    onReset={() => apply({ dateFrom: '', dateTo: '', kind: '', teacher: '', group: '' })}>
+    {isList && <>
+      <Field label="Преподаватель">
+        <TextInput value={draft.teacher} onChange={(e) => setDraft((d) => ({ ...d, teacher: e.target.value }))} />
+      </Field>
+      <Field label="Группа">
+        <TextInput value={draft.group} onChange={(e) => setDraft((d) => ({ ...d, group: e.target.value }))} />
+      </Field>
+    </>}
+    <Field label="Период с">
+      <DateInput value={draft.dateFrom} onChange={(e) => setDraft((d) => ({ ...d, dateFrom: e.target.value }))} placeholder="от" />
+    </Field>
+    <Field label="Период по">
+      <DateInput value={draft.dateTo} onChange={(e) => setDraft((d) => ({ ...d, dateTo: e.target.value }))} placeholder="до" />
+    </Field>
+    {isList && <Field label="Вид начисления">
+      <SelectInput value={draft.kind} onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value }))}
+        options={[{ value: '', label: 'Уроки и отмены' }, ...PAYROLL_KIND_FILTER_OPTIONS]} aria-label="Вид начисления" />
+    </Field>}
+  </FilterPopover>;
+}
+
 function PayrollListView({ search }: { search: SearchProps }) {
-  const { page, pageSize, sortBy, sortDir, filters, setPage, setPageSize, setSort, setFilters, getExtra, setExtra, setExtras } = search;
+  const { page, pageSize, sortBy, sortDir, filters, setPage, setPageSize, setSort, setFilters, getExtra } = search;
 
   const globalDateRange = useMemo(() => ({
     from: getExtra('date_from') || '',
@@ -163,24 +209,6 @@ function PayrollListView({ search }: { search: SearchProps }) {
 
   return (
     <>
-      <div className="payroll-range">
-        <label>Период:</label>
-        <DateInput
-          value={globalDateRange.from}
-          onChange={(e) => setExtra('date_from', e.target.value || null)}
-          placeholder="от"
-        />
-        <span className="payroll-range__sep">—</span>
-        <DateInput
-          value={globalDateRange.to}
-          onChange={(e) => setExtra('date_to', e.target.value || null)}
-          placeholder="до"
-        />
-        <button
-          className="btn-secondary"
-          onClick={() => setExtras({ date_from: null, date_to: null })}
-        >Сбросить</button>
-      </div>
       {/* Упавший запрос — не «пусто»: на денежном экране ноль читается как факт. */}
       {isError && !data ? (
         <EmptyState hint="Не удалось загрузить список. Обновите страницу или попробуйте позже — это не значит, что выплат нет.">
@@ -284,7 +312,7 @@ function PayrollEditDialog({ row, onClose }: { row: PayrollEntry; onClose: () =>
 }
 
 function PayrollSummaryView({ search }: { search: SearchProps }) {
-  const { getExtra, setExtra, setExtras } = search;
+  const { getExtra } = search;
   const dateFrom = getExtra('date_from') || '';
   const dateTo = getExtra('date_to') || '';
 
@@ -314,14 +342,7 @@ function PayrollSummaryView({ search }: { search: SearchProps }) {
 
   return (
     <>
-      <div className="payroll-range">
-        <label>Период:</label>
-        <DateInput value={dateFrom} onChange={(e) => setExtra('date_from', e.target.value || null)} placeholder="от" />
-        <span className="payroll-range__sep">—</span>
-        <DateInput value={dateTo} onChange={(e) => setExtra('date_to', e.target.value || null)} placeholder="до" />
-        <button className="btn-secondary" onClick={() => setExtras({ date_from: null, date_to: null })}>Сбросить</button>
-      </div>
-      <div className="data-table__scroll">
+      <TableScrollArea>
         <table className="data-table">
           <thead>
             <tr>
@@ -362,7 +383,7 @@ function PayrollSummaryView({ search }: { search: SearchProps }) {
             )}
           </tbody>
         </table>
-      </div>
+      </TableScrollArea>
     </>
   );
 }

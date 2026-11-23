@@ -2,9 +2,7 @@ import { lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLoading } from '../../components/ui/Skeleton';
 import { PageHeader } from '../../components/shell/PageHeader';
-import { TableFilterPanel, columnFilterFields } from '../../components/filters';
-import { useListSearchParams } from '../../hooks/useListSearchParams';
-import { REGISTRY_COLUMNS } from './registry/RegistryTable';
+import { RegistrySearch } from './registry/RegistrySearch';
 import { FillSearch } from './fill/FillSearch';
 
 // Реестр — отдельный чанк: таблица/сигналы грузятся только при открытии вкладки.
@@ -16,9 +14,6 @@ type Tab = 'registry' | 'fill';
 export default function DashboardPage() {
   const [sp, setSp] = useSearchParams();
   const tab: Tab = sp.get('tab') === 'fill' ? 'fill' : 'registry';
-  // Фильтры реестра живут в адресе (f.*) — вторая копия хука читает те же
-  // параметры, что и вкладка. Умолчания совпадают с RegistryTab.
-  const { filters, setFilters } = useListSearchParams({ sortBy: 'urgency', sortDir: 'asc', pageSize: 30 });
 
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(sp);
@@ -33,7 +28,7 @@ export default function DashboardPage() {
         title="Дашборд"
         // Лупа — в шапке для обеих вкладок (по активной).
         actions={tab === 'registry' ? (
-          <TableFilterPanel fields={columnFilterFields(REGISTRY_COLUMNS)} filters={filters} onApply={setFilters} label="Поиск: Реестр" />
+          <RegistrySearch />
         ) : <FillSearch />}
       />
 

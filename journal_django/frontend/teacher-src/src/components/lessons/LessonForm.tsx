@@ -380,7 +380,7 @@ export function LessonForm({
 
   return (
     <Modal
-      title={group}
+      title={`${group} · Урок №${fmtNum(next)}${isHalf ? ' (45 минут)' : ''}`}
       subtitle={isSubstitution ? 'Запись урока · замена' : 'Запись урока'}
       onClose={onClose}
       busy={submitLesson.isPending}
@@ -560,10 +560,6 @@ export function LessonForm({
       <div className="lf-preview">
         <div className="lf-preview-row">
           <span>Пришли {presentCount} / Не пришли {absentCount}</span>
-          <span className="lf-preview-hint">Выплату посчитает система</span>
-        </div>
-        <div className="lf-preview-num">
-          №{fmtNum(next)}{isHalf ? ' (45 минут)' : ''}
         </div>
       </div>
 

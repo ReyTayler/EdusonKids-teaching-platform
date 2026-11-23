@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalendar } from '../../hooks/useCalendar';
 import { useGroupData } from '../../hooks/useGroupData';
-import { CalendarView } from '@shared/shared/calendar/CalendarView';
+import { CalendarView, type CalendarViewMode } from '@shared/shared/calendar/CalendarView';
 import { LessonPopup } from '@shared/shared/calendar/LessonPopup';
 import { Modal } from '../../components/ui/Modal';
 import { LessonForm } from '../../components/lessons/LessonForm';
@@ -10,6 +10,8 @@ import { ExtraLessonRecordModal } from '../../components/lessons/ExtraLessonReco
 import { OccurrenceMenu } from './OccurrenceMenu';
 import { currentMondayMsk, addDays, isoDate } from '../../lib/dates';
 import type { Occurrence } from '../../lib/types';
+
+const TEACHER_CALENDAR_VIEWS: CalendarViewMode[] = ['week', 'month'];
 
 interface MenuState {
   occ: Occurrence;
@@ -68,6 +70,8 @@ export default function CalendarPage() {
         onVisibleRangeChange={onVisibleRangeChange}
         onOccurrenceMenu={onOccurrenceMenu}
         role="teacher"
+        showLegend={false}
+        views={TEACHER_CALENDAR_VIEWS}
       />
 
       {menu && (

@@ -1,5 +1,5 @@
 /* Каскад стилей teacher SPA.
- * Порядок: tokens (бренд, teacher) → base (общий, из admin) → shell (topbar, teacher)
+ * Порядок: tokens (бренд, teacher) → base (общий, из admin) → shell (sidebar, teacher)
  *          → pages (teacher).
  * Фаза 2: подключены @shared/styles/forms.css (form-компоненты DateInput/
  * Combobox/Checkbox/SelectInput — стилизуются на токенах, бренд-safe) и

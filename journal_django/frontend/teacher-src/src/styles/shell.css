@@ -1,155 +1,44 @@
-/* ── TEACHER SHELL — верхняя шапка (header.top Eduson) ──
- * Тот же язык и те же имена классов (.topnav*), что в admin: общий ThemeToggle
- * из @shared рисуется классом .topnav__icon-btn. Липкая, полупрозрачная с
- * размытием, линия снизу. Высоту держит min-height контейнера (--topbar-h
- * минус рамка): от неё считают липкие элементы страниц. */
+/* Teacher navigation follows the admin: sidebar, compact rail and modal drawer. */
+.t-shell { --header-h: 0px; min-height: 100vh; display: flex; }
+.t-content { flex: 1; min-width: 0; }
+.t-shell--narrow { --header-h: var(--topbar-h); }
+.t-sidebar { position: sticky; top: 0; width: var(--sidebar-w); height: 100dvh; flex-shrink: 0; display: flex; flex-direction: column; background: var(--bg2); border-right: 1px solid var(--border); }
+.t-sidebar-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-5) var(--space-4); min-height: 80px; }
+.t-brand { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--space-2); text-decoration: none; color: var(--text); }
+.t-brand .logo-mark { display: block; width: 150px; height: auto; color: var(--text); }
+.t-brand-sub { font-size: 11px; color: var(--text3); line-height: 1.3; }
+.t-brand-sub br { display: none; }
+.t-sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); }
+.t-nav-link { display: flex; align-items: center; gap: var(--space-3); min-height: 40px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text2); font: inherit; font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer; text-align: left; }
+.t-nav-link svg { flex-shrink: 0; }
+.t-nav-link:hover { background: var(--bg3); color: var(--text); }
+.t-nav-link.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.t-sidebar-footer { padding: var(--space-4); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: var(--space-3); }
+.t-user { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.t-user-meta { min-width: 0; line-height: 1.4; }
+.t-user-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-user-role { font-size: 11px; color: var(--text3); }
+.t-sidebar-actions { display: flex; align-items: center; gap: var(--space-2); }
+.t-logout { flex: 1; }
+.t-icon-btn { flex-shrink: 0; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--r-sm); background: transparent; color: var(--text2); cursor: pointer; }
+.t-icon-btn:hover { background: var(--bg3); color: var(--text); }
+.t-sidebar--rail { width: var(--sidebar-rail-w); }
+.t-sidebar--rail .t-sidebar-head { justify-content: center; padding: var(--space-5) 0; }
+.t-sidebar--rail .t-brand, .t-sidebar--rail .t-nav-label, .t-sidebar--rail .t-user { display: none; }
+.t-sidebar--rail .t-sidebar-nav { padding: var(--space-3) var(--space-2); }
+.t-sidebar--rail .t-nav-link { justify-content: center; padding: var(--space-2); }
+.t-sidebar--rail .t-sidebar-footer { padding: var(--space-3) var(--space-2); }
+.t-sidebar--rail .t-sidebar-actions { flex-direction: column; }
+.t-main { width: 100%; max-width: 1440px; margin: 0 auto; padding: var(--space-6) var(--space-8); min-width: 0; }
+.t-mobile-bar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: var(--space-3); height: var(--topbar-h); padding: 0 var(--space-4); background: var(--bg2); border-bottom: 1px solid var(--border); }
+.t-mobile-title { font-size: 14px; font-weight: 600; }
+.t-drawer-overlay { position: fixed; inset: 0; z-index: 500; background: var(--overlay); }
+.t-drawer { position: fixed; inset: 0 auto 0 0; z-index: 501; width: min(var(--sidebar-w), 90vw); outline: none; }
+.t-drawer .t-sidebar { width: 100%; }
+.t-nav-link:focus-visible, .t-icon-btn:focus-visible, .t-brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 767px) { .t-main { padding: var(--space-4); } }
 
-.t-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.topnav {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-nav);
-  background: var(--nav-bg);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--line);
-}
-.topnav__inner {
-  max-width: var(--content-max);
-  min-height: calc(var(--topbar-h) - 1px);
-  margin: 0 auto;
-  padding: 0 var(--page-pad-x);
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-.topnav__brand { flex-shrink: 0; text-decoration: none; }
-.topnav__tabs {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: var(--space-2);
-  min-width: 0;
-}
-.topnav__spacer { flex: 1; }
-
-/* Вкладка: чёрная заливка у активной, как в Eduson. */
-.topnav__tab {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px var(--space-3);
-  border-radius: var(--r-tab);
-  background: transparent;
-  color: var(--text2);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  line-height: 1.45;
-  white-space: nowrap;
-  text-decoration: none;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-.topnav__tab:hover { background: var(--bg3); color: var(--text); }
-.topnav__tab:focus-visible { box-shadow: var(--focus-ring); }
-.topnav__tab--active,
-.topnav__tab--active:hover {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-/* Правая часть: тема, имя с ролью, выход. */
-.topnav__icon-btn {
-  width: 32px; height: 32px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text2);
-  cursor: pointer;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-.topnav__icon-btn:hover { background: var(--bg3); color: var(--text); }
-.topnav__icon-btn:focus-visible { box-shadow: var(--focus-ring); }
-.topnav__btn {
-  min-height: 28px;
-  padding: var(--space-1) var(--space-3);
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text2);
-  font: inherit;
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-.topnav__btn:hover { background: var(--bg3); color: var(--text); }
-.topnav__btn:focus-visible { box-shadow: var(--focus-ring); }
-.topnav__who {
-  font-size: var(--fs-xs);
-  color: var(--text2);
-  text-align: right;
-  line-height: 1.3;
-  min-width: 0;
-}
-.topnav__who-name { display: block; color: var(--text); font-weight: 500; white-space: nowrap; }
-.topnav__who-role { display: block; font-size: var(--fs-2xs); color: var(--text3); white-space: nowrap; }
-
-/* Узкий режим: вкладки прячутся, остаётся кнопка меню. Семь вкладок плюс знак и
-   правая часть занимают ~1220px, поэтому порог 1280px — с запасом на шрифт. */
-.topnav__burger { display: none; }
-@media (max-width: 1280px) {
-  .topnav__tabs { display: none; }
-  .topnav__burger { display: inline-flex; }
-}
-@media (max-width: 900px) {
-  .topnav__inner { padding: 0 var(--space-4); }
-}
-/* Телефон: знак и кнопка меню; тема, имя и выход уходят в меню. */
-@media (max-width: 640px) {
-  .topnav__inner > .topnav__who,
-  .topnav__inner > .topnav__btn,
-  .topnav__inner > .topnav__icon-btn:not(.topnav__burger) { display: none; }
-}
-
-/* Содержимое мобильного меню (в общем Dialog). */
-.topnav-drawer { display: flex; flex-direction: column; gap: var(--space-4); }
-.topnav-drawer__group { display: flex; flex-direction: column; gap: 2px; }
-.topnav-drawer__link {
-  display: flex;
-  align-items: center;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--r-sm);
-  color: var(--text2);
-  font-size: var(--fs-md);
-  font-weight: 500;
-  text-decoration: none;
-}
-.topnav-drawer__link:hover { background: var(--bg3); color: var(--text); }
-.topnav-drawer__link--active,
-.topnav-drawer__link--active:hover { background: var(--accent); color: var(--on-accent); }
-.topnav-drawer__footer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line);
-}
-.topnav-drawer__footer .topnav__who { flex: 1; text-align: left; }
-
-/* ── Основная область: контейнер Eduson (.wrap) ── */
-.t-main {
-  flex: 1;
-  width: 100%;
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: var(--page-pad-y) var(--page-pad-x) 60px;
-  min-width: 0;
-}
-@media (max-width: 900px) {
-  .t-main { padding: var(--space-4) var(--space-4) var(--space-10); }
-}
+/* Eduson keeps its monochrome active state and page spacing. */
+.t-nav-link.active { background: var(--accent); color: var(--on-accent); }
+.t-main { max-width: var(--content-max); padding: var(--page-pad-y) var(--page-pad-x) var(--space-10); }
+@media (max-width: 900px) { .t-main { padding: var(--space-4); } }

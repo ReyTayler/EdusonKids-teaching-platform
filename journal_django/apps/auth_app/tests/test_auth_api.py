@@ -701,3 +701,31 @@ def test_twofa_setup_change_method_before_enable_still_works(account_factory):
         }, format='json')
     assert second.status_code == 200
     assert second.data['method'] == 'email'
+
+
+# ---------------------------------------------------------------------------
+# Срок жизни refresh — 30 дней (и в cookie, и в самом токене)
+# ---------------------------------------------------------------------------
+
+def test_refresh_lifetime_is_30_days(account_factory):
+    """
+    Регресс: refresh был 7 дней — активных пользователей выкидывало раз в неделю.
+    Проверяем оба места, где живёт срок: max-age cookie (браузер удалит её
+    сам) и exp внутри JWT (сервер отвергнет токен).
+    """
+    from django.http import HttpResponse
+
+    from apps.accounts.models import Account
+    from apps.core.authentication import issue_tokens_for, set_auth_cookies
+
+    acc = account_factory(email='__auth_refresh_30d__@example.com', role='teacher', password=_PASSWORD)
+    refresh = issue_tokens_for(Account.objects.get(pk=acc['id']))
+    response = HttpResponse()
+    set_auth_cookies(response, refresh)
+
+    thirty_days = 30 * 24 * 60 * 60
+    refresh_cookie = settings.SIMPLE_JWT['AUTH_REFRESH_COOKIE']
+    assert response.cookies[refresh_cookie]['max-age'] == thirty_days
+    assert refresh['exp'] - refresh['iat'] == thirty_days
+    # access не трогали — по-прежнему час
+    assert response.cookies[_ACCESS_COOKIE]['max-age'] == 60 * 60

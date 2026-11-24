@@ -81,7 +81,7 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
-        # Бамп token_version отзывает и access, и 7-дневный refresh на сервере:
+        # Бамп token_version отзывает и access, и 30-дневный refresh на сервере:
         # даже перехваченный refresh после логаута станет невалидным
         # (CookieJWTAuthentication.get_user сверяет версию на каждом запросе).
         accounts_repo.bump_token_version(request.user.id)

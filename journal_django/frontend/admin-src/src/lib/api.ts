@@ -230,8 +230,8 @@ async function rawFetch(method: string, path: string, body?: unknown): Promise<R
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res = await rawFetch(method, path, body);
 
-  // Access-токен живёт 15 минут. При 401 один раз пробуем обновить его из
-  // 7-дневной refresh-cookie и повторяем исходный запрос — пользователя не
+  // Access-токен живёт 60 минут. При 401 один раз пробуем обновить его из
+  // 30-дневной refresh-cookie и повторяем исходный запрос — пользователя не
   // выбрасывает на /login, пока жив refresh. На login отправляем только если
   // refresh тоже не удался (refresh-токен истёк / отозван).
   if (res.status === 401 && path !== REFRESH_PATH) {

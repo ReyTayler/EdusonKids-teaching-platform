@@ -477,7 +477,9 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 # ---------------------------------------------------------------------------
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    # 30 дней от момента входа (не от последней активности: ротация выключена).
+    # Было 7 — активных пользователей выкидывало раз в неделю посреди работы.
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
 
     # Ротация и blacklist отключены — отзыв через token_version.
     'ROTATE_REFRESH_TOKENS': False,

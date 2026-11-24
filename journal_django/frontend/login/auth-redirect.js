@@ -2,7 +2,7 @@
 //   role === 'teacher' → /teacher, иначе (manager|admin) → /admin
 //   (зеркалит серверный apps/auth_app/services.py: redirect_for). 401 → показываем форму.
 //
-// Access-cookie живёт 60 минут, refresh — 7 дней (SIMPLE_JWT в settings/base.py).
+// Access-cookie живёт 60 минут, refresh — 30 дней (SIMPLE_JWT в settings/base.py).
 // Если с прошлого визита прошло больше часа, access уже протух и /me ответит 401,
 // хотя refresh ещё жив — без попытки обновить токен пользователя молча кидало бы
 // на форму входа. Поэтому при 401 один раз пробуем POST /api/auth/refresh и
